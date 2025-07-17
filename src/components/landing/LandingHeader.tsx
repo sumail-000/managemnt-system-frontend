@@ -9,6 +9,7 @@ export function LandingHeader() {
   const navigation = [
     { name: "Features", href: "#features" },
     { name: "Pricing", href: "#pricing" },
+    { name: "Blog", href: "/blog" },
     { name: "About", href: "#about" },
     { name: "Contact", href: "#contact" },
   ]
@@ -30,13 +31,23 @@ export function LandingHeader() {
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-8">
             {navigation.map((item) => (
-              <a
-                key={item.name}
-                href={item.href}
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                {item.name}
-              </a>
+              item.href.startsWith('#') ? (
+                <a
+                  key={item.name}
+                  href={item.href}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {item.name}
+                </a>
+              ) : (
+                <Link
+                  key={item.name}
+                  to={item.href}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {item.name}
+                </Link>
+              )
             ))}
           </nav>
 
@@ -67,14 +78,25 @@ export function LandingHeader() {
           <div className="md:hidden py-4 border-t border-border">
             <div className="flex flex-col space-y-4">
               {navigation.map((item) => (
-                <a
-                  key={item.name}
-                  href={item.href}
-                  className="text-muted-foreground hover:text-foreground transition-colors px-2 py-1"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  {item.name}
-                </a>
+                item.href.startsWith('#') ? (
+                  <a
+                    key={item.name}
+                    href={item.href}
+                    className="text-muted-foreground hover:text-foreground transition-colors px-2 py-1"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    {item.name}
+                  </a>
+                ) : (
+                  <Link
+                    key={item.name}
+                    to={item.href}
+                    className="text-muted-foreground hover:text-foreground transition-colors px-2 py-1"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    {item.name}
+                  </Link>
+                )
               ))}
               <div className="flex flex-col space-y-2 pt-4 border-t border-border">
                 <Button variant="ghost" asChild>
