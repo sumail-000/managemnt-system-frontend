@@ -95,7 +95,7 @@ export function PricingSection() {
           {plans.map((plan, index) => (
             <Card 
               key={index} 
-              className={`relative dashboard-card ${
+              className={`relative dashboard-card h-full flex flex-col ${
                 plan.badge === "Most Popular" 
                   ? "border-primary shadow-glow scale-105" 
                   : ""
@@ -121,9 +121,9 @@ export function PricingSection() {
                 <p className="text-muted-foreground mt-2">{plan.description}</p>
               </CardHeader>
 
-              <CardContent className="space-y-6">
+              <CardContent className="flex flex-col h-full">
                 {/* Features List */}
-                <div className="space-y-3">
+                <div className="space-y-3 flex-grow">
                   {plan.features.map((feature, featureIndex) => (
                     <div key={featureIndex} className="flex items-start space-x-3">
                       <Check className="w-5 h-5 text-success mt-0.5 flex-shrink-0" />
@@ -134,7 +134,7 @@ export function PricingSection() {
 
                 {/* Limitations */}
                 {plan.limitations.length > 0 && (
-                  <div className="pt-4 border-t border-border">
+                  <div className="pt-6 border-t border-border">
                     <p className="text-xs text-muted-foreground mb-2">Limitations:</p>
                     <div className="space-y-1">
                       {plan.limitations.map((limitation, limitIndex) => (
@@ -147,23 +147,26 @@ export function PricingSection() {
                   </div>
                 )}
 
-                {/* CTA Button */}
-                <Button 
-                  className="w-full" 
-                  variant={plan.badge === "Most Popular" ? "gradient" : "outline"}
-                  size="lg"
-                  asChild
-                >
-                  <Link to="/register" state={{ selectedPlan: plan.name.toLowerCase() }}>
-                    {index === 0 ? "Start Free Trial" : `Choose ${plan.name}`}
-                  </Link>
-                </Button>
+                {/* Spacer for consistent button placement */}
+                <div className="mt-auto pt-6">
+                  {/* CTA Button */}
+                  <Button 
+                    className="w-full" 
+                    variant={plan.badge === "Most Popular" ? "gradient" : "outline"}
+                    size="lg"
+                    asChild
+                  >
+                    <Link to="/register" state={{ selectedPlan: plan.name.toLowerCase() }}>
+                      {index === 0 ? "Start Free Trial" : `Choose ${plan.name}`}
+                    </Link>
+                  </Button>
 
-                {index === 0 && (
-                  <p className="text-xs text-center text-muted-foreground">
-                    14-day free trial • No credit card required
-                  </p>
-                )}
+                  {index === 0 && (
+                    <p className="text-xs text-center text-muted-foreground mt-2">
+                      14-day free trial • No credit card required
+                    </p>
+                  )}
+                </div>
               </CardContent>
             </Card>
           ))}
