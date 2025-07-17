@@ -2,41 +2,65 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* Food Management SAAS Design System */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Brand Colors - Fresh Food Theme */
+    --background: 0 0% 99%;
+    --foreground: 215 25% 15%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 215 25% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 215 25% 15%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Primary - Fresh Green */
+    --primary: 142 71% 45%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 142 71% 38%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* Secondary - Professional Blue */
+    --secondary: 210 100% 97%;
+    --secondary-foreground: 215 25% 15%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 210 40% 98%;
+    --muted-foreground: 215 16% 46%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    /* Accent - Vibrant Orange */
+    --accent: 25 95% 53%;
+    --accent-foreground: 0 0% 100%;
+    --accent-hover: 25 95% 48%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    /* Status Colors */
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    /* Neutral Palette */
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 142 71% 45%;
 
-    --radius: 0.5rem;
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(142 71% 45%), hsl(142 71% 38%));
+    --gradient-secondary: linear-gradient(135deg, hsl(210 100% 97%), hsl(220 13% 91%));
+    --gradient-hero: linear-gradient(135deg, hsl(142 71% 45%) 0%, hsl(25 95% 53%) 100%);
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 hsl(0 0% 0% / 0.05);
+    --shadow-md: 0 4px 6px -1px hsl(0 0% 0% / 0.1), 0 2px 4px -2px hsl(0 0% 0% / 0.1);
+    --shadow-lg: 0 10px 15px -3px hsl(0 0% 0% / 0.1), 0 4px 6px -4px hsl(0 0% 0% / 0.1);
+    --shadow-glow: 0 0 20px hsl(142 71% 45% / 0.3);
+
+    --radius: 0.75rem;
 
     --sidebar-background: 0 0% 98%;
 
@@ -56,41 +80,63 @@ All colors MUST be HSL.
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
+    /* Dark Mode - Food Management Theme */
+    --background: 215 28% 7%;
     --foreground: 210 40% 98%;
 
-    --card: 222.2 84% 4.9%;
+    --card: 215 28% 10%;
     --card-foreground: 210 40% 98%;
 
-    --popover: 222.2 84% 4.9%;
+    --popover: 215 28% 10%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    /* Primary - Brighter Green for Dark Mode */
+    --primary: 142 71% 55%;
+    --primary-foreground: 215 28% 7%;
+    --primary-hover: 142 71% 48%;
 
-    --secondary: 217.2 32.6% 17.5%;
+    --secondary: 215 28% 15%;
     --secondary-foreground: 210 40% 98%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 215 28% 15%;
+    --muted-foreground: 215 20% 65%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    /* Accent - Softer Orange for Dark Mode */
+    --accent: 25 95% 58%;
+    --accent-foreground: 215 28% 7%;
+    --accent-hover: 25 95% 53%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    /* Status Colors */
+    --success: 142 71% 55%;
+    --success-foreground: 215 28% 7%;
+    
+    --warning: 38 92% 55%;
+    --warning-foreground: 215 28% 7%;
+    
+    --destructive: 0 84% 65%;
+    --destructive-foreground: 215 28% 7%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --border: 215 28% 20%;
+    --input: 215 28% 20%;
+    --ring: 142 71% 55%;
+
+    /* Sidebar Colors */
+    --sidebar-background: 215 28% 10%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 142 71% 55%;
+    --sidebar-primary-foreground: 215 28% 7%;
+    --sidebar-accent: 215 28% 15%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 215 28% 20%;
+    --sidebar-ring: 142 71% 55%;
+
+    /* Dark Mode Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(142 71% 55%), hsl(142 71% 48%));
+    --gradient-secondary: linear-gradient(135deg, hsl(215 28% 15%), hsl(215 28% 20%));
+    --gradient-hero: linear-gradient(135deg, hsl(142 71% 55%) 0%, hsl(25 95% 58%) 100%);
+
+    /* Dark Mode Shadows */
+    --shadow-glow: 0 0 20px hsl(142 71% 55% / 0.4);
   }
 }
 
@@ -100,6 +146,57 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans;
+  }
+}
+
+@layer components {
+  /* Gradient Buttons */
+  .btn-gradient {
+    @apply bg-gradient-primary text-primary-foreground hover:shadow-glow transition-all duration-300;
+  }
+  
+  .btn-hero {
+    @apply bg-gradient-hero text-white hover:shadow-glow transition-all duration-300;
+  }
+
+  /* Card Components */
+  .card-elevated {
+    @apply bg-card border border-border rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300;
+  }
+
+  /* Dashboard Components */
+  .dashboard-card {
+    @apply bg-card border border-border rounded-lg p-6 shadow-sm hover:shadow-md transition-all duration-300;
+  }
+
+  /* Animations */
+  .fade-in {
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  .slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+}
+
+@layer utilities {
+  /* Custom Animations */
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Utility Classes */
+  .text-gradient {
+    background: var(--gradient-hero);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
   }
 }
