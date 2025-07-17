@@ -32,7 +32,7 @@ export function PricingSection() {
       price: 79,
       icon: Zap,
       description: "Ideal for growing businesses with advanced needs",
-      badge: "Most Popular",
+      badge: null,
       features: [
         "20 product limit/month",
         "Advanced label templates",
@@ -95,9 +95,9 @@ export function PricingSection() {
           {plans.map((plan, index) => (
             <Card 
               key={index} 
-              className={`relative dashboard-card h-full flex flex-col ${
-                plan.badge === "Most Popular" 
-                  ? "border-primary shadow-glow scale-105" 
+              className={`relative dashboard-card h-full flex flex-col transition-all duration-300 hover:scale-105 hover:shadow-lg ${
+                plan.badge === "Best Value" 
+                  ? "border-primary shadow-glow" 
                   : ""
               }`}
             >
@@ -152,7 +152,7 @@ export function PricingSection() {
                   {/* CTA Button */}
                   <Button 
                     className="w-full" 
-                    variant={plan.badge === "Most Popular" ? "gradient" : "outline"}
+                    variant={plan.badge === "Best Value" ? "gradient" : "outline"}
                     size="lg"
                     asChild
                   >
