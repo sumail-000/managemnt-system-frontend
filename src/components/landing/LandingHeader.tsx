@@ -57,7 +57,7 @@ export function LandingHeader() {
               <Link to="/login">Sign In</Link>
             </Button>
             <Button variant="gradient" asChild>
-              <Link to="/register">Get Started</Link>
+              <Link to="/register" state={{ selectedPlan: "basic" }}>Get Started</Link>
             </Button>
           </div>
 
@@ -103,7 +103,7 @@ export function LandingHeader() {
                   <Link to="/login">Sign In</Link>
                 </Button>
                 <Button variant="gradient" asChild>
-                  <Link to="/register">Get Started</Link>
+                  <Link to="/register" state={{ selectedPlan: "basic" }}>Get Started</Link>
                 </Button>
               </div>
             </div>

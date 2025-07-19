@@ -49,7 +49,7 @@ export function HeroSection() {
             {/* CTA Buttons */}
             <div className="flex flex-col sm:flex-row gap-4">
               <Button size="xl" variant="gradient" asChild>
-                <Link to="/register">
+                <Link to="/register" state={{ selectedPlan: "basic" }}>
                   Start Free Trial
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Link>

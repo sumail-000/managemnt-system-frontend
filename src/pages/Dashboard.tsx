@@ -11,11 +11,44 @@ import {
   TrendingUp,
   AlertTriangle,
   CheckCircle,
-  Star
+  Star,
+  Crown
 } from "lucide-react"
 import { Link } from "react-router-dom"
+import { useAuth } from "@/contexts/AuthContext"
 
 export default function Dashboard() {
+  const { user, usage, usagePercentages } = useAuth()
+  
+  // Get membership plan features from user data
+  const getMembershipFeatures = () => {
+    if (!user?.membershipPlan) {
+      return { 
+        name: 'Basic', 
+        limit: 3, 
+        features: [],
+        product_limit: 3,
+        label_limit: 10
+      }
+    }
+    
+    const plan = user.membershipPlan
+    return {
+      name: plan.name,
+      limit: plan.product_limit || (plan.name === 'Basic' ? 3 : plan.name === 'Pro' ? 20 : 999),
+      features: plan.features || [],
+      product_limit: plan.product_limit || (plan.name === 'Basic' ? 3 : plan.name === 'Pro' ? 20 : 999),
+      label_limit: plan.label_limit || (plan.name === 'Basic' ? 10 : plan.name === 'Pro' ? 100 : 9999)
+    }
+  }
+
+  const membershipInfo = getMembershipFeatures()
+  
+  // Get current usage from context
+  const currentUsage = {
+    products: usage?.products?.current_month || 0,
+    labels: usage?.labels?.current_month || 0
+  }
   const stats = [
     {
       title: "Total Products",
@@ -85,24 +118,38 @@ export default function Dashboard() {
   ]
 
   return (
-    <div className="flex-1 space-y-6 p-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
+    <div className="flex-1">
+      {/* Fixed Header */}
+      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border px-6 py-4">
+        <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
           <p className="text-muted-foreground">
-            Welcome back! Here's what's happening with your food products.
+            Welcome back, {user?.name}! Here's what's happening with your food products.
           </p>
         </div>
-        <Button variant="gradient" size="lg" asChild>
-          <Link to="/products/new">
-            <Plus className="w-4 h-4 mr-2" />
-            Add Product
-          </Link>
-        </Button>
+        <div className="flex items-center gap-4">
+          <div className="text-right">
+            <div className="flex items-center gap-2">
+              <Crown className="w-4 h-4 text-primary" />
+              <span className="font-medium">{membershipInfo.name} Plan</span>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {membershipInfo.limit === 999 ? 'Unlimited' : `${membershipInfo.limit} products/month`}
+            </p>
+          </div>
+          <Button variant="gradient" size="lg" asChild>
+            <Link to="/products/new">
+              <Plus className="w-4 h-4 mr-2" />
+              Add Product
+            </Link>
+          </Button>
+        </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Scrollable Content */}
+      <div className="space-y-6 p-6">
+        {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat, index) => (
           <Card key={index} className="dashboard-card">
@@ -133,10 +180,18 @@ export default function Dashboard() {
                 Create New Product
               </Link>
             </Button>
-            <Button variant="outline" className="justify-start" asChild>
+            <Button 
+              variant="outline" 
+              className="justify-start" 
+              asChild
+              disabled={membershipInfo.name === 'Basic'}
+            >
               <Link to="/nutrition">
                 <BarChart3 className="w-4 h-4 mr-2" />
                 Analyze Nutrition
+                {membershipInfo.name === 'Basic' && (
+                  <Badge variant="secondary" className="ml-auto">Pro+</Badge>
+                )}
               </Link>
             </Button>
             <Button variant="outline" className="justify-start" asChild>
@@ -145,10 +200,18 @@ export default function Dashboard() {
                 Generate Label
               </Link>
             </Button>
-            <Button variant="outline" className="justify-start" asChild>
+            <Button 
+              variant="outline" 
+              className="justify-start" 
+              asChild
+              disabled={membershipInfo.name === 'Basic'}
+            >
               <Link to="/qr-codes">
                 <QrCode className="w-4 h-4 mr-2" />
                 Create QR Code
+                {membershipInfo.name === 'Basic' && (
+                  <Badge variant="secondary" className="ml-auto">Pro+</Badge>
+                )}
               </Link>
             </Button>
           </CardContent>
@@ -223,20 +286,36 @@ export default function Dashboard() {
         <CardContent>
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-semibold">Pro Membership</h3>
+              <h3 className="font-semibold">{membershipInfo.name} Membership</h3>
               <p className="text-sm text-muted-foreground">
-                15/20 products used this month • Expires in 23 days
-              </p>
+              {currentUsage.products}/{usage?.products?.unlimited ? '∞' : membershipInfo.product_limit} products used this month
+              {membershipInfo.name !== 'Basic' && ' • Expires in 23 days'}
+            </p>
             </div>
             <Button variant="outline" asChild>
-              <Link to="/settings/billing">Manage Plan</Link>
+              <Link to="/billing">Manage Plan</Link>
             </Button>
           </div>
           <div className="mt-4 bg-muted rounded-full h-2">
-            <div className="bg-gradient-primary h-2 rounded-full" style={{ width: "75%" }} />
+            <div 
+              className="bg-gradient-primary h-2 rounded-full" 
+              style={{ 
+                width: usage?.products?.unlimited 
+                  ? "100%" 
+                  : `${usagePercentages?.products || 0}%` 
+              }} 
+            />
           </div>
+          {membershipInfo.name === 'Basic' && (
+            <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+              <p className="text-sm text-muted-foreground">
+                Upgrade to Pro for 20 products/month and advanced features!
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
+      </div>
     </div>
   )
 }

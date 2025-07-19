@@ -2,7 +2,7 @@ import { useState } from "react"
 import { 
   LayoutDashboard, 
   Package, 
-  Users, 
+  CreditCard, 
   Settings, 
   QrCode,
   FileText,
@@ -10,7 +10,8 @@ import {
   Shield,
   Heart,
   Search,
-  Plus
+  Plus,
+  ChefHat
 } from "lucide-react"
 import { NavLink, useLocation } from "react-router-dom"
 
@@ -28,9 +29,10 @@ import {
 } from "@/components/ui/sidebar"
 
 const mainItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
+  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Products", url: "/products", icon: Package },
   { title: "Add Product", url: "/products/new", icon: Plus },
+  { title: "Ingredients", url: "/ingredients", icon: ChefHat },
 ]
 
 const managementItems = [
@@ -41,7 +43,7 @@ const managementItems = [
 ]
 
 const systemItems = [
-  { title: "Users", url: "/users", icon: Users },
+  { title: "Billing", url: "/billing", icon: CreditCard },
   { title: "Settings", url: "/settings", icon: Settings },
   { title: "Admin Panel", url: "/admin", icon: Shield },
 ]
@@ -64,7 +66,7 @@ export function AppSidebar() {
     >
       <SidebarContent>
         {/* Logo Section */}
-        <div className="p-4 border-b border-sidebar-border">
+        <div className={`border-b border-sidebar-border ${isCollapsed ? 'p-2 flex justify-center' : 'p-4'}`}>
           {!isCollapsed ? (
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 bg-gradient-primary rounded-lg flex items-center justify-center">
@@ -73,7 +75,7 @@ export function AppSidebar() {
               <span className="font-semibold text-sidebar-foreground">FoodManager</span>
             </div>
           ) : (
-            <div className="w-8 h-8 bg-gradient-primary rounded-lg flex items-center justify-center mx-auto">
+            <div className="w-8 h-8 bg-gradient-primary rounded-lg flex items-center justify-center">
               <Package className="w-4 h-4 text-primary-foreground" />
             </div>
           )}

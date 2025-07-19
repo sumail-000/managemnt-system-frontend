@@ -1,9 +1,9 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
 /* Food Management SAAS Design System */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
 
 @layer base {
   :root {
@@ -142,32 +142,47 @@
 
 @layer base {
   * {
-    @apply border-border;
+    border-color: var(--border);
   }
 
   body {
-    @apply bg-background text-foreground font-sans;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: 'Inter', sans-serif;
   }
 }
 
 @layer components {
   /* Gradient Buttons */
   .btn-gradient {
-    @apply bg-gradient-primary text-primary-foreground hover:shadow-glow transition-all duration-300;
+    background-image: var(--gradient-primary);
+    color: hsl(var(--primary-foreground));
+    transition: all 300ms;
   }
   
   .btn-hero {
-    @apply bg-gradient-hero text-white hover:shadow-glow transition-all duration-300;
+    background-image: var(--gradient-hero);
+    color: white;
+    transition: all 300ms;
   }
 
   /* Card Components */
   .card-elevated {
-    @apply bg-card border border-border rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300;
+    background-color: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.75rem;
+    box-shadow: var(--shadow-md);
+    transition: box-shadow 300ms;
   }
 
   /* Dashboard Components */
   .dashboard-card {
-    @apply bg-card border border-border rounded-lg p-6 shadow-sm hover:shadow-md transition-all duration-300;
+    background-color: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    box-shadow: var(--shadow-sm);
+    transition: all 300ms;
   }
 
   /* Animations */
@@ -177,6 +192,16 @@
 
   .slide-up {
     animation: slideUp 0.3s ease-out;
+  }
+
+  /* Product Card Hover Effects */
+  .product-card-hover {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .product-card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
   }
 }
 

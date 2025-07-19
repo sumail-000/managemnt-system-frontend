@@ -1,15 +1,74 @@
-import { ReactNode } from "react"
+import { ReactNode, useState } from "react"
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/AppSidebar"
 import { Button } from "@/components/ui/button"
-import { Bell, Search, User } from "lucide-react"
+import { Bell, Search, User, Settings, LogOut, UserCircle, Crown, Loader2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { useAuth } from "@/contexts/AuthContext"
+import { useToast } from "@/hooks/use-toast"
+import { logService } from "@/services/logService"
 
 interface DashboardLayoutProps {
   children: ReactNode
 }
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
+  const { user, logout } = useAuth()
+  const { toast } = useToast()
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+
+  const handleLogout = async () => {
+    try {
+      logService.info('User logout initiated', {
+        userId: user?.id,
+        email: user?.email,
+        timestamp: new Date().toISOString()
+      })
+      
+      setIsLoggingOut(true)
+      await logout()
+      
+      logService.info('User logout completed successfully')
+      toast({
+        title: "Logged out successfully",
+        description: "You have been logged out of your account.",
+      })
+    } catch (error) {
+      logService.error('Logout failed', error)
+      toast({
+        title: "Logout failed",
+        description: "There was an error logging you out. Please try again.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsLoggingOut(false)
+    }
+  }
+
+  const getMembershipDisplay = () => {
+    if (!user?.membershipPlan) {
+      return { text: 'Basic Member', showCrown: false }
+    }
+    
+    const planName = user.membershipPlan.name
+    const showCrown = planName === 'Pro' || planName === 'Enterprise'
+    
+    return {
+      text: `${planName} Member`,
+      showCrown
+    }
+  }
+
+  const membershipInfo = getMembershipDisplay()
+
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-background">
@@ -40,15 +99,49 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               </Button>
 
               {/* User Menu */}
-              <div className="flex items-center gap-3">
-                <div className="text-right">
-                  <p className="text-sm font-medium">John Doe</p>
-                  <p className="text-xs text-muted-foreground">Pro Member</p>
-                </div>
-                <Button variant="ghost" size="icon" className="rounded-full">
-                  <User className="h-4 w-4" />
-                </Button>
-              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <div className="flex items-center gap-3 cursor-pointer hover:bg-muted/50 rounded-lg p-2 transition-colors">
+                    <div className="text-right">
+                      <p className="text-sm font-medium">{user?.name || 'User'}</p>
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        {membershipInfo.showCrown && (
+                          <Crown className="h-3 w-3 text-yellow-500" />
+                        )}
+                        <span>{membershipInfo.text}</span>
+                      </div>
+                    </div>
+                    <Button variant="ghost" size="icon" className="rounded-full">
+                      <User className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem>
+                    <UserCircle className="mr-2 h-4 w-4" />
+                    <span>Profile</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem>
+                    <Settings className="mr-2 h-4 w-4" />
+                    <span>Settings</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem 
+                    className="text-destructive focus:text-destructive"
+                    onClick={handleLogout}
+                    disabled={isLoggingOut}
+                  >
+                    {isLoggingOut ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <LogOut className="mr-2 h-4 w-4" />
+                    )}
+                    <span>{isLoggingOut ? 'Logging out...' : 'Log out'}</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </header>
 

@@ -1,19 +1,45 @@
 import { useState, useEffect } from "react"
-import { Link, useLocation, useNavigate } from "react-router-dom"
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom"
 import { AuthLayout } from "@/components/AuthLayout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Eye, EyeOff } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
+import { useToast } from "@/hooks/use-toast"
+import { useAuth } from "@/contexts/AuthContext"
+import { authAPI, membershipAPI } from '../services/api'
+import { logService } from '@/services/logService'
+import { Eye, EyeOff, Loader2 } from "lucide-react"
+
+interface MembershipPlan {
+  id: number
+  name: string
+  price: number
+  features: string[]
+}
 
 export default function Register() {
   const location = useLocation()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const { toast } = useToast()
+  const { register, isLoading } = useAuth()
   const selectedPlanFromState = location.state?.selectedPlan || ""
+  const selectedPlanFromURL = searchParams.get('plan') || ""
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [membershipPlans, setMembershipPlans] = useState<MembershipPlan[]>([])
+  
+  // Debug state changes
+  useEffect(() => {
+    logService.debug('MembershipPlans state changed', {
+      planCount: membershipPlans.length,
+      plans: membershipPlans.map(p => ({ id: p.id, name: p.name }))
+    }, 'Register')
+  }, [membershipPlans])
+  const [errors, setErrors] = useState<{[key: string]: string}>({})
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -21,29 +47,192 @@ export default function Register() {
     company: "",
     phone: "",
     taxId: "",
-    planType: selectedPlanFromState,
+    planType: "",
     password: "",
-    confirmPassword: ""
+    confirmPassword: "",
+    agreeTerms: false,
+    agreePrivacy: false
   })
 
+  // Set default plan based on navigation source
   useEffect(() => {
-    if (selectedPlanFromState) {
-      setFormData(prev => ({ ...prev, planType: selectedPlanFromState }))
+    const setDefaultPlan = () => {
+      if (membershipPlans.length === 0) return
+      
+      let defaultPlanId = ""
+      
+      // Priority: state > URL params > default to basic
+      const planSource = selectedPlanFromState || selectedPlanFromURL
+      
+      if (planSource) {
+        // Find plan by name (from pricing section or URL)
+        const selectedPlan = membershipPlans.find(plan => 
+          plan.name.toLowerCase() === planSource.toLowerCase()
+        )
+        if (selectedPlan) {
+          defaultPlanId = selectedPlan.id.toString()
+        }
+      } else {
+        // Default to Basic plan for "Get Started" or "Free Trial" buttons
+        const basicPlan = membershipPlans.find(plan => 
+          plan.name.toLowerCase() === 'basic'
+        )
+        if (basicPlan) {
+          defaultPlanId = basicPlan.id.toString()
+        }
+      }
+      
+      if (defaultPlanId && !formData.planType) {
+        setFormData(prev => ({ ...prev, planType: defaultPlanId }))
+      }
     }
-  }, [selectedPlanFromState])
+    
+    setDefaultPlan()
+  }, [membershipPlans, selectedPlanFromState, selectedPlanFromURL, formData.planType])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    const fetchMembershipPlans = async () => {
+      try {
+        logService.info('Fetching membership plans', {}, 'Register')
+        const response = await membershipAPI.getPlans()
+        
+        // Debug the response structure
+        logService.debug('API response structure', {
+          responseKeys: Object.keys(response),
+          dataType: typeof response.data,
+          dataIsArray: Array.isArray(response.data),
+          dataLength: response.data?.length,
+          responseIsArray: Array.isArray(response),
+          responseLength: Array.isArray(response) ? response.length : 'not array'
+        }, 'Register')
+        
+        // Extract plans from response - the API returns the array directly, not wrapped in data
+        let plans = []
+        if (Array.isArray(response)) {
+          // Direct array response
+          plans = response
+        } else if (Array.isArray(response.data)) {
+          // Wrapped in data property
+          plans = response.data
+        } else if (response.data && Array.isArray(response.data.data)) {
+          // Nested data structure
+          plans = response.data.data
+        } else if (response.data && typeof response.data === 'object') {
+          // Named properties
+          plans = response.data.plans || response.data.membership_plans || []
+        }
+        
+        logService.debug('Extracted plans', {
+          plansType: typeof plans,
+          plansIsArray: Array.isArray(plans),
+          plansLength: plans?.length,
+          firstPlan: plans[0]
+        }, 'Register')
+        
+        setMembershipPlans(plans)
+        logService.info('Successfully retrieved membership plans', {
+          planCount: plans.length,
+          plans: plans.map(p => ({ id: p.id, name: p.name }))
+        }, 'Register')
+      } catch (error) {
+        logService.error('Failed to fetch membership plans', { error }, 'Register')
+        setMembershipPlans([])
+      }
+    }
+    
+    fetchMembershipPlans()
+  }, [])
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // TODO: Implement registration logic
-    console.log("Registration attempt:", formData)
-    // Simulate successful registration and redirect to dashboard
-    navigate("/dashboard")
+    setErrors({})
+    
+    logService.info('Registration form submission started', {
+      email: formData.email,
+      name: `${formData.firstName} ${formData.lastName}`,
+      company: formData.company,
+      planType: formData.planType,
+      timestamp: new Date().toISOString()
+    }, 'Register');
+    
+    // Client-side validation
+    if (formData.password !== formData.confirmPassword) {
+      logService.warning('Registration password confirmation mismatch', {}, 'Register');
+      setErrors({ confirmPassword: "Passwords do not match" })
+      return
+    }
+    
+    if (!formData.agreeTerms || !formData.agreePrivacy) {
+      logService.warning('Registration terms/privacy agreement missing', {
+        agreeTerms: formData.agreeTerms,
+        agreePrivacy: formData.agreePrivacy
+      }, 'Register');
+      toast({
+        title: "Agreement Required",
+        description: "Please agree to the terms and privacy policy.",
+        variant: "destructive",
+      })
+      return
+    }
+    
+    try {
+      const registrationData = {
+        name: `${formData.firstName} ${formData.lastName}`,
+        email: formData.email,
+        password: formData.password,
+        password_confirmation: formData.confirmPassword,
+        company: formData.company,
+        contact_number: formData.phone,
+        tax_id: formData.taxId,
+        membership_plan_id: parseInt(formData.planType)
+      }
+      
+      logService.info('Sending registration data', {
+        email: registrationData.email,
+        name: registrationData.name,
+        company: registrationData.company,
+        membership_plan_id: registrationData.membership_plan_id
+      }, 'Register');
+      
+      await register(registrationData)
+      
+      logService.info('Registration successful, showing success toast', {}, 'Register');
+      
+      toast({
+        title: "Welcome!",
+        description: "Your account has been created successfully.",
+      })
+      
+      logService.info('Redirecting to dashboard', {}, 'Register');
+      navigate("/dashboard")
+    } catch (error: any) {
+      const errorMessage = error.message || "Registration failed. Please try again."
+      
+      logService.error('Registration failed', {
+        email: formData.email,
+        error: errorMessage,
+        validationErrors: error.response?.data?.errors
+      }, 'Register');
+      
+      toast({
+        title: "Registration Failed",
+        description: errorMessage,
+        variant: "destructive",
+      })
+      
+      // Handle validation errors
+      if (error.response?.data?.errors) {
+        setErrors(error.response.data.errors)
+      }
+    }
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value, type, checked } = e.target;
+    
     setFormData(prev => ({
       ...prev,
-      [e.target.name]: e.target.value
+      [name]: type === 'checkbox' ? checked : value
     }))
   }
 
@@ -72,8 +261,12 @@ export default function Register() {
                   placeholder="John"
                   value={formData.firstName}
                   onChange={handleChange}
+                  className={errors.name ? "border-red-500" : ""}
                   required
                 />
+                {errors.name && (
+                  <p className="text-sm text-red-500 mt-1">{errors.name}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="lastName">Last Name</Label>
@@ -97,8 +290,12 @@ export default function Register() {
                 placeholder="john@company.com"
                 value={formData.email}
                 onChange={handleChange}
+                className={errors.email ? "border-red-500" : ""}
                 required
               />
+              {errors.email && (
+                <p className="text-sm text-red-500 mt-1">{errors.email}</p>
+              )}
             </div>
 
             {/* Business Information */}
@@ -141,15 +338,26 @@ export default function Register() {
             <div className="space-y-2">
               <Label htmlFor="planType">Membership Plan</Label>
               <Select onValueChange={handleSelectChange} value={formData.planType}>
-                <SelectTrigger>
+                <SelectTrigger className={errors.membership_plan_id ? "border-red-500" : ""}>
                   <SelectValue placeholder="Select a plan" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="basic">Basic - $29/month</SelectItem>
-                  <SelectItem value="pro">Pro - $79/month</SelectItem>
-                  <SelectItem value="enterprise">Enterprise - $199/month</SelectItem>
+                  {membershipPlans && membershipPlans.length > 0 ? (
+                    membershipPlans.map((plan) => (
+                      <SelectItem key={plan.id} value={plan.id.toString()}>
+                        {plan.name} - ${plan.price}/{plan.name === 'Basic' ? '14 days' : 'month'}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="loading" disabled>
+                      Loading plans...
+                    </SelectItem>
+                  )}
                 </SelectContent>
               </Select>
+              {errors.membership_plan_id && (
+                <p className="text-sm text-red-500 mt-1">{errors.membership_plan_id}</p>
+              )}
             </div>
 
             {/* Password */}
@@ -163,8 +371,12 @@ export default function Register() {
                   placeholder="Create a secure password"
                   value={formData.password}
                   onChange={handleChange}
+                  className={errors.password ? "border-red-500" : ""}
                   required
                 />
+                {errors.password && (
+                  <p className="text-sm text-red-500 mt-1">{errors.password}</p>
+                )}
                 <Button
                   type="button"
                   variant="ghost"
@@ -191,8 +403,12 @@ export default function Register() {
                   placeholder="Confirm your password"
                   value={formData.confirmPassword}
                   onChange={handleChange}
+                  className={errors.confirmPassword ? "border-red-500" : ""}
                   required
                 />
+                {errors.confirmPassword && (
+                  <p className="text-sm text-red-500 mt-1">{errors.confirmPassword}</p>
+                )}
                 <Button
                   type="button"
                   variant="ghost"
@@ -210,26 +426,50 @@ export default function Register() {
             </div>
 
             <div className="flex items-center space-x-2">
-              <input
+              <Checkbox
                 id="terms"
-                type="checkbox"
-                className="rounded border-border text-primary focus:ring-primary"
+                checked={formData.agreeTerms}
+                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, agreeTerms: !!checked }))}
                 required
               />
               <Label htmlFor="terms" className="text-sm">
                 I agree to the{" "}
                 <Link to="/terms" className="text-primary hover:underline">
                   Terms of Service
-                </Link>{" "}
-                and{" "}
+                </Link>
+              </Label>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="privacy"
+                checked={formData.agreePrivacy}
+                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, agreePrivacy: !!checked }))}
+                required
+              />
+              <Label htmlFor="privacy" className="text-sm">
+                I agree to the{" "}
                 <Link to="/privacy" className="text-primary hover:underline">
                   Privacy Policy
                 </Link>
               </Label>
             </div>
 
-            <Button type="submit" variant="gradient" size="lg" className="w-full">
-              Create Account
+            <Button 
+              type="submit" 
+              variant="gradient" 
+              size="lg" 
+              className="w-full"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating Account...
+                </>
+              ) : (
+                "Create Account"
+              )}
             </Button>
           </form>
 

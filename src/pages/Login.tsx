@@ -1,32 +1,77 @@
 import { useState } from "react"
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useNavigate, useLocation } from "react-router-dom"
 import { AuthLayout } from "@/components/AuthLayout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
-import { Eye, EyeOff } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+import { useAuth } from "@/contexts/AuthContext"
+import { Eye, EyeOff, Loader2 } from "lucide-react"
 
 export default function Login() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const { toast } = useToast()
+  const { login, isLoading } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const [formData, setFormData] = useState({
     email: "",
     password: ""
   })
+  const [errors, setErrors] = useState<{[key: string]: string}>({})
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // TODO: Implement login logic
-    console.log("Login attempt:", formData)
-    // Simulate successful login and redirect to dashboard
-    navigate("/dashboard")
+    setErrors({})
+    
+    console.log('[LOGIN] Form submission started', {
+      email: formData.email,
+      timestamp: new Date().toISOString()
+    });
+    
+    try {
+      await login(formData.email, formData.password)
+      
+      console.log('[LOGIN] Login successful, showing success toast');
+      
+      toast({
+        title: "Welcome back!",
+        description: "You have been successfully logged in.",
+      })
+      
+      // Redirect to intended page or dashboard
+      const from = location.state?.from?.pathname || "/dashboard"
+      console.log('[LOGIN] Redirecting to:', from);
+      navigate(from, { replace: true })
+    } catch (error: any) {
+      const errorMessage = error.message || "Login failed. Please try again."
+      
+      console.error('[LOGIN] Login failed', {
+        email: formData.email,
+        error: errorMessage,
+        validationErrors: error.response?.data?.errors
+      });
+      
+      toast({
+        title: "Login Failed",
+        description: errorMessage,
+        variant: "destructive",
+      })
+      
+      // Handle validation errors
+      if (error.response?.data?.errors) {
+        setErrors(error.response.data.errors)
+      }
+    }
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    
     setFormData(prev => ({
       ...prev,
-      [e.target.name]: e.target.value
+      [name]: value
     }))
   }
 
@@ -47,8 +92,12 @@ export default function Login() {
                 placeholder="Enter your email"
                 value={formData.email}
                 onChange={handleChange}
+                className={errors.email ? "border-red-500" : ""}
                 required
               />
+              {errors.email && (
+                <p className="text-sm text-red-500 mt-1">{errors.email}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -61,8 +110,12 @@ export default function Login() {
                   placeholder="Enter your password"
                   value={formData.password}
                   onChange={handleChange}
+                  className={errors.password ? "border-red-500" : ""}
                   required
                 />
+                {errors.password && (
+                  <p className="text-sm text-red-500 mt-1">{errors.password}</p>
+                )}
                 <Button
                   type="button"
                   variant="ghost"
@@ -98,8 +151,21 @@ export default function Login() {
               </Link>
             </div>
 
-            <Button type="submit" variant="gradient" size="lg" className="w-full">
-              Sign In
+            <Button 
+              type="submit" 
+              variant="gradient" 
+              size="lg" 
+              className="w-full"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Signing In...
+                </>
+              ) : (
+                "Sign In"
+              )}
             </Button>
           </form>
 

@@ -72,7 +72,7 @@ export default function LandingPage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button size="xl" variant="secondary" className="bg-white text-foreground hover:bg-gray-100" asChild>
-                <Link to="/register">
+                <Link to="/register" state={{ selectedPlan: "basic" }}>
                   Start Free Trial
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Link>

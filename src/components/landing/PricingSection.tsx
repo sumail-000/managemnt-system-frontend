@@ -8,13 +8,13 @@ export function PricingSection() {
   const plans = [
     {
       name: "Basic",
-      price: 29,
+      price: 0,
       icon: Star,
       description: "Perfect for small food businesses getting started",
       badge: null,
       features: [
         "Manual product entry only",
-        "Max 3 product submissions/month",
+        "Max 3 product submissions/14 days",
         "Standard label templates",
         "Basic compliance feedback",
         "Self-help support",
@@ -112,7 +112,7 @@ export function PricingSection() {
                 <CardTitle className="text-2xl font-bold">{plan.name}</CardTitle>
                 <div className="mt-4">
                   <span className="text-4xl font-bold text-foreground">${plan.price}</span>
-                  <span className="text-muted-foreground">/month</span>
+                  <span className="text-muted-foreground">{plan.name === 'Basic' ? '/14 days' : '/month'}</span>
                 </div>
                 <p className="text-muted-foreground mt-2">{plan.description}</p>
               </CardHeader>
