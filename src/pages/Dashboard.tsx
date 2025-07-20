@@ -122,28 +122,29 @@ export default function Dashboard() {
       {/* Fixed Header */}
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border px-6 py-4">
         <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
-          <p className="text-muted-foreground">
-            Welcome back, {user?.name}! Here's what's happening with your food products.
-          </p>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="text-right">
-            <div className="flex items-center gap-2">
-              <Crown className="w-4 h-4 text-primary" />
-              <span className="font-medium">{membershipInfo.name} Plan</span>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {membershipInfo.limit === 999 ? 'Unlimited' : `${membershipInfo.limit} products/month`}
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
+            <p className="text-muted-foreground">
+              Welcome back, {user?.name}! Here's what's happening with your food products.
             </p>
           </div>
-          <Button variant="gradient" size="lg" asChild>
-            <Link to="/products/new">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Product
-            </Link>
-          </Button>
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <div className="flex items-center gap-2">
+                <Crown className="w-4 h-4 text-primary" />
+                <span className="font-medium">{membershipInfo.name} Plan</span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {membershipInfo.limit === 999 ? 'Unlimited' : `${membershipInfo.limit} products/month`}
+              </p>
+            </div>
+            <Button variant="gradient" size="lg" asChild>
+              <Link to="/products/new">
+                <Plus className="w-4 h-4 mr-2" />
+                Add Product
+              </Link>
+            </Button>
+          </div>
         </div>
       </div>
 
