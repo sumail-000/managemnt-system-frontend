@@ -1,4 +1,5 @@
-import { Link } from "react-router-dom"
+import { useState } from "react"
+import { Link, useNavigate } from "react-router-dom"
 import { 
   MoreHorizontal, 
   Pin, 
@@ -20,49 +21,106 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
-
-interface Product {
-  id: string
-  name: string
-  description: string
-  category: string
-  status: "Published" | "Draft"
-  isPinned: boolean
-  tags: string[]
-  servingSize: string
-  servingsPerContainer: number
-  createdAt: Date
-  updatedAt: Date
-  thumbnail?: string
-}
+import { ProductCamelCase as Product } from "@/types/product"
+import { productsAPI } from "@/services/api"
 
 interface ProductCardProps {
   product: Product
   selected: boolean
   onSelect: (checked: boolean) => void
   variant?: "default" | "compact" | "masonry"
+  onRefresh?: () => void
 }
 
-export function ProductCard({ product, selected, onSelect, variant = "default" }: ProductCardProps) {
-  const handlePin = () => {
-    // Handle pin/unpin logic
-    console.log("Toggle pin for product:", product.id)
+export function ProductCard({ product, selected, onSelect, variant = "default", onRefresh }: ProductCardProps) {
+  const navigate = useNavigate()
+  const { toast } = useToast()
+  const [isLoading, setIsLoading] = useState(false)
+
+  const handlePin = async () => {
+    if (isLoading) return
+    
+    setIsLoading(true)
+    try {
+      await productsAPI.togglePin(product.id)
+      toast({
+        title: product.isPinned ? "Product unpinned" : "Product pinned",
+        description: `${product.name} has been ${product.isPinned ? 'unpinned' : 'pinned'}.`
+      })
+      onRefresh?.()
+    } catch (error: any) {
+      console.error('Error toggling pin:', error)
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to toggle pin status",
+        variant: "destructive"
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleEdit = () => {
-    // Handle edit navigation
-    console.log("Edit product:", product.id)
+    navigate(`/products/${product.id}/edit`)
   }
 
-  const handleDuplicate = () => {
-    // Handle duplicate logic
-    console.log("Duplicate product:", product.id)
+  const handleDuplicate = async () => {
+    if (isLoading) return
+    
+    setIsLoading(true)
+    try {
+      await productsAPI.duplicate(product.id)
+      toast({
+        title: "Product duplicated",
+        description: `${product.name} has been duplicated successfully.`
+      })
+      onRefresh?.()
+    } catch (error: any) {
+      console.error('Error duplicating product:', error)
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to duplicate product",
+        variant: "destructive"
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  const handleDelete = () => {
-    // Handle delete logic
-    console.log("Delete product:", product.id)
+  const handleDelete = async () => {
+    if (isLoading) return
+    
+    setIsLoading(true)
+    try {
+      await productsAPI.delete(product.id)
+      toast({
+        title: "Product deleted",
+        description: "The product has been moved to trash."
+      })
+      onRefresh?.()
+    } catch (error: any) {
+      console.error('Error deleting product:', error)
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to delete product",
+        variant: "destructive"
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   // Compact List View
@@ -75,7 +133,10 @@ export function ProductCard({ product, selected, onSelect, variant = "default" }
         <CardContent className="p-4">
           <div className="flex items-center gap-4">
             {/* Selection Checkbox */}
-            <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className={cn(
+              "transition-opacity",
+              selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            )}>
               <Checkbox
                 checked={selected}
                 onCheckedChange={onSelect}
@@ -85,9 +146,9 @@ export function ProductCard({ product, selected, onSelect, variant = "default" }
 
             {/* Product Image */}
             <div className="relative h-12 w-12 rounded-lg bg-muted overflow-hidden flex-shrink-0">
-              {product.thumbnail ? (
+              {product.image ? (
                 <img
-                  src={product.thumbnail}
+                  src={product.image}
                   alt={product.name}
                   className="w-full h-full object-cover"
                 />
@@ -156,20 +217,38 @@ export function ProductCard({ product, selected, onSelect, variant = "default" }
                       Edit Product
                     </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleDuplicate}>
+                  <DropdownMenuItem onClick={handleDuplicate} disabled={isLoading}>
                     <Copy className="h-4 w-4 mr-2" />
                     Duplicate
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handlePin}>
+                  <DropdownMenuItem onClick={handlePin} disabled={isLoading}>
                     <Pin className="h-4 w-4 mr-2" />
                     {product.isPinned ? "Unpin" : "Pin"} Product
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleDelete} className="text-destructive">
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Delete
-                  </DropdownMenuItem>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive" disabled={isLoading}>
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete
+                      </DropdownMenuItem>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will move "{product.name}" to trash. You can restore it later from the trash.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                          Delete
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -187,7 +266,10 @@ export function ProductCard({ product, selected, onSelect, variant = "default" }
         selected && "ring-2 ring-primary shadow-glow"
       )}>
         {/* Selection Checkbox */}
-        <div className="absolute top-3 left-3 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className={cn(
+          "absolute top-3 left-3 z-10 transition-opacity",
+          selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+        )}>
           <Checkbox
             checked={selected}
             onCheckedChange={onSelect}
@@ -206,17 +288,21 @@ export function ProductCard({ product, selected, onSelect, variant = "default" }
 
         {/* Product Image */}
         <div className="relative aspect-square bg-muted overflow-hidden">
-          {product.thumbnail ? (
-            <img
-              src={product.thumbnail}
-              alt={product.name}
-              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
-            />
-          ) : (
-            <div className="flex items-center justify-center h-full bg-gradient-to-br from-muted to-muted/50">
-              <Package className="h-16 w-16 text-muted-foreground/60" />
-            </div>
-          )}
+          {product.image ? (
+          <img
+            src={product.image}
+            alt={product.name}
+            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
+            onError={(e) => {
+              console.log('Image failed to load:', product.image)
+              e.currentTarget.style.display = 'none'
+              e.currentTarget.nextElementSibling?.classList.remove('hidden')
+            }}
+          />
+        ) : null}
+        <div className={`flex items-center justify-center h-full bg-gradient-to-br from-muted to-muted/50 ${product.image ? 'hidden' : ''}`}>
+          <Package className="h-16 w-16 text-muted-foreground/60" />
+        </div>
           
           {/* Gradient Overlay */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -276,20 +362,38 @@ export function ProductCard({ product, selected, onSelect, variant = "default" }
                     Edit Product
                   </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleDuplicate}>
+                <DropdownMenuItem onClick={handleDuplicate} disabled={isLoading}>
                   <Copy className="h-4 w-4 mr-2" />
                   Duplicate
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handlePin}>
+                <DropdownMenuItem onClick={handlePin} disabled={isLoading}>
                   <Pin className="h-4 w-4 mr-2" />
                   {product.isPinned ? "Unpin" : "Pin"} Product
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleDelete} className="text-destructive">
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete
-                </DropdownMenuItem>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive" disabled={isLoading}>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
+                    </DropdownMenuItem>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will move "{product.name}" to trash. You can restore it later from the trash.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                        Delete
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -312,7 +416,7 @@ export function ProductCard({ product, selected, onSelect, variant = "default" }
           </div>
 
           {/* Tags */}
-          {product.tags.length > 0 && (
+          {product.tags && product.tags.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {product.tags.slice(0, 2).map((tag) => (
                 <Badge key={tag} variant="outline" className="text-xs border-primary/20 text-primary/80">
@@ -331,7 +435,7 @@ export function ProductCard({ product, selected, onSelect, variant = "default" }
           <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-border/50">
             <div className="flex items-center">
               <Calendar className="h-3 w-3 mr-1" />
-              <span>{product.updatedAt.toLocaleDateString()}</span>
+              <span>{product.updatedAt ? product.updatedAt.toLocaleDateString() : 'N/A'}</span>
             </div>
             <span className="font-medium">{product.servingsPerContainer} servings</span>
           </div>
@@ -347,7 +451,10 @@ export function ProductCard({ product, selected, onSelect, variant = "default" }
       selected && "ring-2 ring-primary shadow-glow"
     )}>
       {/* Selection Checkbox */}
-      <div className="absolute top-3 left-3 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className={cn(
+        "absolute top-3 left-3 z-10 transition-opacity",
+        selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+      )}>
         <Checkbox
           checked={selected}
           onCheckedChange={onSelect}
@@ -366,17 +473,21 @@ export function ProductCard({ product, selected, onSelect, variant = "default" }
 
       {/* Product Image */}
       <div className="relative h-48 bg-gradient-to-br from-muted to-muted/50 overflow-hidden">
-        {product.thumbnail ? (
+        {product.image ? (
           <img
-            src={product.thumbnail}
+            src={product.image}
             alt={product.name}
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+            onError={(e) => {
+              console.log('Image failed to load:', product.image)
+              e.currentTarget.style.display = 'none'
+              e.currentTarget.nextElementSibling?.classList.remove('hidden')
+            }}
           />
-        ) : (
-          <div className="flex items-center justify-center h-full">
-            <Package className="h-12 w-12 text-muted-foreground/60" />
-          </div>
-        )}
+        ) : null}
+        <div className={`flex items-center justify-center h-full ${product.image ? 'hidden' : ''}`}>
+          <Package className="h-12 w-12 text-muted-foreground/60" />
+        </div>
         
         {/* Quick Actions Overlay */}
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors duration-200 flex items-center justify-center opacity-0 group-hover:opacity-100">
@@ -433,20 +544,38 @@ export function ProductCard({ product, selected, onSelect, variant = "default" }
                   Edit Product
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleDuplicate}>
+              <DropdownMenuItem onClick={handleDuplicate} disabled={isLoading}>
                 <Copy className="h-4 w-4 mr-2" />
                 Duplicate
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handlePin}>
+              <DropdownMenuItem onClick={handlePin} disabled={isLoading}>
                 <Pin className="h-4 w-4 mr-2" />
                 {product.isPinned ? "Unpin" : "Pin"} Product
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleDelete} className="text-destructive">
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete
-              </DropdownMenuItem>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive" disabled={isLoading}>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </DropdownMenuItem>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will move "{product.name}" to trash. You can restore it later from the trash.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -470,7 +599,7 @@ export function ProductCard({ product, selected, onSelect, variant = "default" }
           </div>
 
           {/* Tags */}
-          {product.tags.length > 0 && (
+          {product.tags && product.tags.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {product.tags.slice(0, 3).map((tag) => (
                 <Badge key={tag} variant="outline" className="text-xs border-primary/20 text-primary/80 hover:bg-primary/5">
@@ -489,7 +618,7 @@ export function ProductCard({ product, selected, onSelect, variant = "default" }
           <div className="flex items-center justify-between text-xs text-muted-foreground pt-3 border-t border-border/50">
             <div className="flex items-center">
               <Calendar className="h-3 w-3 mr-1" />
-              <span>{product.updatedAt.toLocaleDateString()}</span>
+              <span>{product.updatedAt ? product.updatedAt.toLocaleDateString() : 'N/A'}</span>
             </div>
             <span className="font-medium text-primary/80">{product.servingsPerContainer} servings</span>
           </div>

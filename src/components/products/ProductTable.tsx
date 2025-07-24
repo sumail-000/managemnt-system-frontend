@@ -1,4 +1,5 @@
-import { Link } from "react-router-dom"
+import { useState } from "react"
+import { Link, useNavigate } from "react-router-dom"
 import { 
   MoreHorizontal, 
   Pin, 
@@ -20,41 +21,127 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Card } from "@/components/ui/card"
-
-interface Product {
-  id: string
-  name: string
-  description: string
-  category: string
-  status: "Published" | "Draft"
-  isPinned: boolean
-  tags: string[]
-  servingSize: string
-  servingsPerContainer: number
-  createdAt: Date
-  updatedAt: Date
-  thumbnail?: string
-}
+import { useToast } from "@/hooks/use-toast"
+import { ProductCamelCase as Product } from "@/types/product"
+import { productsAPI } from "@/services/api"
 
 interface ProductTableProps {
   products: Product[]
   selectedProducts: string[]
   onSelectProduct: (productId: string, checked: boolean) => void
   onSelectAll: (checked: boolean) => void
+  onRefresh?: () => void
 }
 
 export function ProductTable({ 
   products, 
   selectedProducts, 
   onSelectProduct, 
-  onSelectAll 
+  onSelectAll,
+  onRefresh 
 }: ProductTableProps) {
+  const navigate = useNavigate()
+  const { toast } = useToast()
+  const [loadingProducts, setLoadingProducts] = useState<Set<string>>(new Set())
+  
   const allSelected = products.length > 0 && selectedProducts.length === products.length
   const someSelected = selectedProducts.length > 0 && selectedProducts.length < products.length
 
-  const handleProductAction = (action: string, productId: string) => {
-    console.log(`${action} product:`, productId)
+  const handlePin = async (productId: string, isPinned: boolean) => {
+    if (loadingProducts.has(productId)) return
+    
+    setLoadingProducts(prev => new Set(prev).add(productId))
+    try {
+      await productsAPI.togglePin(productId)
+      toast({
+        title: isPinned ? "Product unpinned" : "Product pinned",
+        description: "Pin status updated successfully."
+      })
+      onRefresh?.()
+    } catch (error: any) {
+      console.error('Error toggling pin:', error)
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to toggle pin status",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingProducts(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(productId)
+        return newSet
+      })
+    }
+  }
+
+  const handleDuplicate = async (productId: string) => {
+    if (loadingProducts.has(productId)) return
+    
+    setLoadingProducts(prev => new Set(prev).add(productId))
+    try {
+      await productsAPI.duplicate(productId)
+      toast({
+        title: "Product duplicated",
+        description: "Product has been duplicated successfully."
+      })
+      onRefresh?.()
+    } catch (error: any) {
+      console.error('Error duplicating product:', error)
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to duplicate product",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingProducts(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(productId)
+        return newSet
+      })
+    }
+  }
+
+  const handleDelete = async (productId: string) => {
+    if (loadingProducts.has(productId)) return
+    
+    setLoadingProducts(prev => new Set(prev).add(productId))
+    try {
+      await productsAPI.delete(productId)
+      toast({
+        title: "Product deleted",
+        description: "The product has been moved to trash."
+      })
+      onRefresh?.()
+    } catch (error: any) {
+      console.error('Error deleting product:', error)
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to delete product",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingProducts(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(productId)
+        return newSet
+      })
+    }
+  }
+
+  const handleEdit = (productId: string) => {
+    navigate(`/products/${productId}/edit`)
   }
 
   return (
@@ -139,17 +226,21 @@ export function ProductTable({
                     
                     {/* Enhanced Thumbnail */}
                     <div className="relative h-12 w-12 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center overflow-hidden flex-shrink-0 ring-2 ring-border/20 group-hover:ring-primary/30 transition-all duration-300">
-                      {product.thumbnail ? (
+                      {product.image ? (
                         <img
-                          src={product.thumbnail}
+                          src={product.image}
                           alt={product.name}
                           className="h-full w-full object-cover rounded-xl"
+                          onError={(e) => {
+                            console.log('Image failed to load:', product.image)
+                            e.currentTarget.style.display = 'none'
+                            e.currentTarget.nextElementSibling?.classList.remove('hidden')
+                          }}
                         />
-                      ) : (
-                        <div className="text-base font-bold text-primary">
-                          {product.name.charAt(0).toUpperCase()}
-                        </div>
-                      )}
+                      ) : null}
+                      <div className={`text-base font-bold text-primary ${product.image ? 'hidden' : ''}`}>
+                        {product.name.charAt(0).toUpperCase()}
+                      </div>
                       <div className="absolute inset-0 bg-gradient-to-t from-black/5 to-transparent rounded-xl" />
                     </div>
                     
@@ -204,7 +295,7 @@ export function ProductTable({
                 {/* Enhanced Tags - Hidden on mobile */}
                 <div className="hidden lg:block lg:col-span-2">
                   <div className="flex flex-wrap gap-2">
-                    {product.tags.slice(0, 2).map((tag) => (
+                    {product.tags && product.tags.slice(0, 2).map((tag) => (
                       <Badge 
                         key={tag} 
                         variant="outline" 
@@ -214,7 +305,7 @@ export function ProductTable({
                         {tag}
                       </Badge>
                     ))}
-                    {product.tags.length > 2 && (
+                    {product.tags && product.tags.length > 2 && (
                       <Badge 
                         variant="outline" 
                         className="text-xs border-muted-foreground/30 bg-muted/50 px-2 py-1"
@@ -232,17 +323,17 @@ export function ProductTable({
                       <Clock className="h-4 w-4 text-primary" />
                       <div>
                         <div className="font-semibold text-sm text-foreground">
-                          {product.updatedAt.toLocaleDateString('en-US', { 
+                          {product.updatedAt ? product.updatedAt.toLocaleDateString('en-US', { 
                             month: 'short', 
                             day: 'numeric',
                             year: 'numeric'
-                          })}
+                          }) : 'N/A'}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          {product.updatedAt.toLocaleTimeString([], { 
+                          {product.updatedAt ? product.updatedAt.toLocaleTimeString([], { 
                             hour: '2-digit', 
                             minute: '2-digit' 
-                          })}
+                          }) : 'N/A'}
                         </div>
                       </div>
                     </div>
@@ -267,7 +358,8 @@ export function ProductTable({
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleProductAction("edit", product.id)}
+                        onClick={() => handleEdit(product.id)}
+                        disabled={loadingProducts.has(product.id)}
                         className="h-9 w-9 p-0 hover:bg-primary/10 hover:text-primary transition-all duration-200 rounded-lg"
                       >
                         <Edit className="h-4 w-4" />
@@ -298,23 +390,53 @@ export function ProductTable({
                             Edit Product
                           </Link>
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleProductAction("duplicate", product.id)} className="hover:bg-primary/10">
+                        <DropdownMenuItem 
+                          onClick={() => handleDuplicate(product.id)} 
+                          disabled={loadingProducts.has(product.id)}
+                          className="hover:bg-primary/10"
+                        >
                           <Copy className="h-4 w-4 mr-3 text-primary" />
                           Duplicate
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => handleProductAction("pin", product.id)} className="hover:bg-primary/10">
+                        <DropdownMenuItem 
+                          onClick={() => handlePin(product.id, product.isPinned)} 
+                          disabled={loadingProducts.has(product.id)}
+                          className="hover:bg-primary/10"
+                        >
                           <Pin className="h-4 w-4 mr-3 text-primary" />
                           {product.isPinned ? "Unpin" : "Pin"} Product
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem 
-                          onClick={() => handleProductAction("delete", product.id)}
-                          className="text-destructive focus:text-destructive hover:bg-destructive/10"
-                        >
-                          <Trash2 className="h-4 w-4 mr-3" />
-                          Delete
-                        </DropdownMenuItem>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <DropdownMenuItem 
+                              onSelect={(e) => e.preventDefault()}
+                              disabled={loadingProducts.has(product.id)}
+                              className="text-destructive focus:text-destructive hover:bg-destructive/10"
+                            >
+                              <Trash2 className="h-4 w-4 mr-3" />
+                              Delete
+                            </DropdownMenuItem>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This will move "{product.name}" to trash. You can restore it later from the trash.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction 
+                                onClick={() => handleDelete(product.id)} 
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              >
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>

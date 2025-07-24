@@ -17,14 +17,21 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
     
+    // Handle FormData - remove Content-Type to let browser set it with boundary
+    if (config.data instanceof FormData) {
+      console.log('[API] FormData detected - removing Content-Type header to allow browser to set boundary');
+      delete config.headers['Content-Type'];
+    }
+    
     // Log API request
     console.log('[API] Request:', {
       method: config.method?.toUpperCase(),
       url: config.url,
       baseURL: config.baseURL,
-      data: config.data,
+      data: config.data instanceof FormData ? 'FormData (file upload)' : config.data,
       params: config.params,
-      hasToken: !!token
+      hasToken: !!token,
+      isFormData: config.data instanceof FormData
     });
     
     return config;
@@ -34,6 +41,8 @@ api.interceptors.request.use(
     return Promise.reject(error);
   }
 );
+
+// Removed camelCase conversion to maintain snake_case consistency with backend
 
 // Response interceptor to handle errors and logging
 api.interceptors.response.use(
@@ -46,6 +55,21 @@ api.interceptors.response.use(
       data: response.data
     });
     
+    // Check for token refresh headers
+    const newToken = response.headers['x-new-token'];
+    const tokenRefreshed = response.headers['x-token-refreshed'];
+    
+    if (newToken && tokenRefreshed === 'true') {
+      console.log('[API] Token refreshed automatically, updating localStorage');
+      localStorage.setItem('auth_token', newToken);
+      
+      // Dispatch custom event to notify components of token refresh
+      window.dispatchEvent(new CustomEvent('tokenRefreshed', { 
+        detail: { newToken } 
+      }));
+    }
+    
+    // Return data as-is to maintain snake_case consistency with backend
     return response.data;
   },
   (error) => {
@@ -59,10 +83,29 @@ api.interceptors.response.use(
     });
     
     if (error.response?.status === 401) {
-      console.warn('[API] Unauthorized access - redirecting to login');
-      // Token expired or invalid
-      localStorage.removeItem('auth_token');
-      window.location.href = '/login';
+      console.warn('[API] Unauthorized access detected');
+      // Only auto-logout if we're not already on login/register pages
+      // and if this isn't a token validation request that might be expected to fail
+      const currentPath = window.location.pathname;
+      const isAuthPage = currentPath === '/login' || currentPath === '/register';
+      const isTokenValidation = error.config?.url?.includes('/auth/user');
+      const isPaymentPage = currentPath === '/payment';
+      
+      if (!isAuthPage && !isTokenValidation) {
+        console.warn('[API] Auto-logout triggered - redirecting to login');
+        localStorage.removeItem('auth_token');
+        
+        // If user is on payment page, show a more helpful message
+        if (isPaymentPage) {
+          // Store a flag to show a specific message on login page
+          localStorage.setItem('payment_session_expired', 'true');
+          window.location.href = '/login?redirect=payment&reason=session_expired';
+        } else {
+          window.location.href = '/login';
+        }
+      } else {
+        console.warn('[API] 401 error on auth page or token validation - not auto-logging out');
+      }
     }
     return Promise.reject(error);
   }
@@ -125,20 +168,125 @@ export const authAPI = {
 
 // Products API
 export const productsAPI = {
-  getAll: (params?: { search?: string; category?: string; page?: number }) =>
-    api.get('/products', { params }),
+  // Basic CRUD operations
+  getAll: (params?: { 
+    search?: string; 
+    category?: string; 
+    status?: string;
+    is_pinned?: boolean;
+    tags?: string[];
+    sort_by?: string;
+    sort_order?: 'asc' | 'desc';
+    page?: number;
+    per_page?: number;
+  }) => {
+    console.log('[PRODUCTS_API] Get all products request initiated', params);
+    return api.get('/products', { params });
+  },
   
-  getById: (id: number) => api.get(`/products/${id}`),
+  getById: (id: number | string) => {
+    console.log('[PRODUCTS_API] Get product by ID request initiated', { id });
+    return api.get(`/products/${id}`);
+  },
   
-  create: (productData: any) => api.post('/products', productData),
+  create: (productData: {
+    name: string;
+    description?: string;
+    category: string;
+    tags?: string[];
+    serving_size: number;
+    serving_unit: string;
+    servings_per_container: number;
+    is_public?: boolean;
+    is_pinned?: boolean;
+    status?: 'draft' | 'published';
+  } | FormData) => {
+    console.log('[PRODUCTS_API] Create product request initiated', { 
+      name: productData instanceof FormData ? 'FormData' : productData.name 
+    });
+    return api.post('/products', productData);
+  },
   
-  update: (id: number, productData: any) =>
-    api.put(`/products/${id}`, productData),
+  update: (id: number | string, productData: Partial<{
+    name: string;
+    description?: string;
+    category: string;
+    tags?: string[];
+    serving_size: number;
+    serving_unit: string;
+    servings_per_container: number;
+    is_public?: boolean;
+    is_pinned?: boolean;
+    status?: 'draft' | 'published';
+  }> | FormData) => {
+    console.log('[PRODUCTS_API] Update product request initiated', { 
+      id, 
+      name: productData instanceof FormData ? 'FormData' : productData.name 
+    });
+    
+    // Laravel doesn't support file uploads with PUT requests
+    // Use POST with method spoofing for FormData (file uploads)
+    if (productData instanceof FormData) {
+      productData.append('_method', 'PUT');
+      return api.post(`/products/${id}`, productData);
+    }
+    
+    return api.put(`/products/${id}`, productData);
+  },
   
-  delete: (id: number) => api.delete(`/products/${id}`),
+  delete: (id: number | string) => {
+    console.log('[PRODUCTS_API] Delete product request initiated', { id });
+    return api.delete(`/products/${id}`);
+  },
   
-  getPublic: (params?: { search?: string; category?: string; page?: number }) =>
-    api.get('/products/public', { params }),
+  // Additional product operations
+  duplicate: (id: number | string) => {
+    console.log('[PRODUCTS_API] Duplicate product request initiated', { id });
+    return api.post(`/products/${id}/duplicate`);
+  },
+  
+  togglePin: (id: number | string) => {
+    console.log('[PRODUCTS_API] Toggle pin product request initiated', { id });
+    return api.patch(`/products/${id}/toggle-pin`);
+  },
+  
+  // Categories and tags
+  getCategories: () => {
+    console.log('[PRODUCTS_API] Get categories request initiated');
+    return api.get('/products/categories/list');
+  },
+  
+  getTags: () => {
+    console.log('[PRODUCTS_API] Get tags request initiated');
+    return api.get('/products/tags/list');
+  },
+  
+  // Trash management
+  getTrashed: (params?: { search?: string; page?: number; per_page?: number }) => {
+    console.log('[PRODUCTS_API] Get trashed products request initiated', params);
+    return api.get('/products/trashed/list', { params });
+  },
+  
+  restore: (id: number | string) => {
+    console.log('[PRODUCTS_API] Restore product request initiated', { id });
+    return api.patch(`/products/${id}/restore`);
+  },
+  
+  forceDelete: (id: number | string) => {
+    console.log('[PRODUCTS_API] Force delete product request initiated', { id });
+    return api.delete(`/products/${id}/force-delete`);
+  },
+  
+  // Public products
+  getPublic: (params?: { search?: string; category?: string; page?: number; per_page?: number }) => {
+    console.log('[PRODUCTS_API] Get public products request initiated', params);
+    return api.get('/products/public', { params });
+  },
+  
+  getPublicById: (id: number | string) => {
+    console.log('[PRODUCTS_API] Get public product by ID request initiated', { id });
+    return api.get(`/products/public/${id}`);
+  },
 };
 
 // Ingredients API
@@ -216,7 +364,34 @@ export const billingAPI = {
   
   getBillingHistory: () => api.get('/billing/history'),
   
+  downloadInvoice: (invoiceId: string) => {
+    return api.get(`/billing/invoice/${invoiceId}/download`, {
+      responseType: 'blob'
+    });
+  },
+  
+  exportBillingHistory: () => {
+    return api.get('/billing/history/export', {
+      responseType: 'blob'
+    });
+  },
+  
   createTestData: () => api.post('/billing/test-data'),
+};
+
+// Payment API
+export const paymentAPI = {
+  createPaymentIntent: (data: any): Promise<any> => api.post('/payment/create-intent', data),
+  
+  getPaymentStatus: (): Promise<any> => api.get('/payment/status'),
+  
+  cancelSubscription: (): Promise<any> => api.post('/payment/cancel-subscription'),
+  
+  updateAutoRenew: (data: { auto_renew: boolean }): Promise<any> => api.post('/payment/auto-renew', data),
+  
+  updatePaymentMethod: (data: any): Promise<any> => api.post('/payment/update-method', data),
+  
+  getSubscriptionDetails: (): Promise<any> => api.get('/payment/subscription'),
 };
 
 export default api;

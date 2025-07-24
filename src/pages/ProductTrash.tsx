@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Link } from "react-router-dom"
 import { 
   ArrowLeft, 
@@ -6,7 +6,8 @@ import {
   Trash2, 
   Search,
   AlertTriangle,
-  Package
+  Package,
+  Loader2
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,6 +26,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
+import { productsAPI } from "@/services/api"
+import { Product, transformProductToCamelCase } from "@/types/product"
 
 interface TrashedProduct {
   id: string
@@ -68,13 +71,38 @@ const mockTrashedProducts: TrashedProduct[] = [
 export default function ProductTrash() {
   const { toast } = useToast()
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedProducts, setSelectedProducts] = useState<string[]>([])
-  const [trashedProducts, setTrashedProducts] = useState(mockTrashedProducts)
+  const [selectedProducts, setSelectedProducts] = useState<number[]>([])
+  const [trashedProducts, setTrashedProducts] = useState<Product[]>([])
+  const [loading, setLoading] = useState(true)
+  const [actionLoading, setActionLoading] = useState(false)
+
+  // Load trashed products on component mount
+  useEffect(() => {
+    loadTrashedProducts()
+  }, [])
+
+  const loadTrashedProducts = async () => {
+    try {
+      setLoading(true)
+      const response = await productsAPI.getTrashed()
+      const products = response.data.map(transformProductToCamelCase)
+      setTrashedProducts(products)
+    } catch (error) {
+      console.error('Failed to load trashed products:', error)
+      toast({
+        title: "Error",
+        description: "Failed to load trashed products",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const filteredProducts = trashedProducts.filter(product =>
     product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    product.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    product.category.toLowerCase().includes(searchQuery.toLowerCase())
+    (product.description && product.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (product.category && product.category.toLowerCase().includes(searchQuery.toLowerCase()))
   )
 
   const handleSelectProduct = (productId: string, checked: boolean) => {
@@ -93,50 +121,96 @@ export default function ProductTrash() {
     }
   }
 
-  const handleRestore = (productId: string) => {
-    const product = trashedProducts.find(p => p.id === productId)
-    if (product) {
-      setTrashedProducts(prev => prev.filter(p => p.id !== productId))
-      setSelectedProducts(prev => prev.filter(id => id !== productId))
+  const handleRestore = async (productId: number) => {
+    try {
+      setActionLoading(true)
+      await productsAPI.restore(productId)
       toast({
         title: "Product restored",
-        description: `${product.name} has been restored successfully.`
+        description: "The product has been restored successfully."
       })
-    }
-  }
-
-  const handleBulkRestore = () => {
-    const restoredCount = selectedProducts.length
-    setTrashedProducts(prev => prev.filter(p => !selectedProducts.includes(p.id)))
-    setSelectedProducts([])
-    toast({
-      title: "Products restored",
-      description: `${restoredCount} product(s) have been restored successfully.`
-    })
-  }
-
-  const handlePermanentDelete = (productId: string) => {
-    const product = trashedProducts.find(p => p.id === productId)
-    if (product) {
-      setTrashedProducts(prev => prev.filter(p => p.id !== productId))
-      setSelectedProducts(prev => prev.filter(id => id !== productId))
+      // Reload trashed products
+      await loadTrashedProducts()
+    } catch (error) {
+      console.error('Failed to restore product:', error)
       toast({
-        title: "Product permanently deleted",
-        description: `${product.name} has been permanently deleted.`,
+        title: "Error",
+        description: "Failed to restore product",
         variant: "destructive"
       })
+    } finally {
+      setActionLoading(false)
     }
   }
 
-  const handleBulkPermanentDelete = () => {
-    const deletedCount = selectedProducts.length
-    setTrashedProducts(prev => prev.filter(p => !selectedProducts.includes(p.id)))
-    setSelectedProducts([])
-    toast({
-      title: "Products permanently deleted",
-      description: `${deletedCount} product(s) have been permanently deleted.`,
-      variant: "destructive"
-    })
+  const handleBulkRestore = async () => {
+    try {
+      setActionLoading(true)
+      await Promise.all(selectedProducts.map(id => productsAPI.restore(id)))
+      toast({
+        title: "Products restored",
+        description: `${selectedProducts.length} product(s) have been restored successfully.`
+      })
+      setSelectedProducts([])
+      // Reload trashed products
+      await loadTrashedProducts()
+    } catch (error) {
+      console.error('Failed to restore products:', error)
+      toast({
+        title: "Error",
+        description: "Failed to restore products",
+        variant: "destructive"
+      })
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handlePermanentDelete = async (productId: number) => {
+    try {
+      setActionLoading(true)
+      await productsAPI.forceDelete(productId)
+      toast({
+        title: "Product permanently deleted",
+        description: "The product has been permanently deleted.",
+        variant: "destructive"
+      })
+      // Reload trashed products
+      await loadTrashedProducts()
+    } catch (error) {
+      console.error('Failed to delete product:', error)
+      toast({
+        title: "Error",
+        description: "Failed to delete product",
+        variant: "destructive"
+      })
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleBulkPermanentDelete = async () => {
+    try {
+      setActionLoading(true)
+      await Promise.all(selectedProducts.map(id => productsAPI.forceDelete(id)))
+      toast({
+        title: "Products permanently deleted",
+        description: `${selectedProducts.length} product(s) have been permanently deleted.`,
+        variant: "destructive"
+      })
+      setSelectedProducts([])
+      // Reload trashed products
+      await loadTrashedProducts()
+    } catch (error) {
+      console.error('Failed to delete products:', error)
+      toast({
+        title: "Error",
+        description: "Failed to delete products",
+        variant: "destructive"
+      })
+    } finally {
+      setActionLoading(false)
+    }
   }
 
   const allSelected = filteredProducts.length > 0 && selectedProducts.length === filteredProducts.length
@@ -201,8 +275,13 @@ export default function ProductTrash() {
               variant="outline"
               size="sm"
               onClick={handleBulkRestore}
+              disabled={actionLoading}
             >
-              <RotateCcw className="h-4 w-4 mr-1" />
+              {actionLoading ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <RotateCcw className="h-4 w-4 mr-1" />
+              )}
               Restore
             </Button>
             <AlertDialog>
@@ -236,7 +315,15 @@ export default function ProductTrash() {
       </div>
 
       {/* Products List */}
-      {filteredProducts.length > 0 ? (
+      {loading ? (
+        <Card className="p-12">
+          <div className="flex flex-col items-center justify-center text-center">
+            <Loader2 className="h-12 w-12 text-muted-foreground mb-4 animate-spin" />
+            <h3 className="text-lg font-medium mb-2">Loading trashed products...</h3>
+            <p className="text-muted-foreground">Please wait while we fetch your deleted items</p>
+          </div>
+        </Card>
+      ) : filteredProducts.length > 0 ? (
         <div className="space-y-4">
           {/* Select All */}
           <div className="flex items-center space-x-2 px-4">
@@ -262,16 +349,22 @@ export default function ProductTrash() {
                     />
 
                     {/* Thumbnail */}
-                    <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center overflow-hidden">
-                      {product.thumbnail ? (
+                    <div className="relative h-16 w-16 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+                      {product.image ? (
                         <img
-                          src={product.thumbnail}
+                          src={product.image}
                           alt={product.name}
-                          className="w-full h-full object-cover"
+                          className="h-full w-full object-cover"
+                          onError={(e) => {
+                            console.log('Image failed to load:', product.image)
+                            e.currentTarget.style.display = 'none'
+                            e.currentTarget.nextElementSibling?.classList.remove('hidden')
+                          }}
                         />
-                      ) : (
-                        <Package className="h-8 w-8 text-muted-foreground" />
-                      )}
+                      ) : null}
+                      <div className={`${product.image ? 'hidden' : ''}`}>
+                        <Package className="h-6 w-6 text-muted-foreground" />
+                      </div>
                     </div>
 
                     {/* Product Info */}
@@ -280,14 +373,14 @@ export default function ProductTrash() {
                         {product.name}
                       </h3>
                       <p className="text-sm text-muted-foreground truncate">
-                        {product.description}
+                        {product.description || 'No description'}
                       </p>
                       <div className="flex items-center gap-2 mt-2">
                         <Badge variant="outline" className="text-xs">
-                          {product.category}
+                          {product.category || 'Uncategorized'}
                         </Badge>
                         <span className="text-xs text-muted-foreground">
-                          Deleted {product.deletedAt.toLocaleDateString()} by {product.deletedBy}
+                          Deleted {product.deletedAt ? new Date(product.deletedAt).toLocaleDateString() : 'Unknown date'}
                         </span>
                       </div>
                     </div>
@@ -298,8 +391,13 @@ export default function ProductTrash() {
                         variant="outline"
                         size="sm"
                         onClick={() => handleRestore(product.id)}
+                        disabled={actionLoading}
                       >
-                        <RotateCcw className="h-4 w-4 mr-1" />
+                        {actionLoading ? (
+                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                        ) : (
+                          <RotateCcw className="h-4 w-4 mr-1" />
+                        )}
                         Restore
                       </Button>
 

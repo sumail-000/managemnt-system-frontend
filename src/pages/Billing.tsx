@@ -20,6 +20,7 @@ import {
   Zap,
   Shield,
   Infinity,
+  TrendingDown,
   TrendingUp,
   Download,
   MapPin,
@@ -28,18 +29,36 @@ import {
   Trash2,
   Plus,
   X,
-  CheckCircle2
+  CheckCircle2,
+  Lock
 } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
 import { useToast } from "@/hooks/use-toast"
-import { billingAPI } from "@/services/api"
+import { billingAPI, paymentAPI, membershipAPI } from '@/services/api'
+import { useNavigate } from "react-router-dom"
 
 export default function Billing() {
-  const { user, usage, usagePercentages, refreshUsage } = useAuth()
+  const { 
+    user, 
+    usage, 
+    usagePercentages: usage_percentages, 
+    refreshUsage,
+    billingInformation,
+    paymentMethods: contextPaymentMethods,
+    billingHistory: contextBillingHistory,
+    subscriptionInfo, 
+    subscriptionDetails, 
+    trialInfo 
+  } = useAuth()
   const { toast } = useToast()
+  const navigate = useNavigate()
   const [isLoading, setIsLoading] = useState(false)
-  const [autoRenew, setAutoRenew] = useState(true)
+  const [autoRenew, setAutoRenew] = useState(subscriptionDetails?.auto_renew ?? true)
   const [showCancelModal, setShowCancelModal] = useState(false)
+  const [showDowngradeModal, setShowDowngradeModal] = useState(false)
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [pendingAction, setPendingAction] = useState<'cancel' | 'downgrade' | null>(null)
+  const [password, setPassword] = useState('')
   const [editingBilling, setEditingBilling] = useState(false)
   const [billingInfo, setBillingInfo] = useState({
     full_name: "",
@@ -52,52 +71,47 @@ export default function Billing() {
     country: "",
     phone: ""
   })
-  const [paymentMethods, setPaymentMethods] = useState([])
-  const [billingHistory, setBillingHistory] = useState([])
+  const [paymentMethods, setPaymentMethods] = useState(contextPaymentMethods || [])
+  const [billingHistory, setBillingHistory] = useState(contextBillingHistory || [])
+  const [selectedDowngradePlan, setSelectedDowngradePlan] = useState(null)
   
-  // Load billing data on component mount
+  // Update local state when context data changes
   useEffect(() => {
-    const loadBillingData = async () => {
-      try {
-        const [billingInfoResponse, paymentMethodsResponse, billingHistoryResponse] = await Promise.all([
-          billingAPI.getBillingInformation(),
-          billingAPI.getPaymentMethods(),
-          billingAPI.getBillingHistory()
-        ])
-        
-        // Handle billing information response
-        if (billingInfoResponse && billingInfoResponse.data && billingInfoResponse.data.data) {
-          setBillingInfo(billingInfoResponse.data.data)
-        }
-        
-        // Handle payment methods response
-        if (paymentMethodsResponse && paymentMethodsResponse.data) {
-          setPaymentMethods(paymentMethodsResponse.data.data || [])
-        }
-        
-        // Handle billing history response
-        if (billingHistoryResponse && billingHistoryResponse.data) {
-          setBillingHistory(billingHistoryResponse.data.data || [])
-        }
-      } catch (error) {
-        console.error('Failed to load billing data:', error)
-        toast({
-          title: "Error",
-          description: "Failed to load billing information.",
-          variant: "destructive",
-        })
-      }
+    if (billingInformation) {
+      setBillingInfo({
+        full_name: billingInformation.full_name || "",
+        email: billingInformation.email || user?.email || "",
+        company_name: billingInformation.company_name || user?.company || "",
+        street_address: billingInformation.street_address || "",
+        city: billingInformation.city || "",
+        state_province: billingInformation.state_province || "",
+        postal_code: billingInformation.postal_code || "",
+        country: billingInformation.country || "",
+        phone: billingInformation.phone || user?.contact_number || ""
+      })
     }
-    
-    loadBillingData()
-  }, [toast])
+  }, [billingInformation, user])
   
-  // Get current membership info
-  const currentPlan = user?.membershipPlan || { name: 'Basic', product_limit: 3, label_limit: 10, features: [] }
+  useEffect(() => {
+    if (contextPaymentMethods) {
+      setPaymentMethods(contextPaymentMethods)
+    }
+  }, [contextPaymentMethods])
+  
+  useEffect(() => {
+    if (contextBillingHistory) {
+      setBillingHistory(contextBillingHistory)
+    }
+  }, [contextBillingHistory])
+  
+  // Get current membership info from real API data
+  const currentPlan = user?.membership_plan || { name: 'Basic', product_limit: 3, label_limit: 10, features: [] }
   const currentUsage = {
     products: usage?.products?.current_month || 0,
     labels: usage?.labels?.current_month || 0
   }
+  
+  // Use billing data from AuthContext (already destructured above)
 
 
 
@@ -184,26 +198,110 @@ export default function Billing() {
 
   const plans = getTransformedPlans()
 
-
-
   const handleUpgrade = async (planName: string) => {
+    // Get the plan details to pass to payment page
+    const selectedPlan = plans.find(p => p.name === planName)
+    if (!selectedPlan) return
+    
+    // Redirect to payment page with plan information
+    navigate('/payment', { 
+      state: { 
+        planId: planName.toLowerCase(),
+        planName: selectedPlan.name,
+        price: selectedPlan.price,
+        period: selectedPlan.period,
+        isUpgrade: true,
+        currentPlan: currentPlan.name
+      } 
+    })
+  }
+
+  const handleDowngrade = (planName: string) => {
+    setPendingAction('downgrade')
+    setShowDowngradeModal(true)
+  }
+
+  const handleCancelPlan = () => {
+    setPendingAction('cancel')
+    setShowCancelModal(true)
+  }
+
+  const confirmAction = () => {
+    if (pendingAction === 'cancel') {
+      setShowCancelModal(false)
+    } else if (pendingAction === 'downgrade') {
+      setShowDowngradeModal(false)
+    }
+    setShowPasswordModal(true)
+  }
+
+  const executeAction = async () => {
+    if (!password) {
+      toast({
+        title: "Password Required",
+        description: "Please enter your password to confirm.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsLoading(true)
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      await refreshUsage()
-      toast({
-        title: "Plan Updated",
-        description: `Successfully upgraded to ${planName} plan!`,
-      })
+      // Verify password first (simulate API call)
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      
+      if (pendingAction === 'cancel') {
+        await handleCancelSubscription()
+      } else if (pendingAction === 'downgrade') {
+        if (selectedDowngradePlan) {
+          await handleDowngradeSubscription(selectedDowngradePlan)
+        }
+      }
+      
+      setShowPasswordModal(false)
+      setPassword('')
+      setPendingAction(null)
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to update plan. Please try again.",
+        description: "Invalid password or action failed. Please try again.",
         variant: "destructive",
       })
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleDowngradeSubscription = async (planId: string) => {
+    try {
+      // Call API to downgrade to selected plan
+      const response = await membershipAPI.upgradePlan(parseInt(planId))
+      
+      if (response.data.success) {
+        // Refresh user data to get updated subscription
+        await refreshUsage()
+        
+        // Find the selected plan name for the success message
+        const selectedPlan = plans.find((plan: any) => plan.id === parseInt(planId))
+        
+        setShowDowngradeModal(false)
+        setSelectedDowngradePlan(null)
+        
+        toast({
+          title: "Plan Downgraded",
+          description: response.data.message || `Your plan has been downgraded to ${selectedPlan?.name || 'selected plan'}. Changes will take effect at the end of your current billing period.`,
+        })
+      } else {
+        throw new Error(response.data.message || 'Failed to downgrade plan')
+      }
+    } catch (error: any) {
+      console.error('Downgrade subscription error:', error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to downgrade plan. Please try again.",
+        variant: "destructive",
+      })
+      throw error
     }
   }
 
@@ -215,26 +313,106 @@ export default function Billing() {
     // In real implementation, this would redirect to Stripe Customer Portal
   }
 
-  const downloadInvoice = (invoice: string) => {
-    toast({
-      title: "Download Started",
-      description: `Downloading invoice ${invoice}`,
-    })
+  const downloadInvoice = async (invoiceId: string) => {
+    try {
+      setIsLoading(true)
+      toast({
+        title: "Download Started",
+        description: `Preparing invoice ${invoiceId} for download...`,
+      })
+      
+      const response = await billingAPI.downloadInvoice(invoiceId)
+      
+      // Create blob URL and trigger download
+      const blob = new Blob([response.data], { type: 'application/pdf' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `invoice-${invoiceId}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      
+      toast({
+        title: "Download Complete",
+        description: `Invoice ${invoiceId} has been downloaded successfully.`,
+      })
+    } catch (error: any) {
+      console.error('Download invoice error:', error)
+      toast({
+        title: "Download Failed",
+        description: error.message || "Failed to download invoice. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+  
+  const exportBillingHistory = async () => {
+    try {
+      setIsLoading(true)
+      toast({
+        title: "Export Started",
+        description: "Preparing billing history export...",
+      })
+      
+      const response = await billingAPI.exportBillingHistory()
+      
+      // Create blob URL and trigger download
+      const blob = new Blob([response.data], { 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `billing-history-${new Date().toISOString().split('T')[0]}.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      
+      toast({
+        title: "Export Complete",
+        description: "Billing history has been exported successfully.",
+      })
+    } catch (error: any) {
+      console.error('Export billing history error:', error)
+      toast({
+        title: "Export Failed",
+        description: error.message || "Failed to export billing history. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleCancelSubscription = async () => {
     setIsLoading(true)
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      setShowCancelModal(false)
-      toast({
-        title: "Subscription Cancelled",
-        description: "Your subscription will remain active until the end of the current billing period.",
-      })
-    } catch (error) {
+      // Call actual API to cancel subscription
+      const response = await paymentAPI.cancelSubscription()
+      
+      // Update local state based on API response
+      if (response.data.success) {
+        // Refresh user data to get updated subscription status
+        await refreshUsage()
+        
+        setShowCancelModal(false)
+        toast({
+          title: "Subscription Cancelled",
+          description: response.data.message || "Your subscription will remain active until the end of the current billing period.",
+        })
+      } else {
+        throw new Error(response.data.message || 'Failed to cancel subscription')
+      }
+    } catch (error: any) {
+      console.error('Cancel subscription error:', error)
       toast({
         title: "Error",
-        description: "Failed to cancel subscription. Please try again.",
+        description: error.message || "Failed to cancel subscription. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -243,10 +421,49 @@ export default function Billing() {
   }
 
   const handleUpdatePaymentMethod = () => {
+    // Navigate to payment form with update context
+    navigate('/payment', { 
+      state: { 
+        isUpdate: true,
+        currentPlan: currentPlan.name,
+        returnUrl: '/billing'
+      } 
+    })
+    
     toast({
       title: "Redirecting",
       description: "Opening payment method update...",
     })
+  }
+
+  const handleAutoRenewChange = async (checked: boolean) => {
+    setIsLoading(true)
+    try {
+      // Call API to update auto-renew setting
+      const response = await paymentAPI.updateAutoRenew({ auto_renew: checked })
+      
+      if (response.data.success) {
+        setAutoRenew(checked)
+        // Refresh user data to sync with backend
+        await refreshUsage()
+        
+        toast({
+          title: "Auto-renew Updated",
+          description: response.data.message || `Auto-renew has been ${checked ? 'enabled' : 'disabled'}.`,
+        })
+      } else {
+        throw new Error(response.data.message || 'Failed to update auto-renew setting')
+      }
+    } catch (error: any) {
+      console.error('Auto-renew update error:', error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update auto-renew setting. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleSaveBilling = async () => {
@@ -275,7 +492,7 @@ export default function Billing() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div className="animate-fade-in">
-          <h1 className="text-3xl font-bold text-foreground bg-gradient-primary bg-clip-text text-transparent">
+          <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
             Billing & Plans
           </h1>
           <p className="text-muted-foreground">
@@ -283,14 +500,10 @@ export default function Billing() {
           </p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" onClick={handleManageBilling} className="hover-scale">
-            <Settings className="w-4 h-4 mr-2" />
-            Manage Billing
-          </Button>
           {currentPlan.name !== 'Basic' && (
             <Button 
               variant="destructive" 
-              onClick={() => setShowCancelModal(true)}
+              onClick={handleCancelPlan}
               className="hover-scale"
             >
               <X className="w-4 h-4 mr-2" />
@@ -323,22 +536,38 @@ export default function Billing() {
             </div>
             <div className="text-right animate-fade-in">
               <p className="text-sm text-muted-foreground">Next billing</p>
-              <p className="font-medium">February 15, 2024</p>
+              <p className="font-medium">
+                {subscriptionDetails?.next_renewal_date 
+                  ? new Date(subscriptionDetails.next_renewal_date).toLocaleDateString('en-US', { 
+                      year: 'numeric', 
+                      month: 'long', 
+                      day: 'numeric' 
+                    })
+                  : trialInfo?.trial_ends_at 
+                    ? `Trial ends ${new Date(trialInfo.trial_ends_at).toLocaleDateString('en-US', { 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric' 
+                      })}`
+                    : 'No billing date available'
+                }
+              </p>
               <div className="flex items-center gap-2 mt-2">
                 <Label htmlFor="auto-renew" className="text-sm">Auto-renew</Label>
                 <Switch 
                   id="auto-renew"
                   checked={autoRenew}
-                  onCheckedChange={setAutoRenew}
+                  onCheckedChange={handleAutoRenewChange}
                   className="data-[state=checked]:bg-gradient-primary"
+                  disabled={currentPlan.name === 'Basic' || isLoading}
                 />
               </div>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid md:grid-cols-3 gap-6">
-            <div className="md:col-span-2">{/* Added billing info section */}
+          <div className="space-y-6">
+            <div>
               <h4 className="font-medium mb-3 flex items-center gap-2">
                 <TrendingUp className="w-4 h-4" />
                 Usage This Month
@@ -349,48 +578,32 @@ export default function Billing() {
                     <span>Products</span>
                     <span>{currentUsage.products}/{usage?.products?.unlimited ? '∞' : (currentPlan.product_limit === 999 ? '∞' : currentPlan.product_limit)}</span>
                   </div>
-                  <Progress value={usage?.products?.unlimited ? 0 : (usagePercentages?.products || 0)} className="h-3 rounded-full shadow-inner" />
+                  <Progress value={usage?.products?.unlimited ? 0 : (usage_percentages?.products || 0)} className="h-3 rounded-full shadow-inner" />
                 </div>
                 <div>
                   <div className="flex justify-between text-sm mb-1">
                     <span>Labels Generated</span>
                     <span>{currentUsage.labels}/{usage?.labels?.unlimited ? '∞' : (currentPlan.label_limit === 9999 ? '∞' : currentPlan.label_limit)}</span>
                   </div>
-                  <Progress value={usage?.labels?.unlimited ? 0 : (usagePercentages?.labels || 0)} className="h-3 rounded-full shadow-inner" />
+                  <Progress value={usage?.labels?.unlimited ? 0 : (usage_percentages?.labels || 0)} className="h-3 rounded-full shadow-inner" />
                 </div>
-                {currentPlan.name === 'Basic' && (
+                {(trialInfo?.is_trial || currentPlan.name === 'Basic') && (
                   <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
                     <div className="flex items-start gap-2">
                       <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5" />
                       <div>
                         <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
-                          Trial Period Active
+                          {trialInfo?.is_trial ? 'Trial Period Active' : 'Free Plan Active'}
                         </p>
                         <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
-                          You have {usage?.trial_days_remaining || 0} days remaining in your free trial.
+                          {trialInfo?.is_trial 
+                            ? `You have ${trialInfo.remaining_days || 0} days remaining in your free trial.`
+                            : 'Upgrade to unlock premium features and higher limits.'
+                          }
                         </p>
                       </div>
                     </div>
                   </div>
-                )}
-              </div>
-            </div>
-            <div>
-              <h4 className="font-medium mb-3 flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4" />
-                Plan Features
-              </h4>
-              <div className="space-y-2">
-                {currentPlan.features?.slice(0, 4).map((feature, index) => (
-                  <div key={index} className="flex items-center gap-2 text-sm hover:bg-muted/50 p-2 rounded transition-colors">
-                    <Check className="w-4 h-4 text-success animate-pulse" />
-                    <span>{feature}</span>
-                  </div>
-                ))}
-                {currentPlan.features?.length > 4 && (
-                  <p className="text-sm text-muted-foreground">
-                    +{currentPlan.features.length - 4} more features
-                  </p>
                 )}
               </div>
             </div>
@@ -405,15 +618,35 @@ export default function Billing() {
           Available Plans
         </h2>
         <div className="grid md:grid-cols-3 gap-6">
-          {plans.map((plan, index) => (
+          {plans.filter(plan => {
+            // Show upgrade options based on current plan
+            if (currentPlan.name === 'Basic') {
+              return plan.name === 'Pro' || plan.name === 'Enterprise'
+            } else if (currentPlan.name === 'Pro') {
+              return plan.name === 'Enterprise' || plan.name === 'Basic'
+            } else if (currentPlan.name === 'Enterprise') {
+              return plan.name === 'Pro' || plan.name === 'Basic'
+            }
+            return true
+          }).map((plan, index) => {
+            const isUpgrade = (
+              (currentPlan.name === 'Basic' && (plan.name === 'Pro' || plan.name === 'Enterprise')) ||
+              (currentPlan.name === 'Pro' && plan.name === 'Enterprise')
+            )
+            const isDowngrade = (
+              (currentPlan.name === 'Pro' && plan.name === 'Basic') ||
+              (currentPlan.name === 'Enterprise' && (plan.name === 'Pro' || plan.name === 'Basic'))
+            )
+            
+            return (
             <Card 
               key={plan.name} 
               className={`relative transition-all duration-300 hover:scale-105 hover:shadow-xl animate-scale-in ${
-                plan.popular ? 'border-primary shadow-lg ring-2 ring-primary/20' : ''
+                plan.popular && !plan.current ? 'border-primary shadow-lg ring-2 ring-primary/20' : ''
               } ${plan.current ? 'ring-2 ring-accent' : ''}`}
               style={{ animationDelay: `${index * 100}ms` }}
             >
-              {plan.popular && (
+              {plan.popular && !plan.current && (
                 <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 animate-pulse">
                   <Badge className="bg-gradient-primary shadow-lg">
                     <Star className="w-3 h-3 mr-1" />
@@ -446,7 +679,7 @@ export default function Billing() {
               <CardContent>
                 <div className="space-y-3 mb-6">
                   {plan.features.map((feature, index) => (
-                    <div key={index} className="flex items-center gap-2 text-sm hover:bg-muted/30 p-1 rounded transition-colors">{/* Added hover effect */}
+                    <div key={index} className="flex items-center gap-2 text-sm hover:bg-muted/30 p-1 rounded transition-colors">
                       <Check className="w-4 h-4 text-success flex-shrink-0" />
                       <span>{feature}</span>
                     </div>
@@ -469,23 +702,30 @@ export default function Billing() {
                 </div>
                 <Button 
                   className="w-full hover-scale" 
-                  variant={plan.current ? "outline" : plan.popular ? "default" : "outline"}
+                  variant={plan.current ? "outline" : isUpgrade ? "default" : "destructive"}
                   disabled={plan.current || isLoading}
-                  onClick={() => handleUpgrade(plan.name)}
+                  onClick={() => {
+                    if (isUpgrade) {
+                      handleUpgrade(plan.name)
+                    } else if (isDowngrade) {
+                      handleDowngrade(plan.name)
+                    }
+                  }}
                 >
                   {isLoading ? (
                     <div className="animate-pulse">Processing...</div>
                   ) : plan.current ? (
                     'Current Plan'
-                  ) : plan.name === 'Basic' ? (
-                    'Downgrade'
-                  ) : (
+                  ) : isUpgrade ? (
                     'Upgrade'
+                  ) : (
+                    'Downgrade'
                   )}
                 </Button>
               </CardContent>
             </Card>
-          ))}
+            )
+          })}
         </div>
       </div>
 
@@ -692,16 +932,22 @@ export default function Billing() {
       </Card>
 
       {/* Billing History */}
-      <Card className="hover:shadow-lg transition-all duration-300 animate-scale-in">{/* Added hover effect */}
+      <Card className="hover:shadow-lg transition-all duration-300 animate-scale-in">
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Receipt className="w-5 h-5" />
               Billing History
             </CardTitle>
-            <Button variant="outline" size="sm" className="hover-scale">
-              <Download className="w-4 h-4 mr-2" />{/* Added hover effect */}
-              Export All
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="hover-scale"
+              onClick={exportBillingHistory}
+              disabled={isLoading || billingHistory.length === 0}
+            >
+              <Download className="w-4 h-4 mr-2" />
+              {isLoading ? 'Exporting...' : 'Export All'}
             </Button>
           </div>
         </CardHeader>
@@ -723,7 +969,7 @@ export default function Billing() {
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="text-right">
-                      <p className="font-medium">${parseFloat(item.amount).toFixed(2)} {item.currency?.toUpperCase()}</p>
+                      <p className="font-medium">${parseFloat(item.amount.toString()).toFixed(2)} {item.currency?.toUpperCase()}</p>
                       <Badge variant={item.status === 'paid' ? 'default' : item.status === 'pending' ? 'secondary' : 'destructive'}>
                         {item.status}
                       </Badge>
@@ -733,7 +979,8 @@ export default function Billing() {
                       size="sm"
                       onClick={() => downloadInvoice(item.invoice_number)}
                       className="hover-scale"
-                      disabled={!item.invoice_url}
+                      disabled={isLoading}
+                      title="Download Invoice PDF"
                     >
                       <Download className="w-4 h-4" />
                     </Button>
@@ -751,9 +998,9 @@ export default function Billing() {
       </Card>
 
       {/* Usage Analytics */}
-      <div className="grid md:grid-cols-2 gap-6 animate-fade-in">{/* Added animation */}
+      <div className="grid md:grid-cols-2 gap-6 animate-fade-in">
         <Card className="hover:shadow-lg transition-all duration-300 hover:scale-[1.02]">
-          <CardHeader>{/* Added hover effects */}
+          <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5" />
               Usage Trends
@@ -762,21 +1009,34 @@ export default function Billing() {
           <CardContent>
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">This month</span>
-                <span className="font-medium">+23% from last month</span>
+                <span className="text-sm text-muted-foreground">
+                  {usage?.period ? 
+                    `${new Date(usage.period.start).toLocaleDateString()} - ${new Date(usage.period.end).toLocaleDateString()}` :
+                    'This month'
+                  }
+                </span>
+                <span className="font-medium">
+                  {subscriptionInfo?.status === 'active' ? 'Active Subscription' : 
+                   trialInfo?.is_trial ? `${trialInfo.remaining_days} days left` :
+                   'Free Plan'}
+                </span>
               </div>
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span>Products created</span>
-                  <span>{currentUsage.products}</span>
+                  <span>{currentUsage.products}/{usage?.products?.unlimited ? '∞' : usage?.products?.limit}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>Labels generated</span>
-                  <span>{currentUsage.labels}</span>
+                  <span>{currentUsage.labels}/{usage?.labels?.unlimited ? '∞' : usage?.labels?.limit}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>QR codes created</span>
-                  <span>{usage?.qr_codes?.current_month || 0}</span>
+                  <span>{usage?.qr_codes?.current_month || 0}/{usage?.qr_codes?.unlimited ? '∞' : usage?.qr_codes?.limit || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Total products</span>
+                  <span>{usage?.products?.total || 0}</span>
                 </div>
               </div>
             </div>
@@ -784,7 +1044,7 @@ export default function Billing() {
         </Card>
 
         <Card className="hover:shadow-lg transition-all duration-300 hover:scale-[1.02]">
-          <CardHeader>{/* Added hover effects */}
+          <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <AlertCircle className="w-5 h-5" />
               Recommendations
@@ -792,30 +1052,183 @@ export default function Billing() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {currentPlan.name === 'Basic' && (usagePercentages?.products || 0) > 70 && (
-                <div className="p-4 bg-warning/10 border border-warning/20 rounded-lg hover:bg-warning/20 transition-colors animate-pulse">{/* Added hover and pulse */}
+              {/* Usage warning based on real data */}
+              {(usage_percentages?.products || 0) > 70 && (
+                <div className="p-4 bg-warning/10 border border-warning/20 rounded-lg hover:bg-warning/20 transition-colors animate-pulse">
                   <p className="font-medium flex items-center gap-2">
                     <AlertTriangle className="w-4 h-4" />
-                    Consider upgrading
+                    {(usage_percentages?.products || 0) > 90 ? 'Upgrade urgently needed' : 'Consider upgrading'}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    You're using {Math.round(usagePercentages?.products || 0)}% of your product limit
+                    You're using {Math.round(usage_percentages?.products || 0)}% of your {currentPlan.name} plan's product limit
                   </p>
                 </div>
               )}
-              <div className="p-4 bg-gradient-to-r from-muted/50 to-muted/30 rounded-lg hover:from-muted/70 hover:to-muted/50 transition-all duration-300">{/* Enhanced styling */}
-                <p className="font-medium flex items-center gap-2">
-                  <Star className="w-4 h-4 text-accent" />
-                  Save 20% with annual billing
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Switch to annual payments and save money
-                </p>
-              </div>
+              
+              {/* Trial expiration warning */}
+              {trialInfo?.is_trial && trialInfo.remaining_days <= 7 && (
+                <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg hover:bg-destructive/20 transition-colors">
+                  <p className="font-medium flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4" />
+                    Trial ending soon
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Your trial expires in {trialInfo.remaining_days} days. Upgrade to continue using premium features.
+                  </p>
+                </div>
+              )}
+              
+              {/* Subscription renewal reminder */}
+              {subscriptionDetails?.remaining_days && subscriptionDetails.remaining_days <= 7 && (
+                <div className="p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-950/30 transition-colors">
+                  <p className="font-medium flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    Renewal reminder
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Your {subscriptionInfo?.plan_name} subscription renews in {subscriptionDetails.remaining_days} days.
+                  </p>
+                </div>
+              )}
+              
+              {/* Annual billing suggestion for paid users */}
+              {subscriptionInfo?.status === 'active' && subscriptionInfo?.type !== 'annual' && (
+                <div className="p-4 bg-gradient-to-r from-muted/50 to-muted/30 rounded-lg hover:from-muted/70 hover:to-muted/50 transition-all duration-300">
+                  <p className="font-medium flex items-center gap-2">
+                    <Star className="w-4 h-4 text-accent" />
+                    Save 20% with annual billing
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Switch to annual payments and save money on your {subscriptionInfo.plan_name} plan
+                  </p>
+                </div>
+              )}
+              
+              {/* Upgrade suggestion for free users */}
+              {currentPlan.name === 'Basic' && !trialInfo?.is_trial && (
+                <div className="p-4 bg-gradient-to-r from-primary/10 to-accent/10 rounded-lg hover:from-primary/20 hover:to-accent/20 transition-all duration-300">
+                  <p className="font-medium flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-primary" />
+                    Unlock premium features
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Upgrade to Pro or Enterprise for unlimited products and advanced features
+                  </p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Downgrade Modal */}
+      {showDowngradeModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-fade-in">
+          <Card className="w-full max-w-lg mx-4 animate-scale-in">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-warning">
+                <TrendingDown className="w-5 h-5" />
+                Downgrade Subscription
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <p className="text-muted-foreground">
+                  Choose a plan to downgrade to. Changes will take effect at the end of your current billing period.
+                </p>
+                
+                <div className="space-y-3">
+                  {plans
+                    .filter(plan => {
+                      const currentPlanIndex = plans.findIndex(p => p.name === currentPlan.name)
+                      const planIndex = plans.findIndex(p => p.name === plan.name)
+                      return planIndex < currentPlanIndex
+                    })
+                    .map((plan) => (
+                      <div 
+                        key={plan.id}
+                        className="p-4 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+                        onClick={() => {
+                          setSelectedDowngradePlan(plan)
+                        }}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="font-medium">{plan.name}</h4>
+                            <p className="text-sm text-muted-foreground">
+                              ${plan.price}/month • {plan.features?.length || 0} features
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-lg font-bold">${plan.price}</div>
+                            <div className="text-sm text-muted-foreground">per month</div>
+                          </div>
+                        </div>
+                        
+                        {plan.features && (
+                          <div className="mt-3 pt-3 border-t">
+                            <p className="text-sm font-medium mb-2">Included features:</p>
+                            <ul className="text-sm text-muted-foreground space-y-1">
+                              {plan.features.slice(0, 3).map((feature, index) => (
+                                <li key={index} className="flex items-center gap-2">
+                                  <Check className="w-3 h-3 text-green-500" />
+                                  {feature}
+                                </li>
+                              ))}
+                              {plan.features.length > 3 && (
+                                <li className="text-xs">+{plan.features.length - 3} more features</li>
+                              )}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  }
+                </div>
+                
+                {plans.filter(plan => {
+                  const currentPlanIndex = plans.findIndex(p => p.name === currentPlan.name)
+                  const planIndex = plans.findIndex(p => p.name === plan.name)
+                  return planIndex < currentPlanIndex
+                }).length === 0 && (
+                  <div className="text-center py-8">
+                    <AlertCircle className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground">No downgrade options available</p>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      You're already on the lowest available plan.
+                    </p>
+                  </div>
+                )}
+                
+                <div className="flex gap-3 pt-4">
+                  <Button 
+                    variant="outline" 
+                    className="flex-1" 
+                    onClick={() => {
+                      setShowDowngradeModal(false)
+                      setSelectedDowngradePlan(null)
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    variant="default" 
+                    className="flex-1"
+                    onClick={() => {
+                      if (selectedDowngradePlan) {
+                        handleDowngradeSubscription(selectedDowngradePlan.id)
+                      }
+                    }}
+                    disabled={isLoading || !selectedDowngradePlan}
+                  >
+                    {isLoading ? 'Processing...' : selectedDowngradePlan ? `Downgrade to ${selectedDowngradePlan.name}` : 'Select a Plan'}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Cancel Subscription Modal */}
       {showCancelModal && (

@@ -40,7 +40,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   }
 
   // Check membership plan access
-  const userPlan = user.membershipPlan?.name?.toLowerCase() || 'basic';
+  const userPlan = user.membership_plan?.name?.toLowerCase() || 'basic';
   const userPlanLevel = planHierarchy[userPlan as keyof typeof planHierarchy] || 1;
   const requiredPlanLevel = planHierarchy[requiredPlan];
 
@@ -56,7 +56,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
                 This feature requires a {requiredPlan.charAt(0).toUpperCase() + requiredPlan.slice(1)} plan or higher.
               </p>
               <p className="text-sm text-muted-foreground mb-6">
-                Your current plan: {user.membershipPlan?.name || 'Basic'}
+                Your current plan: {user.membership_plan?.name || 'Basic'}
               </p>
             </div>
             <div className="space-y-3">
@@ -82,8 +82,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   }
 
   // Check specific feature access
-  if (requiredFeature && user.membershipPlan?.features) {
-    const hasFeature = user.membershipPlan.features.includes(requiredFeature);
+  if (requiredFeature && user.membership_plan?.features) {
+      const hasFeature = user.membership_plan.features.includes(requiredFeature);
     if (!hasFeature) {
       return (
         <div className="flex items-center justify-center min-h-screen p-4">
@@ -96,7 +96,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
                   The feature "{requiredFeature}" is not included in your current plan.
                 </p>
                 <p className="text-sm text-muted-foreground mb-6">
-                  Your current plan: {user.membershipPlan?.name || 'Basic'}
+                  Your current plan: {user.membership_plan?.name || 'Basic'}
                 </p>
               </div>
               <div className="space-y-3">

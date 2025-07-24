@@ -13,7 +13,8 @@ import {
   Package,
   Info,
   Settings,
-  Tags
+  Tags,
+  ChevronRight
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -41,17 +42,25 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { useToast } from "@/hooks/use-toast"
+import { productsAPI } from "@/services/api"
+
+// Import product images
+import organicYogurtImage from "@/assets/organic-greek-yogurt.jpg"
+import glutenFreeCrackersImage from "@/assets/gluten-free-crackers.jpg"
+import premiumOliveOilImage from "@/assets/premium-olive-oil.jpg"
+import almondButterImage from "@/assets/almond-butter.jpg"
+import margheritaPizzaImage from "@/assets/margherita-pizza.jpg"
 
 const productSchema = z.object({
-  name: z.string().min(1, "Product name is required").max(100, "Name too long"),
-  description: z.string().min(1, "Description is required").max(500, "Description too long"),
+  name: z.string().min(1, "Product name is required").max(255, "Name too long"),
+  description: z.string().optional(),
   category: z.string().min(1, "Category is required"),
-  servingSize: z.string().min(1, "Serving size is required"),
-  servingUnit: z.string().min(1, "Serving unit is required"),
-  servingsPerContainer: z.number().min(1, "Must have at least 1 serving"),
-  status: z.enum(["Draft", "Published"]),
-  isPublic: z.boolean(),
-  isPinned: z.boolean(),
+  serving_size: z.number().min(0, "Serving size must be positive"),
+  serving_unit: z.string().min(1, "Serving unit is required"),
+  servings_per_container: z.number().min(1, "Must have at least 1 serving"),
+  status: z.enum(["draft", "published"]),
+  is_public: z.boolean(),
+  is_pinned: z.boolean(),
   tags: z.array(z.string()).optional()
 })
 
@@ -81,6 +90,10 @@ export default function ProductForm() {
   const [newTag, setNewTag] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [imageUrl, setImageUrl] = useState("")
+  const [uploadMethod, setUploadMethod] = useState<"upload" | "url">("url")
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [currentTab, setCurrentTab] = useState("basic")
 
   const form = useForm<ProductFormData>({
     resolver: zodResolver(productSchema),
@@ -88,62 +101,203 @@ export default function ProductForm() {
       name: "",
       description: "",
       category: "",
-      servingSize: "",
-      servingUnit: "g",
-      servingsPerContainer: 1,
-      status: "Draft",
-      isPublic: false,
-      isPinned: false,
+      serving_size: 0,
+      serving_unit: "g",
+      servings_per_container: 1,
+      status: "draft",
+      is_public: false,
+      is_pinned: false,
       tags: []
     }
   })
 
   // Load product data if editing
   useEffect(() => {
-    if (isEdit && id) {
-      // Mock loading existing product data
-      const mockProduct = {
-        name: "Organic Greek Yogurt",
-        description: "Creamy organic Greek yogurt with live cultures",
-        category: "Dairy",
-        servingSize: "150",
-        servingUnit: "g",
-        servingsPerContainer: 4,
-        status: "Published" as const,
-        isPublic: true,
-        isPinned: true,
-        tags: ["Organic", "High Protein", "Gluten Free"]
+    const loadProduct = async () => {
+      if (isEdit && id) {
+        setIsLoading(true)
+        try {
+          const response = await productsAPI.getById(id)
+          console.log('[ProductForm] API Response:', response)
+          
+          // Extract product data from response
+          const product = response.data || response
+          console.log('[ProductForm] Product data:', product)
+          
+          if (!product || typeof product !== 'object') {
+            throw new Error('Invalid product data received - no product object')
+          }
+          
+          if (!product.name || typeof product.name !== 'string' || product.name.trim() === '') {
+            console.error('[ProductForm] Invalid product name:', product.name)
+            throw new Error('Invalid product data received - missing or invalid name')
+          }
+          
+          // Log the structure for debugging
+          console.log('[ProductForm] Product structure:', {
+            id: product.id,
+            name: product.name,
+            category: product.category,
+            status: product.status,
+            hasUser: !!product.user,
+            hasIngredients: !!product.ingredients,
+            hasNutritionalData: !!product.nutritional_data
+          })
+          
+          const formData = {
+            name: product.name || '',
+            description: product.description || "",
+            category: product.category || '',
+            serving_size: parseFloat(product.serving_size) || 0,
+            serving_unit: product.serving_unit || 'g',
+            servings_per_container: parseInt(product.servings_per_container) || 1,
+            status: (product.status as "draft" | "published") || 'draft',
+            is_public: Boolean(product.is_public),
+            is_pinned: Boolean(product.is_pinned),
+            tags: Array.isArray(product.tags) ? product.tags : []
+          }
+          
+          console.log('[ProductForm] Mapped form data:', formData)
+          
+          form.reset(formData)
+          setSelectedTags(Array.isArray(product.tags) ? product.tags : [])
+          
+          // Handle image preview if product has an image
+          if (product.image_url || product.image_path || product.image) {
+            let imageUrl = product.image_url || product.image
+            
+            // If we have an image_path, construct the full URL
+            if (product.image_path && !imageUrl) {
+              imageUrl = `http://localhost:8000/storage/${product.image_path}`
+            }
+            
+            if (imageUrl) {
+              setImageUrl(imageUrl)
+              setImagePreview(imageUrl)
+              setUploadMethod(product.image_path ? "upload" : "url")
+            }
+          }
+          
+          toast({
+            title: "Product loaded",
+            description: "Product data has been loaded successfully."
+          })
+        } catch (error: any) {
+          console.error('Error loading product:', error)
+          toast({
+            title: "Error",
+            description: error.response?.data?.message || "Failed to load product data.",
+            variant: "destructive"
+          })
+          navigate("/products")
+        } finally {
+          setIsLoading(false)
+        }
       }
-      
-      form.reset(mockProduct)
-      setSelectedTags(mockProduct.tags)
-      setImagePreview("https://images.unsplash.com/photo-1571212515416-efbaeb7fb324?w=300&h=200&fit=crop")
     }
-  }, [isEdit, id, form])
+    
+    loadProduct()
+  }, [isEdit, id, form, navigate, toast])
 
   const onSubmit = async (data: ProductFormData) => {
+    console.log('Form data received:', data)
+    console.log('Selected tags:', selectedTags)
+    console.log('Upload method:', uploadMethod)
+    console.log('Selected file:', selectedFile)
+    console.log('Selected file type:', typeof selectedFile)
+    console.log('Selected file instanceof File:', selectedFile instanceof File)
+    
     setIsLoading(true)
+    
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      // Determine if we need to use FormData for file upload
+      const hasFile = selectedFile && uploadMethod === "upload"
+      console.log('hasFile condition result:', hasFile)
+      console.log('selectedFile truthy:', !!selectedFile)
+      console.log('uploadMethod === "upload":', uploadMethod === "upload")
       
-      const productData = {
-        ...data,
-        tags: selectedTags
+      let productData: any
+      let headers: any = {}
+      
+      if (hasFile) {
+        // Use FormData for file upload
+        productData = new FormData()
+        productData.append('name', data.name)
+        productData.append('description', data.description || '')
+        productData.append('category', data.category)
+        productData.append('serving_size', data.serving_size.toString())
+        productData.append('serving_unit', data.serving_unit)
+        productData.append('servings_per_container', data.servings_per_container.toString())
+        productData.append('status', data.status)
+        productData.append('is_public', data.is_public ? '1' : '0')
+        productData.append('is_pinned', data.is_pinned ? '1' : '0')
+        // Append tags as individual array items
+        selectedTags.forEach((tag, index) => {
+          productData.append(`tags[${index}]`, tag)
+        })
+        // Append the image file - we know it exists because hasFile is true
+        console.log('Appending file to FormData:', selectedFile)
+        console.log('File details:', {
+          name: selectedFile.name,
+          size: selectedFile.size,
+          type: selectedFile.type,
+          lastModified: selectedFile.lastModified
+        })
+        productData.append('image_file', selectedFile)
+        
+        // Log FormData contents
+        console.log('FormData contents:')
+        for (let [key, value] of productData.entries()) {
+          console.log(`${key}:`, value)
+        }
+        
+        // Don't set Content-Type for FormData - let browser set it with boundary
+      } else {
+        // Use regular JSON for URL or no image
+        productData = {
+          name: data.name,
+          description: data.description,
+          category: data.category,
+          serving_size: data.serving_size,
+          serving_unit: data.serving_unit,
+          servings_per_container: data.servings_per_container,
+          status: data.status,
+          is_public: data.is_public,
+          is_pinned: data.is_pinned,
+          tags: selectedTags
+        }
+        
+        // Add image URL if provided
+        if (imageUrl && uploadMethod === "url") {
+          productData.image_url = imageUrl
+        }
+        
+        headers['Content-Type'] = 'application/json'
       }
       
-      console.log("Saving product:", productData)
+      let response
+      if (isEdit && id) {
+        response = await productsAPI.update(id, productData)
+      } else {
+        response = await productsAPI.create(productData)
+      }
+      
+      console.log('Product operation successful:', response.data)
       
       toast({
         title: isEdit ? "Product updated" : "Product created",
-        description: `${data.name} has been ${isEdit ? 'updated' : 'created'} successfully.`
+        description: isEdit 
+          ? "Your product has been updated successfully." 
+          : "Your product has been created successfully."
       })
       
+      // Navigate back to products list
       navigate("/products")
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Error saving product:', error)
       toast({
         title: "Error",
-        description: "Failed to save product. Please try again.",
+        description: error.response?.data?.message || "Something went wrong. Please try again.",
         variant: "destructive"
       })
     } finally {
@@ -164,13 +318,40 @@ export default function ProductForm() {
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
+    console.log('File selected:', file?.name, 'File object:', file)
     if (file) {
+      console.log('Setting selectedFile state to:', file)
+      setSelectedFile(file)
+      // Automatically switch to upload method when file is selected
+      setUploadMethod("upload")
       const reader = new FileReader()
       reader.onload = (e) => {
-        setImagePreview(e.target?.result as string)
+        const result = e.target?.result as string
+        console.log('File read complete, setting preview')
+        setImagePreview(result)
+        setImageUrl("")
+      }
+      reader.onerror = (e) => {
+        console.error('Error reading file:', e)
       }
       reader.readAsDataURL(file)
+    } else {
+      console.log('No file selected')
     }
+  }
+
+  const handleImageUrlChange = (url: string) => {
+    setImageUrl(url)
+    setImagePreview(url)
+    setSelectedFile(null) // Clear file when using URL
+  }
+
+  const clearImage = () => {
+    setImagePreview(null)
+    setImageUrl("")
+    setSelectedFile(null)
+    // Reset to URL method when clearing
+    setUploadMethod("url")
   }
 
   return (
@@ -213,7 +394,7 @@ export default function ProductForm() {
 
       <Form {...form}>
         <form id="product-form" onSubmit={form.handleSubmit(onSubmit)}>
-          <Tabs defaultValue="basic" className="space-y-6">
+          <Tabs value={currentTab} onValueChange={setCurrentTab} className="space-y-6">
             <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="basic" className="flex items-center gap-2">
                 <Info className="h-4 w-4" />
@@ -292,36 +473,88 @@ export default function ProductForm() {
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-4">
-                        {imagePreview ? (
+                        {/* Upload Method Selection */}
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant={uploadMethod === "url" ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setUploadMethod("url")}
+                          >
+                            Image URL
+                          </Button>
+                          <Button
+                            type="button"
+                            variant={uploadMethod === "upload" ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setUploadMethod("upload")}
+                          >
+                            Upload File
+                          </Button>
+                        </div>
+
+                        {/* Image Preview */}
+                        {imagePreview && (
                           <div className="relative">
                             <img
                               src={imagePreview}
                               alt="Product preview"
                               className="w-full h-48 object-cover rounded-lg"
                             />
-                            <Button
-                              type="button"
-                              variant="destructive"
-                              size="sm"
-                              className="absolute top-2 right-2"
-                              onClick={() => setImagePreview(null)}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
+                            <div className="absolute top-2 right-2 flex gap-2">
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => {
+                                  if (uploadMethod === "upload") {
+                                    document.getElementById('image-upload')?.click()
+                                  }
+                                }}
+                              >
+                                Change Image
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="destructive"
+                                size="sm"
+                                onClick={clearImage}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
-                        ) : (
+                        )}
+
+                        {/* URL Input */}
+                        {uploadMethod === "url" && (
+                          <div className="space-y-2">
+                            <Label>Image URL</Label>
+                            <Input
+                              placeholder="https://example.com/image.jpg"
+                              value={imageUrl}
+                              onChange={(e) => handleImageUrlChange(e.target.value)}
+                            />
+                            {imageUrl && !imagePreview && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setImagePreview(imageUrl)}
+                              >
+                                Preview Image
+                              </Button>
+                            )}
+                          </div>
+                        )}
+
+                        {/* File Upload */}
+                        {uploadMethod === "upload" && !imagePreview && (
                           <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
                             <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
                             <p className="text-sm text-muted-foreground mb-2">
                               Upload product image
                             </p>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={handleImageUpload}
-                              className="hidden"
-                              id="image-upload"
-                            />
                             <Button
                               type="button"
                               variant="outline"
@@ -332,6 +565,14 @@ export default function ProductForm() {
                             </Button>
                           </div>
                         )}
+
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageUpload}
+                          className="hidden"
+                          id="image-upload"
+                        />
                       </div>
                     </CardContent>
                   </Card>
@@ -348,7 +589,7 @@ export default function ProductForm() {
                 <CardContent className="grid gap-4 md:grid-cols-3">
                   <FormField
                     control={form.control}
-                    name="servingSize"
+                    name="serving_size"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Serving Size *</FormLabel>
@@ -356,7 +597,8 @@ export default function ProductForm() {
                           <Input 
                             placeholder="150" 
                             type="number"
-                            {...field} 
+                            {...field}
+                            onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
                           />
                         </FormControl>
                         <FormMessage />
@@ -366,11 +608,11 @@ export default function ProductForm() {
 
                   <FormField
                     control={form.control}
-                    name="servingUnit"
+                    name="serving_unit"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Unit *</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select unit" />
@@ -391,15 +633,15 @@ export default function ProductForm() {
 
                   <FormField
                     control={form.control}
-                    name="servingsPerContainer"
+                    name="servings_per_container"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Servings per Container *</FormLabel>
+                        <FormLabel>Servings per Container</FormLabel>
                         <FormControl>
                           <Input 
+                            type="number" 
                             placeholder="4" 
-                            type="number"
-                            {...field}
+                            {...field} 
                             onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
                           />
                         </FormControl>
@@ -425,7 +667,7 @@ export default function ProductForm() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Product Category *</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <Select onValueChange={field.onChange} value={field.value}>
                             <FormControl>
                               <SelectTrigger>
                                 <SelectValue placeholder="Select category" />
@@ -520,15 +762,15 @@ export default function ProductForm() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Status</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl>
                             <SelectTrigger className="w-48">
                               <SelectValue />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="Draft">Draft</SelectItem>
-                            <SelectItem value="Published">Published</SelectItem>
+                            <SelectItem value="draft">Draft</SelectItem>
+                            <SelectItem value="published">Published</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormDescription>
@@ -542,50 +784,99 @@ export default function ProductForm() {
                   <Separator />
 
                   <FormField
-                    control={form.control}
-                    name="isPublic"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between">
-                        <div className="space-y-0.5">
-                          <FormLabel>Public Visibility</FormLabel>
-                          <FormDescription>
-                            Allow this product to be visible to other users
-                          </FormDescription>
-                        </div>
-                        <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
+                      control={form.control}
+                      name="is_public"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between">
+                          <div className="space-y-0.5">
+                            <FormLabel>Public Visibility</FormLabel>
+                            <FormDescription>
+                              Allow this product to be visible to other users
+                            </FormDescription>
+                          </div>
+                          <FormControl>
+                            <Switch
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
 
                   <FormField
-                    control={form.control}
-                    name="isPinned"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between">
-                        <div className="space-y-0.5">
-                          <FormLabel>Pin Product</FormLabel>
-                          <FormDescription>
-                            Pin this product to the top of your product list
-                          </FormDescription>
-                        </div>
-                        <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
+                      control={form.control}
+                      name="is_pinned"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between">
+                          <div className="space-y-0.5">
+                            <FormLabel>Pin Product</FormLabel>
+                            <FormDescription>
+                              Pin this product to the top of your product list
+                            </FormDescription>
+                          </div>
+                          <FormControl>
+                            <Switch
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
                 </CardContent>
               </Card>
             </TabsContent>
           </Tabs>
+          
+          {/* Tab Navigation */}
+          <div className="flex justify-between mt-6 pt-4 border-t border-border">
+            <Button 
+              type="button" 
+              variant="outline"
+              onClick={() => {
+                const tabs = ["basic", "serving", "categorization", "settings"]
+                const currentIndex = tabs.indexOf(currentTab)
+                if (currentIndex > 0) {
+                  setCurrentTab(tabs[currentIndex - 1])
+                }
+              }}
+              disabled={currentTab === "basic"}
+              className="min-w-[120px]"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Previous
+            </Button>
+            
+            <Button 
+              type="button" 
+              variant="outline"
+              onClick={() => {
+                const tabs = ["basic", "serving", "categorization", "settings"]
+                const currentIndex = tabs.indexOf(currentTab)
+                if (currentIndex < tabs.length - 1) {
+                  setCurrentTab(tabs[currentIndex + 1])
+                } else {
+                  // On last tab, navigate based on context
+                  if (isEdit) {
+                    navigate("/products")
+                  } else {
+                    navigate("/products/new")
+                  }
+                }
+              }}
+              className="min-w-[120px]"
+            >
+              {currentTab === "settings" 
+                ? (isEdit ? "Back to Products" : "Create Another")
+                : "Next"
+              }
+              {currentTab === "settings" 
+                ? <Plus className="w-4 h-4 ml-2" />
+                : <ChevronRight className="w-4 h-4 ml-2" />
+              }
+            </Button>
+          </div>
         </form>
       </Form>
     </div>

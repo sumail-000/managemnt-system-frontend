@@ -9,26 +9,36 @@ import Products from "./pages/Products";
 import ProductForm from "./pages/ProductForm";
 import ProductDetail from "./pages/ProductDetail";
 import ProductTrash from "./pages/ProductTrash";
+import PublicProductView from "./pages/PublicProductView";
 import Ingredients from "./pages/Ingredients";
 import NutritionAnalysis from "./pages/NutritionAnalysis";
+import LabelGeneratorPage from "./pages/LabelGenerator";
 import Billing from "./pages/Billing";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ResetPassword from "./pages/ResetPassword";
 import Blog from "./pages/Blog";
 import NotFound from "./pages/NotFound";
+import QRCodes from "./pages/QRCodes";
+import Favorites from "./pages/Favorites";
+import { PaymentForm } from "./components/payment/PaymentForm";
 
-const App = () => (
-  <Router>
-    <AuthProvider>
-    <Routes>
+const App = () => {
+  console.log('[App] Application initialized');
+  
+  return (
+    <Router>
+      <AuthProvider>
+      <Routes>
       {/* Public Routes */}
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/payment" element={<PaymentForm />} />
       <Route path="/forgot-password" element={<ResetPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/blog" element={<Blog />} />
+      <Route path="/public/product/:id" element={<PublicProductView />} />
       
       {/* Protected Dashboard Routes */}
       <Route path="/dashboard" element={
@@ -98,10 +108,7 @@ const App = () => (
       <Route path="/labels" element={
         <ProtectedRoute>
           <DashboardLayout>
-            <div className="p-6">
-              <h1 className="text-2xl font-bold">Label Generator</h1>
-              <p className="text-muted-foreground">Label generation tools coming soon...</p>
-            </div>
+            <LabelGeneratorPage />
           </DashboardLayout>
         </ProtectedRoute>
       } />
@@ -109,10 +116,15 @@ const App = () => (
       <Route path="/qr-codes" element={
         <ProtectedRoute requiredPlan="pro">
           <DashboardLayout>
-            <div className="p-6">
-              <h1 className="text-2xl font-bold">QR Codes</h1>
-              <p className="text-muted-foreground">QR code management coming soon...</p>
-            </div>
+            <QRCodes />
+          </DashboardLayout>
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/favorites" element={
+        <ProtectedRoute>
+          <DashboardLayout>
+            <Favorites />
           </DashboardLayout>
         </ProtectedRoute>
       } />
@@ -138,10 +150,11 @@ const App = () => (
       
       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
       <Route path="*" element={<NotFound />} />
-    </Routes>
-    <Toaster />
-    </AuthProvider>
-  </Router>
-);
+      </Routes>
+      <Toaster />
+      </AuthProvider>
+    </Router>
+  );
+};
 
 export default App;

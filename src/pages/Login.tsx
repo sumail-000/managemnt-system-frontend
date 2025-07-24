@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Link, useNavigate, useLocation } from "react-router-dom"
 import { AuthLayout } from "@/components/AuthLayout"
 import { Button } from "@/components/ui/button"
@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/contexts/AuthContext"
-import { Eye, EyeOff, Loader2 } from "lucide-react"
+import { Eye, EyeOff, Loader2, AlertCircle } from "lucide-react"
 
 export default function Login() {
   const navigate = useNavigate()
@@ -20,6 +20,56 @@ export default function Login() {
     password: ""
   })
   const [errors, setErrors] = useState<{[key: string]: string}>({})
+  const [sessionExpired, setSessionExpired] = useState(false)
+  const [fromPayment, setFromPayment] = useState(false)
+
+  // Check for session expiration and registration success on component mount
+  useEffect(() => {
+    const urlParams = new URLSearchParams(location.search)
+    const reason = urlParams.get('reason')
+    const registrationSuccess = urlParams.get('registration')
+    const redirect = urlParams.get('redirect')
+    const sessionExpiredParam = urlParams.get('sessionExpired')
+    const paymentSessionExpired = localStorage.getItem('payment_session_expired')
+    
+    if (registrationSuccess === 'success') {
+      toast({
+        title: "Registration Successful!",
+        description: "Your account has been created. Please log in to continue.",
+        variant: "default",
+      })
+    }
+    
+    // Handle payment page redirects
+    if (redirect === 'payment') {
+      setFromPayment(true)
+      if (sessionExpiredParam === 'true') {
+        setSessionExpired(true)
+        toast({
+          title: "Session Expired",
+          description: "Your session has expired. Please log in again to continue with your payment.",
+          variant: "destructive",
+        })
+      } else {
+        toast({
+          title: "Authentication Required",
+          description: "Please log in to access the payment page.",
+          variant: "default",
+        })
+      }
+    }
+    
+    if (reason === 'session_expired' || paymentSessionExpired) {
+      setSessionExpired(true)
+      localStorage.removeItem('payment_session_expired')
+      
+      toast({
+        title: "Session Expired",
+        description: "Your session has expired. Please log in again to continue.",
+        variant: "destructive",
+      })
+    }
+  }, [location.search, toast])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -40,10 +90,8 @@ export default function Login() {
         description: "You have been successfully logged in.",
       })
       
-      // Redirect to intended page or dashboard
-      const from = location.state?.from?.pathname || "/dashboard"
-      console.log('[LOGIN] Redirecting to:', from);
-      navigate(from, { replace: true })
+      console.log('[LOGIN] Login successful, AuthContext will handle redirection');
+      // Note: AuthContext.login() handles all redirection logic based on payment status
     } catch (error: any) {
       const errorMessage = error.message || "Login failed. Please try again."
       
@@ -82,6 +130,18 @@ export default function Login() {
     >
       <Card className="card-elevated">
         <CardContent className="p-6">
+          {sessionExpired && (
+            <div className="flex items-center gap-2 p-3 mb-4 bg-orange-50 border border-orange-200 rounded-md text-orange-800 text-sm">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              <span>Your session expired{fromPayment ? ' during payment' : ''}. Please log in to continue.</span>
+            </div>
+          )}
+          {fromPayment && !sessionExpired && (
+            <div className="flex items-center gap-2 p-3 mb-4 bg-blue-50 border border-blue-200 rounded-md text-blue-800 text-sm">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              <span>Please log in to continue with your payment.</span>
+            </div>
+          )}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email Address</Label>

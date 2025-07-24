@@ -39,24 +39,10 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
+import { productsAPI } from "@/services/api"
+import { Product, transformProductFromAPI } from "@/types/product"
 
-interface Product {
-  id: string
-  name: string
-  description: string
-  category: string
-  status: "Published" | "Draft"
-  isPinned: boolean
-  isPublic: boolean
-  tags: string[]
-  servingSize: string
-  servingUnit: string
-  servingsPerContainer: number
-  createdAt: Date
-  updatedAt: Date
-  createdBy: string
-  thumbnail?: string
-}
+
 
 export default function ProductDetail() {
   const { id } = useParams()
@@ -66,76 +52,127 @@ export default function ProductDetail() {
   const [product, setProduct] = useState<Product | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  // Mock data - replace with actual API call
   useEffect(() => {
     const loadProduct = async () => {
+      if (!id) return
+      
       setIsLoading(true)
       try {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 500))
-        
-        const mockProduct: Product = {
-          id: id || "1",
-          name: "Organic Greek Yogurt",
-          description: "Creamy organic Greek yogurt made from grass-fed cow's milk with live and active cultures. Rich in protein and probiotics, this yogurt supports digestive health while providing a delicious, satisfying taste.",
-          category: "Dairy",
-          status: "Published",
-          isPinned: true,
-          isPublic: true,
-          tags: ["Organic", "High Protein", "Gluten Free", "Probiotic", "Grass Fed"],
-          servingSize: "150",
-          servingUnit: "g",
-          servingsPerContainer: 4,
-          createdAt: new Date("2024-01-15"),
-          updatedAt: new Date("2024-01-20"),
-          createdBy: "John Doe",
-          thumbnail: "https://images.unsplash.com/photo-1571212515416-efbaeb7fb324?w=600&h=400&fit=crop"
-        }
-        
-        setProduct(mockProduct)
-      } catch (error) {
+        const response = await productsAPI.getById(id)
+        setProduct(transformProductFromAPI(response.data))
+      } catch (error: any) {
+        console.error('Error loading product:', error)
         toast({
           title: "Error",
-          description: "Failed to load product details",
+          description: error.response?.data?.message || "Failed to load product details",
           variant: "destructive"
         })
+        navigate("/products")
       } finally {
         setIsLoading(false)
       }
     }
 
-    if (id) {
-      loadProduct()
-    }
-  }, [id, toast])
+    loadProduct()
+  }, [id, toast, navigate])
 
-  const handleTogglePin = () => {
-    if (product) {
-      setProduct(prev => prev ? { ...prev, isPinned: !prev.isPinned } : null)
+  const handleTogglePin = async () => {
+    if (!product || !id) return
+    
+    try {
+      await productsAPI.togglePin(id)
+      setProduct(prev => prev ? { ...prev, is_pinned: !prev.is_pinned } : null)
       toast({
-        title: product.isPinned ? "Product unpinned" : "Product pinned",
-        description: `${product.name} has been ${product.isPinned ? 'unpinned' : 'pinned'}.`
+        title: product.is_pinned ? "Product unpinned" : "Product pinned",
+        description: `${product.name} has been ${product.is_pinned ? 'unpinned' : 'pinned'}.`
+      })
+    } catch (error: any) {
+      console.error('Error toggling pin:', error)
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to toggle pin status",
+        variant: "destructive"
       })
     }
   }
 
-  const handleDuplicate = () => {
-    toast({
-      title: "Product duplicated",
-      description: "A copy of this product has been created."
-    })
+  const handleDuplicate = async () => {
+    if (!product || !id) return
+    
+    try {
+      await productsAPI.duplicate(id)
+      toast({
+        title: "Product duplicated",
+        description: "A copy of this product has been created."
+      })
+      navigate("/products")
+    } catch (error: any) {
+      console.error('Error duplicating product:', error)
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to duplicate product",
+        variant: "destructive"
+      })
+    }
   }
 
-  const handleDelete = () => {
-    toast({
-      title: "Product deleted",
-      description: "The product has been moved to trash."
-    })
-    navigate("/products")
+  const handleDelete = async () => {
+    if (!product || !id) return
+    
+    try {
+      await productsAPI.delete(id)
+      toast({
+        title: "Product deleted",
+        description: "The product has been moved to trash."
+      })
+      navigate("/products")
+    } catch (error: any) {
+      console.error('Error deleting product:', error)
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to delete product",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleTogglePublic = async () => {
+    if (!product) return
+    
+    try {
+      const response = await productsAPI.update(product.id, {
+        is_public: !product.is_public
+      })
+      
+      setProduct(prev => prev ? { ...prev, is_public: !prev.is_public } : null)
+      
+      toast({
+        title: product.is_public ? "Product made private" : "Product made public",
+        description: product.is_public 
+          ? "This product is no longer publicly accessible." 
+          : "This product can now be shared publicly."
+      })
+    } catch (error: any) {
+      console.error('Error toggling product visibility:', error)
+      toast({
+        title: "Error",
+        description: "Failed to update product visibility. Please try again.",
+        variant: "destructive"
+      })
+    }
   }
 
   const handleShare = () => {
-    const url = `${window.location.origin}/products/${id}/public`
+    if (!product?.is_public) {
+      toast({
+        title: "Product is not public",
+        description: "You need to make this product public before sharing it.",
+        variant: "destructive"
+      })
+      return
+    }
+    
+    const url = `${window.location.origin}/public/product/${id}`
     navigator.clipboard.writeText(url)
     toast({
       title: "Link copied",
@@ -192,7 +229,7 @@ export default function ProductDetail() {
             </Link>
           </Button>
           <div className="flex items-center gap-2">
-            {product.isPinned && (
+            {product.is_pinned && (
               <Pin className="h-5 w-5 text-accent fill-current" />
             )}
             <h1 className="text-3xl font-bold text-foreground">{product.name}</h1>
@@ -201,9 +238,9 @@ export default function ProductDetail() {
         
         <div className="flex items-center gap-3">
           <Badge 
-            variant={product.status === "Published" ? "default" : "secondary"}
+            variant={product.status === "published" ? "default" : "secondary"}
           >
-            {product.status}
+            {product.status === "published" ? "Published" : "Draft"}
           </Badge>
           
           <DropdownMenu>
@@ -226,7 +263,15 @@ export default function ProductDetail() {
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleTogglePin}>
                 <Pin className="h-4 w-4 mr-2" />
-                {product.isPinned ? "Unpin" : "Pin"} Product
+                {product.is_pinned ? "Unpin" : "Pin"} Product
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleTogglePublic}>
+                {product.is_public ? (
+                  <EyeOff className="h-4 w-4 mr-2" />
+                ) : (
+                  <Eye className="h-4 w-4 mr-2" />
+                )}
+                {product.is_public ? "Make Private" : "Make Public"}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleShare}>
                 <Share2 className="h-4 w-4 mr-2" />
@@ -277,9 +322,9 @@ export default function ProductDetail() {
           {/* Product Image */}
           <Card>
             <CardContent className="p-0">
-              {product.thumbnail ? (
+              {product.image ? (
                 <img
-                  src={product.thumbnail}
+                  src={product.image}
                   alt={product.name}
                   className="w-full h-64 object-cover rounded-lg"
                 />
@@ -312,24 +357,24 @@ export default function ProductDetail() {
               <div>
                 <Label className="text-sm font-medium text-muted-foreground">Serving Size</Label>
                 <p className="text-lg font-semibold">
-                  {product.servingSize} {product.servingUnit}
+                  {product.serving_size} {product.serving_unit}
                 </p>
               </div>
               <div>
                 <Label className="text-sm font-medium text-muted-foreground">Servings per Container</Label>
-                <p className="text-lg font-semibold">{product.servingsPerContainer}</p>
+                <p className="text-lg font-semibold">{product.servings_per_container}</p>
               </div>
               <div>
                 <Label className="text-sm font-medium text-muted-foreground">Total Size</Label>
                 <p className="text-lg font-semibold">
-                  {parseInt(product.servingSize) * product.servingsPerContainer} {product.servingUnit}
+                  {product.serving_size * product.servings_per_container} {product.serving_unit}
                 </p>
               </div>
             </CardContent>
           </Card>
 
           {/* Tags */}
-          {product.tags.length > 0 && (
+          {product.tags && product.tags.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle>Tags</CardTitle>
@@ -362,39 +407,61 @@ export default function ProductDetail() {
               
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Status</span>
-                <Badge variant={product.status === "Published" ? "default" : "secondary"}>
-                  {product.status}
+                <Badge variant={product.status === "published" ? "default" : "secondary"}>
+                  {product.status === "published" ? "Published" : "Draft"}
                 </Badge>
               </div>
               
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Visibility</span>
                 <div className="flex items-center gap-1">
-                  {product.isPublic ? (
-                    <Eye className="h-4 w-4 text-muted-foreground" />
+                  {product.is_public ? (
+                    <Eye className="h-4 w-4 text-green-500" />
                   ) : (
                     <EyeOff className="h-4 w-4 text-muted-foreground" />
                   )}
-                  <span className="text-sm">{product.isPublic ? "Public" : "Private"}</span>
+                  <span className="text-sm">{product.is_public ? "Public" : "Private"}</span>
                 </div>
               </div>
+              
+              {!product.is_public && (
+                <div className="p-3 bg-muted/50 rounded-lg border border-dashed">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">Product is private</span>
+                    </div>
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      onClick={handleTogglePublic}
+                      className="h-7 text-xs"
+                    >
+                      Make Public
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Make this product public to generate shareable links
+                  </p>
+                </div>
+              )}
 
               <Separator />
 
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Calendar className="h-4 w-4" />
-                  <span>Created {product.createdAt.toLocaleDateString()}</span>
+                  <span>Created {new Date(product.created_at).toLocaleDateString()}</span>
                 </div>
                 
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Calendar className="h-4 w-4" />
-                  <span>Updated {product.updatedAt.toLocaleDateString()}</span>
+                  <span>Updated {new Date(product.updated_at).toLocaleDateString()}</span>
                 </div>
                 
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <User className="h-4 w-4" />
-                  <span>By {product.createdBy}</span>
+                  <span>By {product.user.name}</span>
                 </div>
               </div>
             </CardContent>
@@ -408,7 +475,7 @@ export default function ProductDetail() {
             <CardContent className="space-y-3">
               <Button variant="outline" className="w-full justify-start" onClick={handleTogglePin}>
                 <Pin className="w-4 h-4 mr-2" />
-                {product.isPinned ? "Unpin Product" : "Pin Product"}
+                {product.is_pinned ? "Unpin Product" : "Pin Product"}
               </Button>
               
               <Button variant="outline" className="w-full justify-start" onClick={handleShare}>

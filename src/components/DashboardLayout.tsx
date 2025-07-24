@@ -54,11 +54,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   }
 
   const getMembershipDisplay = () => {
-    if (!user?.membershipPlan) {
+    if (!user?.membership_plan) {
       return { text: 'Basic Member', showCrown: false }
     }
     
-    const planName = user.membershipPlan.name
+    const planName = user.membership_plan.name
     const showCrown = planName === 'Pro' || planName === 'Enterprise'
     
     return {

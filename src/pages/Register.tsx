@@ -203,8 +203,7 @@ export default function Register() {
         description: "Your account has been created successfully.",
       })
       
-      logService.info('Redirecting to dashboard', {}, 'Register');
-      navigate("/dashboard")
+      // Navigation is handled by AuthContext based on payment requirements
     } catch (error: any) {
       const errorMessage = error.message || "Registration failed. Please try again."
       

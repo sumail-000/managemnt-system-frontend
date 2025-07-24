@@ -31,9 +31,14 @@ interface FilterSidebarProps {
     dateRange: { from?: Date; to?: Date }
     pinnedOnly: boolean
   }
-  onFiltersChange: (filters: any) => void
+  onFiltersChange: (filters: FilterSidebarProps['filters']) => void
+  onClearFilters: () => void
+  availableCategories?: string[]
+  availableTags?: string[]
+  loading?: boolean
 }
 
+// Use provided categories and tags, fallback to mock data
 const mockCategories = [
   { name: "Dairy", count: 23 },
   { name: "Snacks", count: 45 },
@@ -54,13 +59,31 @@ const mockTags = [
   { name: "Whole Grain", count: 13 }
 ]
 
-export function FilterSidebar({ isOpen, onClose, filters, onFiltersChange }: FilterSidebarProps) {
+export function FilterSidebar({ 
+  isOpen, 
+  onClose, 
+  filters, 
+  onFiltersChange, 
+  onClearFilters,
+  availableCategories = [],
+  availableTags = [],
+  loading = false
+}: FilterSidebarProps) {
   const [expandedSections, setExpandedSections] = useState({
     categories: true,
     status: true,
     tags: true,
     date: false
   })
+
+  // Define categories and tags inside the component to access props
+  const categories = availableCategories.length > 0 
+    ? availableCategories.map(name => ({ name, count: 0 }))
+    : mockCategories
+
+  const tags = availableTags.length > 0
+    ? availableTags.map(name => ({ name, count: 0 }))
+    : mockTags
 
   const toggleSection = (section: keyof typeof expandedSections) => {
     setExpandedSections(prev => ({
@@ -86,13 +109,7 @@ export function FilterSidebar({ isOpen, onClose, filters, onFiltersChange }: Fil
   }
 
   const clearAllFilters = () => {
-    onFiltersChange({
-      categories: [],
-      statuses: [],
-      tags: [],
-      dateRange: {},
-      pinnedOnly: false
-    })
+    onClearFilters()
   }
 
   const getActiveFiltersCount = () => {
@@ -129,6 +146,7 @@ export function FilterSidebar({ isOpen, onClose, filters, onFiltersChange }: Fil
               size="sm"
               onClick={clearAllFilters}
               className="h-7 px-2 text-xs"
+              disabled={loading}
             >
               Clear all
             </Button>
@@ -152,6 +170,7 @@ export function FilterSidebar({ isOpen, onClose, filters, onFiltersChange }: Fil
               onCheckedChange={(checked) => 
                 onFiltersChange({ ...filters, pinnedOnly: !!checked })
               }
+              disabled={loading}
             />
             <Label htmlFor="pinned" className="text-sm font-medium cursor-pointer">
               Show pinned products only
@@ -175,7 +194,7 @@ export function FilterSidebar({ isOpen, onClose, filters, onFiltersChange }: Fil
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-2 mt-2">
-              {mockCategories.map((category) => (
+              {categories.map((category) => (
                 <div key={category.name} className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     <Checkbox
@@ -184,6 +203,7 @@ export function FilterSidebar({ isOpen, onClose, filters, onFiltersChange }: Fil
                       onCheckedChange={(checked) => 
                         handleCategoryChange(category.name, !!checked)
                       }
+                      disabled={loading}
                     />
                     <Label 
                       htmlFor={`category-${category.name}`}
@@ -228,6 +248,7 @@ export function FilterSidebar({ isOpen, onClose, filters, onFiltersChange }: Fil
                         : filters.statuses.filter(s => s !== status)
                       onFiltersChange({ ...filters, statuses: newStatuses })
                     }}
+                    disabled={loading}
                   />
                   <Label 
                     htmlFor={`status-${status}`}
@@ -258,7 +279,7 @@ export function FilterSidebar({ isOpen, onClose, filters, onFiltersChange }: Fil
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-2 mt-2">
               <div className="max-h-48 overflow-y-auto space-y-2">
-                {mockTags.map((tag) => (
+                {tags.map((tag) => (
                   <div key={tag.name} className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
                       <Checkbox
@@ -267,6 +288,7 @@ export function FilterSidebar({ isOpen, onClose, filters, onFiltersChange }: Fil
                         onCheckedChange={(checked) => 
                           handleTagChange(tag.name, !!checked)
                         }
+                        disabled={loading}
                       />
                       <Label 
                         htmlFor={`tag-${tag.name}`}

@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -12,17 +13,50 @@ import {
   AlertTriangle,
   CheckCircle,
   Star,
-  Crown
+  Crown,
+  Info
 } from "lucide-react"
 import { Link } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
+import { productsAPI } from "@/services/api"
+import { Product } from "@/types/product"
 
 export default function Dashboard() {
-  const { user, usage, usagePercentages } = useAuth()
+  const { user, usage, usagePercentages: usage_percentages, trialInfo: trial_info, subscriptionDetails: subscription_details } = useAuth()
+  const [recentProducts, setRecentProducts] = useState<Product[]>([])
+  const [isLoadingProducts, setIsLoadingProducts] = useState(true)
+  
+  // Debug logging
+  console.log('[DASHBOARD] Debug data:', {
+    user: user,
+    membershipPlan: user?.membership_plan,
+    trialInfo: trial_info,
+    subscriptionDetails: subscription_details,
+    usage: usage,
+    usagePercentages: usage_percentages
+  });
+  
+  // Fetch recent products
+  useEffect(() => {
+    const fetchRecentProducts = async () => {
+      try {
+        setIsLoadingProducts(true)
+        const response = await productsAPI.getAll({ per_page: 2, sort_by: 'updated_at', sort_order: 'desc' })
+        setRecentProducts(response.data || [])
+      } catch (error) {
+        console.error('Error fetching recent products:', error)
+        setRecentProducts([])
+      } finally {
+        setIsLoadingProducts(false)
+      }
+    }
+    
+    fetchRecentProducts()
+  }, [])
   
   // Get membership plan features from user data
   const getMembershipFeatures = () => {
-    if (!user?.membershipPlan) {
+    if (!user?.membership_plan) {
       return { 
         name: 'Basic', 
         limit: 3, 
@@ -32,7 +66,7 @@ export default function Dashboard() {
       }
     }
     
-    const plan = user.membershipPlan
+    const plan = user.membership_plan
     return {
       name: plan.name,
       limit: plan.product_limit || (plan.name === 'Basic' ? 3 : plan.name === 'Pro' ? 20 : 999),
@@ -49,73 +83,100 @@ export default function Dashboard() {
     products: usage?.products?.current_month || 0,
     labels: usage?.labels?.current_month || 0
   }
+  // Real-time stats from API data
   const stats = [
     {
       title: "Total Products",
-      value: "142",
-      change: "+12%",
+      value: (usage?.products?.total || 0).toString(),
+      change: usage?.products?.total > 0 ? "+" + Math.round((currentUsage.products / usage.products.total) * 100) + "% this month" : "No data",
       icon: Package,
       color: "text-primary"
     },
     {
       title: "Labels Generated",
-      value: "89",
-      change: "+8%",
+      value: currentUsage.labels.toString(),
+      change: usage?.labels?.limit ? `${Math.round((currentUsage.labels / usage.labels.limit) * 100)}% of limit used` : "This month",
       icon: FileText,
       color: "text-accent"
     },
     {
-      title: "QR Codes Active",
-      value: "67",
-      change: "+15%",
+      title: "QR Codes Created",
+      value: (usage?.qr_codes?.current_month || 0).toString(),
+      change: usage?.qr_codes?.total ? `${usage.qr_codes.total} total` : "This month",
       icon: QrCode,
       color: "text-success"
     },
     {
-      title: "Compliance Rate",
-      value: "98.5%",
-      change: "+2%",
+      title: "Plan Usage",
+      value: `${Math.round(usage_percentages?.products || 0)}%`,
+      change: `${currentUsage.products}/${usage?.products?.unlimited ? '∞' : membershipInfo.product_limit} used`,
       icon: CheckCircle,
-      color: "text-success"
+      color: (usage_percentages?.products || 0) > 80 ? "text-warning" : "text-success"
     }
   ]
 
-  const recentProducts = [
-    {
-      id: 1,
-      name: "Organic Greek Yogurt",
-      category: "Dairy",
-      status: "Published",
-      updatedAt: "2 hours ago"
-    },
-    {
-      id: 2,
-      name: "Gluten-Free Crackers",
-      category: "Snacks",
-      status: "Draft",
-      updatedAt: "5 hours ago"
-    },
-    {
-      id: 3,
-      name: "Premium Olive Oil",
-      category: "Oils",
-      status: "Published",
-      updatedAt: "1 day ago"
-    }
-  ]
+  // Format date for display
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60))
+    
+    if (diffInHours < 1) return 'Just now'
+    if (diffInHours < 24) return `${diffInHours}h ago`
+    if (diffInHours < 48) return 'Yesterday'
+    return date.toLocaleDateString()
+  }
+  
+  // Show message if no products exist
+  const hasProducts = (usage?.products?.total || 0) > 0
 
-  const alerts = [
-    {
+  // Dynamic alerts based on real user data
+  const alerts = []
+  
+  // Usage warning alerts
+  if ((usage_percentages?.products || 0) > 80) {
+    alerts.push({
       type: "warning",
-      message: "3 products need label updates due to regulation changes",
-      action: "Review Products"
-    },
-    {
+      message: `You're using ${Math.round(usage_percentages?.products || 0)}% of your ${membershipInfo.name} plan's product limit`,
+      action: "Upgrade Plan"
+    })
+  }
+  
+  // Trial expiration alerts
+  if (trial_info?.is_trial && trial_info.remaining_days <= 7) {
+    alerts.push({
+      type: "warning",
+      message: `Your trial expires in ${trial_info.remaining_days} days. Upgrade to continue using premium features.`,
+      action: "Upgrade Now"
+    })
+  }
+  
+  // Subscription renewal alerts
+  if (subscription_details?.remaining_days && subscription_details.remaining_days <= 7) {
+    alerts.push({
       type: "info",
-      message: "Monthly nutrition analysis report is ready",
-      action: "Download Report"
-    }
-  ]
+      message: `Your subscription renews in ${subscription_details.remaining_days} days`,
+      action: "Manage Billing"
+    })
+  }
+  
+  // Welcome message for new users
+  if ((usage?.products?.total || 0) === 0) {
+    alerts.push({
+      type: "info",
+      message: "Welcome! Start by creating your first product to unlock the full potential of our platform.",
+      action: "Create Product"
+    })
+  }
+  
+  // Default alert if no specific alerts
+  if (alerts.length === 0) {
+    alerts.push({
+      type: "info",
+      message: "Everything looks good! Your account is active and ready to use.",
+      action: "View Products"
+    })
+  }
 
   return (
     <div className="flex-1">
@@ -129,15 +190,7 @@ export default function Dashboard() {
             </p>
           </div>
           <div className="flex items-center gap-4">
-            <div className="text-right">
-              <div className="flex items-center gap-2">
-                <Crown className="w-4 h-4 text-primary" />
-                <span className="font-medium">{membershipInfo.name} Plan</span>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                {membershipInfo.limit === 999 ? 'Unlimited' : `${membershipInfo.limit} products/month`}
-              </p>
-            </div>
+
             <Button variant="gradient" size="lg" asChild>
               <Link to="/products/new">
                 <Plus className="w-4 h-4 mr-2" />
@@ -221,29 +274,71 @@ export default function Dashboard() {
         {/* Recent Products */}
         <Card className="dashboard-card">
           <CardHeader>
-            <CardTitle>Recent Products</CardTitle>
+            <CardTitle className="text-lg flex items-center gap-2 justify-center">
+              <Package className="w-5 h-5" />
+              Recent Products
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {recentProducts.map((product) => (
-                <div key={product.id} className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">{product.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {product.category} • {product.updatedAt}
-                    </p>
-                  </div>
-                  <Badge 
-                    variant={product.status === "Published" ? "default" : "secondary"}
-                  >
-                    {product.status}
-                  </Badge>
+          <CardContent className="relative">
+            <div className="space-y-3 min-h-[200px]">
+              {isLoadingProducts ? (
+                <div className="space-y-3">
+                  {[1, 2].map((i) => (
+                    <div key={i} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                      <div className="space-y-2">
+                        <div className="h-4 bg-muted rounded w-32 animate-pulse"></div>
+                        <div className="h-3 bg-muted rounded w-24 animate-pulse"></div>
+                      </div>
+                      <div className="h-6 bg-muted rounded w-16 animate-pulse"></div>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              ) : recentProducts.length > 0 ? (
+                recentProducts.map((product) => (
+                  <div key={product.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                    <div>
+                      <Link 
+                        to={`/products/${product.id}`}
+                        className="font-medium text-sm hover:text-primary transition-colors"
+                      >
+                        {product.name}
+                      </Link>
+                      <p className="text-xs text-muted-foreground">
+                        {product.category} • {formatDate(product.updated_at)}
+                      </p>
+                    </div>
+                    <Badge 
+                      variant={product.status === "published" ? "default" : "secondary"}
+                      className="text-xs"
+                    >
+                      {product.status === "published" ? "Published" : "Draft"}
+                    </Badge>
+                  </div>
+                ))
+              ) : (
+                <div className="flex items-center justify-center h-full py-8">
+                  <div className="text-center">
+                    <Package className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                    <h4 className="font-medium text-foreground mb-2">No products available</h4>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      You haven't created any products yet. Start by adding your first product to begin managing your inventory.
+                    </p>
+                    <Button size="sm" asChild>
+                      <Link to="/products/new">
+                        <Plus className="w-4 h-4 mr-2" />
+                        Create Your First Product
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
-            <Button variant="ghost" className="w-full mt-4" asChild>
-              <Link to="/products">View All Products</Link>
-            </Button>
+            {/* View All Products button positioned at bottom center */}
+            <div className="flex justify-center mt-4">
+              <Button variant="outline" size="sm" className="w-full" asChild>
+                <Link to="/products">View All Products</Link>
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
@@ -290,7 +385,25 @@ export default function Dashboard() {
               <h3 className="font-semibold">{membershipInfo.name} Membership</h3>
               <p className="text-sm text-muted-foreground">
               {currentUsage.products}/{usage?.products?.unlimited ? '∞' : membershipInfo.product_limit} products used this month
-              {membershipInfo.name !== 'Basic' && ' • Expires in 23 days'}
+              {(() => {
+                // Show trial info if user is on trial (any plan)
+                if (trial_info && trial_info.remaining_days !== undefined) {
+                   return ` • Trial expires in ${trial_info.remaining_days} day${trial_info.remaining_days !== 1 ? 's' : ''}`;
+                 }
+                 
+                 // Show subscription info if user has paid subscription
+                 if (subscription_details && subscription_details.remaining_days !== undefined) {
+                   return ` • Subscription expires in ${subscription_details.remaining_days} day${subscription_details.remaining_days !== 1 ? 's' : ''}`;
+                 }
+                
+                // For Basic plan users without trial/subscription data
+                if (membershipInfo.name === 'Basic') {
+                  return ' • Free plan active';
+                }
+                
+                // For paid plans without subscription data, show generic active status
+                return ' • Active subscription';
+              })()}
             </p>
             </div>
             <Button variant="outline" asChild>
@@ -303,14 +416,14 @@ export default function Dashboard() {
               style={{ 
                 width: usage?.products?.unlimited 
                   ? "100%" 
-                  : `${usagePercentages?.products || 0}%` 
+                  : `${usage_percentages?.products || 0}%` 
               }} 
             />
           </div>
           {membershipInfo.name === 'Basic' && (
             <div className="mt-4 p-3 bg-muted/50 rounded-lg">
               <p className="text-sm text-muted-foreground">
-                Upgrade to Pro for 20 products/month and advanced features!
+                Upgrade to Pro for advanced features!
               </p>
             </div>
           )}

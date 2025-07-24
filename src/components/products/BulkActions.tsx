@@ -25,7 +25,7 @@ interface BulkActionsProps {
   onBulkDelete: () => void
   onBulkPin: () => void
   onBulkUnpin: () => void
-  onBulkStatusChange: (status: "Published" | "Draft") => void
+  onBulkStatusChange: (status: "published" | "draft") => void
 }
 
 export function BulkActions({
@@ -86,11 +86,11 @@ export function BulkActions({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent>
-              <DropdownMenuItem onClick={() => onBulkStatusChange("Published")}>
+              <DropdownMenuItem onClick={() => onBulkStatusChange("published")}>
                 <CheckCircle className="h-4 w-4 mr-2" />
                 Publish
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onBulkStatusChange("Draft")}>
+              <DropdownMenuItem onClick={() => onBulkStatusChange("draft")}>
                 <FileX className="h-4 w-4 mr-2" />
                 Set as Draft
               </DropdownMenuItem>
