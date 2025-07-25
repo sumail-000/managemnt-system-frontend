@@ -145,6 +145,25 @@ export const authAPI = {
     return api.post('/auth/logout');
   },
   
+  logoutFromAllDevices: () => {
+    console.log('[AUTH_API] Logout from all devices request initiated');
+    return api.post('/auth/logout-all-devices');
+  },
+  
+  changePassword: (data: {
+    current_password: string;
+    new_password: string;
+    new_password_confirmation: string;
+  }) => {
+    console.log('[AUTH_API] Change password request initiated');
+    return api.post('/auth/change-password', data);
+  },
+  
+  deleteAccount: (password: string) => {
+    console.log('[AUTH_API] Delete account request initiated');
+    return api.delete('/auth/delete-account', { data: { password } });
+  },
+  
   getUser: () => {
     console.log('[AUTH_API] Get user request initiated');
     return api.get('/auth/user');
@@ -168,6 +187,17 @@ export const authAPI = {
   }) => {
     console.log('[AUTH_API] Password reset request initiated', { email: data.email });
     return api.post('/password/reset', data);
+  },
+  
+  updateProfile: (data: FormData | {
+    name?: string;
+    email?: string;
+    company?: string;
+    contact_number?: string;
+    tax_id?: string;
+  }) => {
+    console.log('[AUTH_API] Update profile request initiated');
+    return api.post('/auth/update-profile', data);
   },
 };
 
@@ -406,6 +436,144 @@ export const paymentAPI = {
   updatePaymentMethod: (data: any): Promise<any> => api.post('/payment/update-method', data),
   
   getSubscriptionDetails: (): Promise<any> => api.get('/payment/subscription'),
+};
+
+// Edamam API
+export const edamamAPI = {
+  // Food Database API
+  food: {
+    autocomplete: (query: string, limit: number = 10) => {
+      console.log('[EDAMAM_API] Food autocomplete request initiated', { query, limit });
+      return api.get('/edamam/food/autocomplete', { params: { q: query, limit } });
+    },
+    
+    search: (query: string, params?: {
+      limit?: number;
+      category?: string;
+      nutrients?: string[];
+      health?: string[];
+    }) => {
+      console.log('[EDAMAM_API] Food search request initiated', { query, params });
+      return api.get('/edamam/food/search', { params: { query, ...params } });
+    },
+    
+    getByUpc: (upc: string) => {
+      console.log('[EDAMAM_API] Food UPC lookup request initiated', { upc });
+      return api.get(`/edamam/food/upc/${upc}`);
+    },
+    
+    getPopular: (limit: number = 20) => {
+      console.log('[EDAMAM_API] Popular foods request initiated', { limit });
+      return api.get('/edamam/food/popular', { params: { limit } });
+    },
+    
+    getCategories: () => {
+      console.log('[EDAMAM_API] Food categories request initiated');
+      return api.get('/edamam/food/categories');
+    },
+    
+    clearCache: () => {
+      console.log('[EDAMAM_API] Clear food cache request initiated');
+      return api.delete('/edamam/food/cache');
+    }
+  },
+  
+  // Nutrition Analysis API
+  nutrition: {
+    analyze: (ingredients: string[]) => {
+      console.log('[EDAMAM_API] Nutrition analysis request initiated', { ingredients });
+      return api.post('/edamam/nutrition/analyze', { ingredients });
+    },
+    
+    batchAnalyze: (ingredientSets: string[][]) => {
+      console.log('[EDAMAM_API] Batch nutrition analysis request initiated', { count: ingredientSets.length });
+      return api.post('/edamam/nutrition/batch-analyze', { ingredient_sets: ingredientSets });
+    },
+    
+    getHistory: (params?: { page?: number; per_page?: number }) => {
+      console.log('[EDAMAM_API] Nutrition analysis history request initiated', params);
+      return api.get('/edamam/nutrition/history', { params });
+    },
+    
+    clearCache: () => {
+      console.log('[EDAMAM_API] Clear nutrition cache request initiated');
+      return api.delete('/edamam/nutrition/cache');
+    }
+  },
+  
+  // Recipe Search API
+  recipe: {
+    search: (query: string, params?: {
+      limit?: number;
+      diet?: string[];
+      health?: string[];
+      cuisineType?: string[];
+      mealType?: string[];
+      dishType?: string[];
+      calories?: string;
+      time?: string;
+      excluded?: string[];
+    }) => {
+      console.log('[EDAMAM_API] Recipe search request initiated', { query, params });
+      return api.get('/edamam/recipe/search', { params: { query, ...params } });
+    },
+    
+    getById: (id: string) => {
+      console.log('[EDAMAM_API] Recipe details request initiated', { id });
+      return api.get('/edamam/recipe/show', { params: { id } });
+    },
+    
+    getRandom: (count: number = 10, params?: {
+      diet?: string[];
+      health?: string[];
+      cuisineType?: string[];
+      mealType?: string[];
+      dishType?: string[];
+    }) => {
+      console.log('[EDAMAM_API] Random recipes request initiated', { count, params });
+      return api.get('/edamam/recipe/random', { params: { count, ...params } });
+    },
+    
+    getSuggestions: (ingredients: string[], limit: number = 10) => {
+      console.log('[EDAMAM_API] Recipe suggestions request initiated', { ingredients, limit });
+      return api.get('/edamam/recipe/suggest', { params: { ingredients: ingredients.join(','), limit } });
+    },
+    
+    getFilters: () => {
+      console.log('[EDAMAM_API] Recipe filters request initiated');
+      return api.get('/edamam/recipe/filters');
+    },
+    
+    clearCache: () => {
+      console.log('[EDAMAM_API] Clear recipe cache request initiated');
+      return api.delete('/edamam/recipe/cache');
+    },
+    
+    generateIngredients: (productName: string, options?: {
+      limit?: number;
+      serving_size?: number;
+    }) => {
+      console.log('[EDAMAM_API] Generate ingredients request initiated', { productName, options });
+      return api.post('/edamam/recipes/generate-ingredients', {
+        product_name: productName,
+        ...options
+      });
+    }
+  },
+  
+  // Ingredients API
+  ingredients: {
+    generate: (productName: string, options?: {
+      limit?: number;
+      serving_size?: number;
+    }) => {
+      console.log('[INGREDIENTS_API] Generate ingredients request initiated', { productName, options });
+      return api.post('/edamam/ingredients/generate', {
+        product_name: productName,
+        ...options
+      });
+    }
+  }
 };
 
 export default api;

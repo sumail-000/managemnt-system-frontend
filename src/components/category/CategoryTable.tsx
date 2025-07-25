@@ -27,6 +27,8 @@ interface CategoryTableProps {
   isEmpty: boolean
   searchTerm: string
   onSearchChange: (value: string) => void
+  onSearch: () => void
+  onClearSearch: () => void
   onRefresh: () => void
   onEdit: (category: Category) => void
   onDelete: (category: Category) => void
@@ -39,14 +41,15 @@ export function CategoryTable({
   isEmpty,
   searchTerm,
   onSearchChange,
+  onSearch,
+  onClearSearch,
   onRefresh,
   onEdit,
   onDelete,
   onCreateClick
 }: CategoryTableProps) {
-  const filteredCategories = categories.filter(category =>
-    category.name.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  // Categories are already filtered by backend search
+  const filteredCategories = categories
 
   if (loading) {
     return (
@@ -113,18 +116,43 @@ export function CategoryTable({
               placeholder="Search categories..."
               value={searchTerm}
               onChange={(e) => onSearchChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  onSearch()
+                }
+              }}
               className="pl-10 bg-muted/30 border-border/50 focus:bg-background transition-colors"
             />
           </div>
-          <Button 
-            variant="outline" 
-            onClick={onRefresh}
-            disabled={loading}
-            className="shrink-0 border-border/50 hover:bg-muted/50"
-          >
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Refresh
-          </Button>
+          <div className="flex gap-2 shrink-0">
+            <Button 
+              onClick={onSearch}
+              disabled={loading}
+              className="btn-gradient"
+            >
+              <Search className="mr-2 h-4 w-4" />
+              Search
+            </Button>
+            {searchTerm && (
+              <Button 
+                variant="outline"
+                onClick={onClearSearch}
+                disabled={loading}
+                className="border-border/50 hover:bg-muted/50"
+              >
+                Clear
+              </Button>
+            )}
+            <Button 
+              variant="outline" 
+              onClick={onRefresh}
+              disabled={loading}
+              className="border-border/50 hover:bg-muted/50"
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Refresh
+            </Button>
+          </div>
         </div>
 
         {/* Desktop Table */}
@@ -140,7 +168,7 @@ export function CategoryTable({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredCategories.map((category) => (
+                {categories.map((category) => (
                   <TableRow key={category.id} className="hover:bg-muted/30 transition-colors border-border/50">
                     <TableCell className="font-medium">
                       <div className="flex items-center space-x-3">
@@ -198,7 +226,7 @@ export function CategoryTable({
 
         {/* Mobile Cards */}
         <div className="md:hidden space-y-3">
-          {filteredCategories.map((category) => (
+          {categories.map((category) => (
             <Card key={category.id} className="border-border/50 hover:shadow-md transition-all duration-200">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">

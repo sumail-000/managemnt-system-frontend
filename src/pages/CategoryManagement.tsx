@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useCategories } from "@/hooks/useCategories"
 import { useToast } from "@/hooks/use-toast"
 import { Category, CategoryFormData } from "@/types/category"
@@ -15,10 +15,12 @@ export default function CategoryManagement() {
     creating,
     updating,
     deleting,
+    searching,
     loadCategories,
     createCategory,
     updateCategory,
     deleteCategory,
+    searchCategories,
     isEmpty
   } = useCategories({ autoLoad: true })
 
@@ -98,10 +100,25 @@ export default function CategoryManagement() {
     setSelectedCategory(null)
   }
 
-  // Filter categories based on search term
-  const filteredCategories = categories.filter(category =>
-    category.name.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  // Handle search button click
+  const handleSearch = useCallback(async () => {
+    if (searchTerm.trim()) {
+      await searchCategories(searchTerm)
+    } else {
+      await loadCategories()
+    }
+  }, [searchTerm, searchCategories, loadCategories])
+
+  // Handle search input change
+  const handleSearchChange = (term: string) => {
+    setSearchTerm(term)
+  }
+
+  // Handle clear search
+  const handleClearSearch = useCallback(async () => {
+    setSearchTerm("")
+    await loadCategories()
+  }, [loadCategories])
 
   return (
     <div className="min-h-screen bg-background">
@@ -115,17 +132,19 @@ export default function CategoryManagement() {
         {/* Stats */}
         <CategoryStats 
           categories={categories}
-          filteredCategories={filteredCategories}
+          filteredCategories={categories}
           searchTerm={searchTerm}
         />
 
         {/* Main Table/Content */}
         <CategoryTable
           categories={categories}
-          loading={loading}
+          loading={loading || searching}
           isEmpty={isEmpty}
           searchTerm={searchTerm}
-          onSearchChange={setSearchTerm}
+          onSearchChange={handleSearchChange}
+          onSearch={handleSearch}
+          onClearSearch={handleClearSearch}
           onRefresh={loadCategories}
           onEdit={openEditDialog}
           onDelete={openDeleteDialog}

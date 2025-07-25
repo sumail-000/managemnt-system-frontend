@@ -29,6 +29,11 @@ const categoriesAPI = {
     return api.delete(`/categories/${id}`);
   },
   
+  // Search categories
+  search: (query: string) => {
+    console.log('[CATEGORIES_API] Search categories request initiated', { query });
+    return api.get('/categories/search', { params: { query } });
+  },
 
 };
 
@@ -45,9 +50,11 @@ export interface UseCategoriesReturn {
   creating: boolean;
   updating: boolean;
   deleting: boolean;
+  searching: boolean;
   
   // Actions
   loadCategories: () => Promise<void>;
+  searchCategories: (query: string) => Promise<void>;
   createCategory: (categoryData: CategoryFormData) => Promise<Category | null>;
   updateCategory: (id: string, categoryData: CategoryFormData) => Promise<Category | null>;
   deleteCategory: (id: string) => Promise<boolean>;
@@ -71,6 +78,7 @@ export function useCategories(options: UseCategoriesOptions = {}): UseCategories
   const [creating, setCreating] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [searching, setSearching] = useState(false);
 
   // Load categories
   const loadCategories = useCallback(async () => {
@@ -103,6 +111,40 @@ export function useCategories(options: UseCategoriesOptions = {}): UseCategories
       });
     } finally {
       setLoading(false);
+    }
+  }, [toast]);
+
+  // Search categories
+  const searchCategories = useCallback(async (query: string) => {
+    try {
+      setSearching(true);
+      const response = await categoriesAPI.search(query);
+      console.log('[useCategories] Search categories API response:', response);
+      
+      if (response) {
+        // Handle different response formats
+        let categoriesData: Category[] = [];
+        
+        if (Array.isArray(response)) {
+          categoriesData = response;
+        } else if (response.data && Array.isArray(response.data)) {
+          categoriesData = response.data;
+        } else if (response.data && response.data.success && response.data.data && Array.isArray(response.data.data)) {
+          categoriesData = response.data.data;
+        }
+        
+        setCategories(categoriesData);
+        console.log('[useCategories] Search results loaded:', categoriesData);
+      }
+    } catch (error) {
+      console.error('[useCategories] Failed to search categories:', error);
+      toast({
+        title: "Error",
+        description: "Failed to search categories. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setSearching(false);
     }
   }, [toast]);
 
@@ -258,9 +300,11 @@ export function useCategories(options: UseCategoriesOptions = {}): UseCategories
     creating,
     updating,
     deleting,
+    searching,
     
     // Actions
     loadCategories,
+    searchCategories,
     createCategory,
     updateCategory,
     deleteCategory,

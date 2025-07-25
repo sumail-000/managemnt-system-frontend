@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { BarChart3, Clock, ChefHat, AlertTriangle, Download } from "lucide-react"
-import { RecipeAnalyzer } from "./RecipeAnalyzer"
+import ProductSelector from "./ProductSelector"
 import { NutritionDashboard } from "./NutritionDashboard"
 import { AllergenDetector } from "./AllergenDetector"
 import { WarningSystem } from "./WarningSystem"
@@ -33,6 +33,8 @@ export function NutritionAnalysis() {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [nutritionData, setNutritionData] = useState<NutritionData | null>(null)
   const [activeTab, setActiveTab] = useState("analyzer")
+  const [selectedProduct, setSelectedProduct] = useState<any>(null)
+  const [ingredientQuery, setIngredientQuery] = useState("")
   const [analysisHistory, setAnalysisHistory] = useState<Array<{
     id: string
     recipeName: string
@@ -58,6 +60,55 @@ export function NutritionAnalysis() {
       ...prev.slice(0, 9) // Keep last 10
     ])
     console.log('nutritionData should now be set')
+  }
+
+  const handleAnalyze = async () => {
+    if (!selectedProduct || !ingredientQuery.trim()) return
+
+    setIsAnalyzing(true)
+    
+    try {
+      // Simulate API call to Edamam
+      await new Promise(resolve => setTimeout(resolve, 2000))
+
+      // Mock response data
+      const mockData = {
+        totalCalories: 420,
+        macros: {
+          protein: 25.3,
+          carbs: 45.2,
+          fat: 18.7,
+          fiber: 8.1
+        },
+        micros: {
+          'Vitamin C': 45.2,
+          'Iron': 3.4,
+          'Calcium': 120.5,
+          'Sodium': 680.2,
+          'Potassium': 890.1
+        },
+        allergens: ['gluten', 'dairy', 'eggs'],
+        warnings: [
+          {
+            type: 'warning' as const,
+            message: 'High sodium content (680mg) - exceeds recommended daily intake',
+            severity: 'medium' as const
+          },
+          {
+            type: 'info' as const,
+            message: 'Good source of fiber and protein',
+            severity: 'low' as const
+          }
+        ],
+        servings: selectedProduct.servings_per_container || 4,
+        weightPerServing: selectedProduct.serving_size || 150
+      }
+
+      handleAnalysisComplete(mockData, selectedProduct.name)
+      
+    } catch (error) {
+      setIsAnalyzing(false)
+    }
   }
 
   const handleStartNewAnalysis = () => {
@@ -121,7 +172,7 @@ export function NutritionAnalysis() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <CardHeader>
             <TabsList className="grid w-full grid-cols-5">
-              <TabsTrigger value="analyzer">Recipe Analyzer</TabsTrigger>
+              <TabsTrigger value="analyzer">Product Selection</TabsTrigger>
               <TabsTrigger value="dashboard" disabled={!nutritionData}>
                 Dashboard
               </TabsTrigger>
@@ -139,10 +190,12 @@ export function NutritionAnalysis() {
 
           <CardContent>
             <TabsContent value="analyzer" className="mt-0">
-              <RecipeAnalyzer
-                onAnalysisStart={() => setIsAnalyzing(true)}
-                onAnalysisComplete={handleAnalysisComplete}
-                onAnalysisError={() => setIsAnalyzing(false)}
+              <ProductSelector
+                onProductSelect={setSelectedProduct}
+                onAnalyze={handleAnalyze}
+                selectedProduct={selectedProduct}
+                ingredientQuery={ingredientQuery}
+                onIngredientQueryChange={setIngredientQuery}
                 isAnalyzing={isAnalyzing}
               />
             </TabsContent>

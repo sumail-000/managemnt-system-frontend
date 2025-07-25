@@ -76,22 +76,22 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         
         <div className="flex-1 flex flex-col">
           {/* Top Navigation */}
-          <header className="h-16 border-b border-border bg-card flex items-center justify-between px-6">
+          <header className="h-16 border-b border-border bg-slate-700 text-slate-50 flex items-center justify-between px-6 shadow-md">
             <div className="flex items-center gap-4">
               <SidebarTrigger />
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <input
                   type="text"
                   placeholder="Search products, labels, users..."
-                  className="pl-10 pr-4 py-2 w-80 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="pl-10 pr-4 py-2 w-80 rounded-lg border border-slate-600 bg-slate-800 text-slate-100 placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                 />
               </div>
             </div>
 
             <div className="flex items-center gap-4">
               {/* Notifications */}
-              <Button variant="ghost" size="icon" className="relative">
+              <Button variant="ghost" size="icon" className="relative text-slate-200 hover:text-slate-50 hover:bg-slate-600">
                 <Bell className="h-4 w-4" />
                 <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs">
                   3
@@ -101,19 +101,27 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               {/* User Menu */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <div className="flex items-center gap-3 cursor-pointer hover:bg-muted/50 rounded-lg p-2 transition-colors">
+                  <div className="flex items-center gap-3 cursor-pointer hover:bg-slate-600 rounded-lg p-2 transition-colors">
                     <div className="text-right">
-                      <p className="text-sm font-medium">{user?.name || 'User'}</p>
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <p className="text-sm font-medium text-slate-50">{user?.name || 'User'}</p>
+                      <div className="flex items-center gap-1 text-xs text-slate-300">
                         {membershipInfo.showCrown && (
                           <Crown className="h-3 w-3 text-yellow-500" />
                         )}
                         <span>{membershipInfo.text}</span>
                       </div>
                     </div>
-                    <Button variant="ghost" size="icon" className="rounded-full">
-                      <User className="h-4 w-4" />
-                    </Button>
+                    <div className="w-8 h-8 rounded-full overflow-hidden bg-slate-600 flex items-center justify-center">
+                      {user?.avatar ? (
+                        <img 
+                          src={user.avatar} 
+                          alt={user.name || 'User'} 
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <User className="h-4 w-4 text-slate-200" />
+                      )}
+                    </div>
                   </div>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">

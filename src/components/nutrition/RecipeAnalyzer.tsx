@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { useToast } from "@/hooks/use-toast"
+import { productsAPI } from "@/services/api"
+import { Product } from "@/types/product"
 import { 
   Plus, 
   X, 
@@ -16,7 +18,10 @@ import {
   Users, 
   Clock,
   Upload,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Package,
+  Search,
+  Check
 } from "lucide-react"
 
 interface Ingredient {
@@ -46,8 +51,135 @@ export function RecipeAnalyzer({
     { id: "1", name: "", quantity: "", unit: "g" }
   ])
   const [recipeUrl, setRecipeUrl] = useState("")
-  const [analysisMode, setAnalysisMode] = useState<"manual" | "url">("manual")
+  const [analysisMode, setAnalysisMode] = useState<"product" | "manual" | "url">("product")
+  
+  // Product selection state
+  const [products, setProducts] = useState<Product[]>([])
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const [loadingProducts, setLoadingProducts] = useState(false)
+  const [productSearch, setProductSearch] = useState("")
+  const [ingredientQuery, setIngredientQuery] = useState("")
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalProducts, setTotalProducts] = useState(0)
+  const [hasMoreProducts, setHasMoreProducts] = useState(false)
+  
   const { toast } = useToast()
+
+  // Fetch user products with pagination
+  const fetchProducts = async (page = 1, search = "") => {
+    setLoadingProducts(true);
+    try {
+      const params = {
+        page,
+        per_page: 6, // Show 6 products per page
+        search: search || undefined,
+        status: 'published' // Only show published products
+      };
+      
+      const response = await productsAPI.getAll(params);
+      
+      if (response && response.data) {
+        // Handle Laravel pagination response
+        setProducts(prevProducts => {
+          return page === 1 ? response.data : [...prevProducts, ...response.data];
+        });
+        setCurrentPage(response.data.current_page || 1);
+        setTotalPages(response.data.last_page || 1);
+        setTotalProducts(response.data.total || 0);
+        setHasMoreProducts((response.data.current_page || 1) < (response.data.last_page || 1));
+      } else if (response && Array.isArray(response)) {
+        // Handle direct array response
+        setProducts(prevProducts => {
+          return page === 1 ? response : [...prevProducts, ...response];
+        });
+        setHasMoreProducts(false);
+      }
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load products. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoadingProducts(false);
+    }
+  };
+
+  // Fetch products on component mount
+  useEffect(() => {
+    if (analysisMode === 'product') {
+      fetchProducts(1, '');
+    }
+  }, [analysisMode]);
+
+  // Handle search with debouncing
+  useEffect(() => {
+    if (analysisMode === 'product') {
+      const timeoutId = setTimeout(() => {
+        setCurrentPage(1);
+        fetchProducts(1, productSearch);
+      }, 300);
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [productSearch, analysisMode]);
+
+  // Load more products
+  const handleLoadMore = () => {
+    if (hasMoreProducts && !loadingProducts) {
+      fetchProducts(currentPage + 1, productSearch);
+    }
+  };
+
+  // Handle product selection
+  const handleProductSelect = async (product: Product) => {
+    setSelectedProduct(product)
+    setRecipeName(product.name)
+    
+    // Fetch product details to get ingredients
+    try {
+      const productDetails = await productsAPI.getById(product.id)
+      if (productDetails && productDetails.data && productDetails.data.ingredients && productDetails.data.ingredients.length > 0) {
+        // Format ingredients into a query string
+        const ingredientsText = productDetails.data.ingredients
+          .map((ing: any) => {
+            const amount = ing.pivot?.amount || ing.amount || ''
+            const unit = ing.pivot?.unit || ing.unit || ''
+            const name = ing.name || ''
+            
+            if (amount && unit) {
+              return `${amount} ${unit} ${name}`.trim()
+            } else if (amount) {
+              return `${amount} ${name}`.trim()
+            } else {
+              return name
+            }
+          })
+          .filter(ingredient => ingredient.length > 0)
+          .join(', ')
+        
+        setIngredientQuery(ingredientsText)
+      } else {
+        // If no ingredients found, set a placeholder
+        setIngredientQuery(`Main ingredient: ${product.name}`)
+        toast({
+          title: "No ingredients found",
+          description: "This product doesn't have detailed ingredients. You can edit the ingredients manually.",
+          variant: "default"
+        })
+      }
+    } catch (error) {
+      console.error('Error fetching product details:', error)
+      setIngredientQuery(`Main ingredient: ${product.name}`)
+      toast({
+        title: "Error",
+        description: "Failed to load product ingredients. You can edit them manually.",
+        variant: "destructive"
+      })
+    }
+  }
 
   const addIngredient = () => {
     setIngredients([
@@ -83,7 +215,24 @@ export function RecipeAnalyzer({
       return false
     }
 
-    if (analysisMode === "manual") {
+    if (analysisMode === "product") {
+      if (!selectedProduct) {
+        toast({
+          title: "Product selection required",
+          description: "Please select a product to analyze",
+          variant: "destructive"
+        })
+        return false
+      }
+      if (!ingredientQuery.trim()) {
+        toast({
+          title: "Ingredients required",
+          description: "No ingredients found for the selected product",
+          variant: "destructive"
+        })
+        return false
+      }
+    } else if (analysisMode === "manual") {
       const validIngredients = ingredients.filter(ing => 
         ing.name.trim() && ing.quantity.trim()
       )
@@ -223,7 +372,15 @@ export function RecipeAnalyzer({
           <CardTitle>Analysis Method</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-2 mb-4">
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            <Button
+              variant={analysisMode === "product" ? "default" : "outline"}
+              onClick={() => setAnalysisMode("product")}
+              className="flex-1"
+            >
+              <Package className="w-4 h-4 mr-2" />
+              Select Product
+            </Button>
             <Button
               variant={analysisMode === "manual" ? "default" : "outline"}
               onClick={() => setAnalysisMode("manual")}
@@ -242,7 +399,140 @@ export function RecipeAnalyzer({
             </Button>
           </div>
 
-          {analysisMode === "manual" ? (
+          {analysisMode === "product" ? (
+            <div className="space-y-4">
+              {/* Product Search */}
+              <div className="space-y-2">
+                <Label htmlFor="productSearch">Search Your Products</Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                  <Input
+                    id="productSearch"
+                    placeholder="Search by product name or description..."
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+
+              {/* Product Selection Grid */}
+              <div className="space-y-2">
+                <Label>Select Product *</Label>
+                {loadingProducts ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                    <span className="ml-2">Loading your products...</span>
+                  </div>
+                ) : products.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    {productSearch ? 'No products found matching your search.' : 'No products found. Create some products first.'}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="grid gap-3 max-h-64 overflow-y-auto">
+                      {products.map((product) => (
+                      <div
+                        key={product.id}
+                        className={`p-4 border rounded-lg cursor-pointer transition-all hover:shadow-md ${
+                          selectedProduct?.id === product.id
+                            ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+                            : 'border-border hover:border-primary/50'
+                        }`}
+                        onClick={() => handleProductSelect(product)}
+                      >
+                        <div className="flex items-start gap-3">
+                          {/* Product Image */}
+                          <div className="w-16 h-16 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+                            {product.image || product.image_url ? (
+                              <img
+                                src={product.image || product.image_url}
+                                alt={product.name}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  const target = e.target as HTMLImageElement;
+                                  target.style.display = 'none';
+                                  target.nextElementSibling?.classList.remove('hidden');
+                                }}
+                              />
+                            ) : null}
+                            <div className={`w-full h-full flex items-center justify-center ${product.image || product.image_url ? 'hidden' : ''}`}>
+                              <Package className="w-6 h-6 text-muted-foreground" />
+                            </div>
+                          </div>
+                          
+                          {/* Product Info */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <h4 className="font-medium text-sm truncate">{product.name}</h4>
+                                {product.description && (
+                                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                    {product.description}
+                                  </p>
+                                )}
+                                <div className="flex items-center gap-2 mt-2">
+                                  <Badge variant="secondary" className="text-xs">
+                                    {product.category?.name || 'No Category'}
+                                  </Badge>
+                                  <Badge variant="outline" className="text-xs">
+                                    {product.status}
+                                  </Badge>
+                                </div>
+                              </div>
+                              {selectedProduct?.id === product.id && (
+                                <Check className="w-5 h-5 text-primary flex-shrink-0" />
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    </div>
+                    
+                    {/* Load More Button */}
+                    {hasMoreProducts && (
+                      <div className="flex justify-center pt-4">
+                        <Button
+                          variant="outline"
+                          onClick={handleLoadMore}
+                          disabled={loadingProducts}
+                          className="w-full"
+                        >
+                          {loadingProducts ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Loading more...
+                            </>
+                          ) : (
+                            `Load More Products (${totalProducts - products.length} remaining)`
+                          )}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Ingredient Query Box */}
+              {selectedProduct && (
+                <div className="space-y-2">
+                  <Label htmlFor="ingredientQuery">Ingredients Data</Label>
+                  <Textarea
+                    id="ingredientQuery"
+                    placeholder="Ingredients will be loaded automatically when you select a product..."
+                    value={ingredientQuery}
+                    onChange={(e) => setIngredientQuery(e.target.value)}
+                    rows={4}
+                    className="resize-none"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    You can edit the ingredients data before analysis if needed.
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : analysisMode === "manual" ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <Label>Ingredients *</Label>
@@ -338,12 +628,12 @@ export function RecipeAnalyzer({
               {isAnalyzing ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Analyzing Recipe...
+                  {analysisMode === "product" ? "Analyzing Product..." : "Analyzing Recipe..."}
                 </>
               ) : (
                 <>
                   <ChefHat className="w-4 h-4 mr-2" />
-                  Analyze Recipe
+                  {analysisMode === "product" ? "Analyze Product Nutrition" : "Analyze Recipe"}
                 </>
               )}
             </Button>

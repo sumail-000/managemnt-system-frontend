@@ -141,6 +141,7 @@ interface User {
   contact_number?: string;
   tax_id?: string;
   payment_status?: string;
+  avatar?: string;
   membership_plan?: {
     id: number;
     name: string;
@@ -175,6 +176,14 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (userData: RegisterData) => Promise<void>;
   logout: () => void;
+  logoutFromAllDevices: () => Promise<void>;
+  changePassword: (data: {
+    current_password: string;
+    new_password: string;
+    new_password_confirmation: string;
+  }) => Promise<void>;
+  deleteAccount: (password: string) => Promise<void>;
+  updateUser: (userData: FormData | Partial<User>) => Promise<any>;
   refreshUsage: () => Promise<void>;
 }
 
@@ -585,8 +594,108 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const updateUser = (userData: Partial<User>) => {
-    setUser(prev => prev ? { ...prev, ...userData } : null);
+  const logoutFromAllDevices = async () => {
+    console.log('[AUTH] Logout from all devices initiated', {
+      userId: user?.id,
+      email: user?.email
+    });
+    try {
+      if (token) {
+        await authAPI.logoutFromAllDevices();
+        console.log('[AUTH] Server logout from all devices successful');
+      }
+    } catch (error) {
+      console.error('[AUTH] Server logout from all devices error:', error);
+      throw new Error('Failed to logout from all devices');
+    } finally {
+      console.log('[AUTH] Local logout completed after logout from all devices');
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('auth_token_expires_at');
+      setToken(null);
+      setTokenExpiresAt(null);
+      setUser(null);
+      setUsage(null);
+      setUsagePercentages(null);
+      setSubscriptionInfo(null);
+      setTrialInfo(null);
+      setSubscriptionDetails(null);
+      setBillingInformation(null);
+      setPaymentMethods(null);
+      setBillingHistory(null);
+      navigate('/login');
+    }
+  };
+
+  const changePassword = async (data: {
+    current_password: string;
+    new_password: string;
+    new_password_confirmation: string;
+  }) => {
+    console.log('[AUTH] Change password initiated', {
+      userId: user?.id,
+      email: user?.email
+    });
+    try {
+      await authAPI.changePassword(data);
+      console.log('[AUTH] Password change successful');
+    } catch (error: any) {
+      console.error('[AUTH] Password change failed:', error);
+      throw new Error(error.response?.data?.message || 'Failed to change password');
+    }
+  };
+
+  const deleteAccount = async (password: string) => {
+    console.log('[AUTH] Account deletion initiated', {
+      userId: user?.id,
+      email: user?.email
+    });
+    try {
+      await authAPI.deleteAccount(password);
+      console.log('[AUTH] Account deletion successful');
+    } catch (error: any) {
+      console.error('[AUTH] Account deletion failed:', error);
+      throw new Error(error.response?.data?.message || 'Failed to delete account');
+    } finally {
+      console.log('[AUTH] Local logout completed after account deletion');
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('auth_token_expires_at');
+      setToken(null);
+      setTokenExpiresAt(null);
+      setUser(null);
+      setUsage(null);
+      setUsagePercentages(null);
+      setSubscriptionInfo(null);
+      setTrialInfo(null);
+      setSubscriptionDetails(null);
+      setBillingInformation(null);
+      setPaymentMethods(null);
+      setBillingHistory(null);
+      navigate('/login');
+    }
+  };
+
+  const updateUser = async (userData: FormData | Partial<User>) => {
+    console.log('[AUTH] Profile update initiated', {
+      userId: user?.id,
+      email: user?.email
+    });
+    try {
+      const response = (await authAPI.updateProfile(userData) as any) as {
+        message: string;
+        user: User;
+      };
+      
+      console.log('[AUTH] Profile update successful', {
+        userId: response.user.id,
+        email: response.user.email
+      });
+      
+      setUser(response.user);
+      return response;
+    } catch (error: any) {
+      console.error('[AUTH] Profile update failed:', error);
+      throw new Error(error.response?.data?.message || 'Failed to update profile');
+    }
   };
 
   const value = {
@@ -605,7 +714,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
      login,
      register,
      logout,
+     logoutFromAllDevices,
+     changePassword,
+     deleteAccount,
      refreshUsage,
+     updateUser,
    };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

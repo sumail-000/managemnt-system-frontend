@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,189 +9,271 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Save, RotateCcw, User, Bell, Palette, Globe, Shield, Info } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { 
+  User, 
+  Shield, 
+  Bell, 
+  Globe, 
+  Building, 
+  Smartphone, 
+  Camera, 
+  Save, 
+  LogOut, 
+  Trash2, 
+  Eye, 
+  EyeOff,
+  Upload,
+  AlertTriangle,
+  Monitor
+} from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { settingsAPI } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 
-interface UserSettings {
-  theme: string;
-  language: string;
-  timezone: string;
-  email_notifications: boolean;
-  push_notifications: boolean;
-  default_serving_unit: string;
-  label_template_preferences: any[];
-}
-
-interface SettingsOptions {
-  themes: string[];
-  languages: string[];
-  serving_units: string[];
-  timezones: Record<string, string>;
-}
-
 const Settings: React.FC = () => {
-  const { user } = useAuth();
+  const { user, logout, logoutFromAllDevices, changePassword, deleteAccount, updateUser } = useAuth();
   const { toast } = useToast();
-  const [settings, setSettings] = useState<UserSettings | null>(null);
-  const [options, setOptions] = useState<SettingsOptions | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [resetting, setResetting] = useState(false);
-  const [hasChanges, setHasChanges] = useState(false);
-  const [originalSettings, setOriginalSettings] = useState<UserSettings | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isLogoutAllDialogOpen, setIsLogoutAllDialogOpen] = useState(false);
+  const [deleteAccountPassword, setDeleteAccountPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
+  const [profileImagePreview, setProfileImagePreview] = useState<string>('');
 
-  useEffect(() => {
-    fetchSettings();
-    fetchOptions();
-  }, []);
+  // Profile form state
+  const [profileData, setProfileData] = useState({
+    name: user?.name || '',
+    email: user?.email || '',
+    phone: user?.contact_number || '',
+    company: user?.company || '',
+    taxId: user?.tax_id || '',
+    avatar: user?.avatar || ''
+  });
 
-  const fetchSettings = async () => {
-    try {
-      const response = await settingsAPI.get();
-      const settingsData = response.data.data || response.data;
-      setSettings(settingsData);
-      setOriginalSettings(settingsData);
-    } catch (error) {
-      console.error('Failed to fetch settings:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load settings. Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Security form state
+  const [passwordData, setPasswordData] = useState({
+    current_password: '',
+    new_password: '',
+    new_password_confirmation: ''
+  });
 
-  const fetchOptions = async () => {
-    try {
-      const response = await settingsAPI.get();
-      // For now, we'll use default options. In a real app, you might have a separate endpoint
-      setOptions({
-        themes: ['light', 'dark'],
-        languages: ['english', 'arabic'],
-        serving_units: ['grams', 'ounces', 'pounds', 'kilograms'],
-        timezones: {
-          'UTC': 'UTC',
-          'America/New_York': 'Eastern Time',
-          'America/Chicago': 'Central Time',
-          'America/Denver': 'Mountain Time',
-          'America/Los_Angeles': 'Pacific Time',
-          'Europe/London': 'London',
-          'Europe/Paris': 'Paris',
-          'Asia/Dubai': 'Dubai',
-          'Asia/Riyadh': 'Riyadh',
-          'Asia/Tokyo': 'Tokyo',
-          'Australia/Sydney': 'Sydney'
-        }
-      });
-    } catch (error) {
-      console.error('Failed to fetch options:', error);
-    }
-  };
+  // Combined Preferences & Notifications
+  const [settings, setSettings] = useState({
+    // Notification settings
+    emailNotifications: true,
+    pushNotifications: true,
+    marketingEmails: false,
+    securityAlerts: true,
+    productUpdates: true,
+    // Preference settings
+    language: 'english',
+    timezone: 'UTC',
+    dateFormat: 'MM/DD/YYYY',
+    currency: 'USD',
+    theme: 'light'
+  });
 
-  const handleSettingChange = (key: keyof UserSettings, value: any) => {
-    if (!settings) return;
-    
-    const newSettings = { ...settings, [key]: value };
-    setSettings(newSettings);
-    
-    // Check if there are changes
-    const hasChanges = JSON.stringify(newSettings) !== JSON.stringify(originalSettings);
-    setHasChanges(hasChanges);
-  };
-
-  const handleSave = async () => {
-    if (!settings || !hasChanges) return;
-    
-    setSaving(true);
-    try {
-      const response = await settingsAPI.update(settings);
-      const updatedSettings = response.data.data || response.data;
-      setSettings(updatedSettings);
-      setOriginalSettings(updatedSettings);
-      setHasChanges(false);
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) { // 2MB limit
+        toast({
+          title: 'File too large',
+          description: 'Please select an image smaller than 2MB.',
+          variant: 'destructive',
+        });
+        return;
+      }
       
-      // User data will be automatically updated
+      if (!file.type.startsWith('image/')) {
+        toast({
+          title: 'Invalid file type',
+          description: 'Please select a valid image file.',
+          variant: 'destructive',
+        });
+        return;
+      }
       
-      toast({
-        title: 'Success',
-        description: 'Settings saved successfully!',
-      });
-    } catch (error) {
-      console.error('Failed to save settings:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to save settings. Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleReset = async () => {
-    setResetting(true);
-    try {
-      // For now, we'll reset to default values. In a real app, you might have a reset endpoint
-      const defaultSettings: UserSettings = {
-        theme: 'light',
-        language: 'english',
-        timezone: 'UTC',
-        email_notifications: true,
-        push_notifications: true,
-        default_serving_unit: 'grams',
-        label_template_preferences: []
+      setProfileImageFile(file);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setProfileImagePreview(e.target?.result as string);
       };
-      
-      const response = await settingsAPI.update(defaultSettings);
-      const resetSettings = response.data.data || response.data;
-      setSettings(resetSettings);
-      setOriginalSettings(resetSettings);
-      setHasChanges(false);
-      
-      // User data will be automatically updated
-      
-      toast({
-        title: 'Success',
-        description: 'Settings reset to defaults successfully!',
-      });
-    } catch (error) {
-      console.error('Failed to reset settings:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to reset settings. Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setResetting(false);
+      reader.readAsDataURL(file);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin" />
-        <span className="ml-2">Loading settings...</span>
-      </div>
-    );
-  }
+  const handleProfileSave = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Create FormData for file upload and profile data
+      const formData = new FormData();
+      
+      // Add profile data to FormData
+      if (profileData.name !== user?.name) {
+        formData.append('name', profileData.name);
+      }
+      if (profileData.email !== user?.email) {
+        formData.append('email', profileData.email);
+      }
+      if (profileData.company !== user?.company) {
+        formData.append('company', profileData.company || '');
+      }
+      if (profileData.phone !== user?.contact_number) {
+        formData.append('contact_number', profileData.phone || '');
+      }
+      if (profileData.taxId !== user?.tax_id) {
+        formData.append('tax_id', profileData.taxId || '');
+      }
+      
+      // Add image file if selected
+      if (profileImageFile) {
+        formData.append('avatar', profileImageFile);
+      }
+      
+      // Only make API call if there are changes
+      if (formData.has('name') || formData.has('email') || formData.has('company') || 
+          formData.has('contact_number') || formData.has('tax_id') || formData.has('avatar')) {
+        await updateUser(formData);
+        
+        // Clear the image file and preview after successful upload
+        setProfileImageFile(null);
+        setProfileImagePreview('');
+      }
+      
+      toast({
+        title: 'Profile Updated',
+        description: 'Your profile information has been saved successfully.',
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to update profile.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-  if (!settings || !options) {
-    return (
-      <Alert>
-        <Info className="h-4 w-4" />
-        <AlertDescription>
-          Unable to load settings. Please refresh the page and try again.
-        </AlertDescription>
-      </Alert>
-    );
-  }
+  const handlePasswordChange = async () => {
+    if (passwordData.new_password !== passwordData.new_password_confirmation) {
+      toast({
+        title: 'Error',
+        description: 'New passwords do not match.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    if (passwordData.new_password.length < 8) {
+      toast({
+        title: 'Error',
+        description: 'Password must be at least 8 characters long.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    try {
+      setIsLoading(true);
+      await changePassword(passwordData);
+      
+      toast({
+        title: 'Password Updated',
+        description: 'Your password has been changed successfully.',
+      });
+      
+      setPasswordData({
+        current_password: '',
+        new_password: '',
+        new_password_confirmation: ''
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to change password.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    logout();
+    toast({
+      title: 'Logged Out',
+      description: 'You have been successfully logged out.',
+    });
+  };
+
+  const handleLogoutFromAllDevices = async () => {
+    try {
+      setIsLoading(true);
+      await logoutFromAllDevices();
+      toast({
+        title: 'Logged Out from All Devices',
+        description: 'You have been successfully logged out from all devices.',
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to logout from all devices.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+      setIsLogoutAllDialogOpen(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!deleteAccountPassword) {
+      toast({
+        title: 'Error',
+        description: 'Please enter your password to confirm account deletion.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    try {
+      setIsLoading(true);
+      await deleteAccount(deleteAccountPassword);
+      toast({
+        title: 'Account Deleted',
+        description: 'Your account has been permanently deleted.',
+        variant: 'destructive',
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to delete account.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+      setIsDeleteDialogOpen(false);
+      setDeleteAccountPassword('');
+    }
+  };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-4xl mx-auto p-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
@@ -199,178 +281,429 @@ const Settings: React.FC = () => {
             Manage your account settings and preferences.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={handleReset}
-            disabled={resetting || saving}
-          >
-            {resetting ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-            ) : (
-              <RotateCcw className="h-4 w-4 mr-2" />
-            )}
-            Reset to Defaults
-          </Button>
-          <Button
-            onClick={handleSave}
-            disabled={!hasChanges || saving}
-          >
-            {saving ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-            ) : (
-              <Save className="h-4 w-4 mr-2" />
-            )}
-            Save Changes
-          </Button>
-        </div>
       </div>
 
-      {hasChanges && (
-        <Alert>
-          <Info className="h-4 w-4" />
-          <AlertDescription>
-            You have unsaved changes. Don't forget to save your settings.
-          </AlertDescription>
-        </Alert>
-      )}
+      <Tabs defaultValue="profile" className="space-y-8">
+        <div className="relative">
+          <TabsList className="grid w-full grid-cols-3 bg-gradient-to-r from-sidebar-background to-card border border-sidebar-border/50 p-1 h-14 rounded-xl shadow-lg backdrop-blur-sm">
+            <TabsTrigger 
+              value="profile" 
+              className="flex items-center gap-2 h-full rounded-lg transition-all duration-300 hover:scale-105 data-[state=active]:bg-gradient-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md data-[state=active]:scale-105"
+            >
+              <User className="h-4 w-4" />
+              <span className="hidden sm:inline">Profile</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="security" 
+              className="flex items-center gap-2 h-full rounded-lg transition-all duration-300 hover:scale-105 data-[state=active]:bg-gradient-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md data-[state=active]:scale-105"
+            >
+              <Shield className="h-4 w-4" />
+              <span className="hidden sm:inline">Security</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="preferences" 
+              className="flex items-center gap-2 h-full rounded-lg transition-all duration-300 hover:scale-105 data-[state=active]:bg-gradient-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md data-[state=active]:scale-105"
+            >
+              <Globe className="h-4 w-4" />
+              <span className="hidden sm:inline">Preferences</span>
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
-      <Tabs defaultValue="profile" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="profile" className="flex items-center gap-2">
-            <User className="h-4 w-4" />
-            Profile
-          </TabsTrigger>
-          <TabsTrigger value="appearance" className="flex items-center gap-2">
-            <Palette className="h-4 w-4" />
-            Appearance
-          </TabsTrigger>
-          <TabsTrigger value="notifications" className="flex items-center gap-2">
-            <Bell className="h-4 w-4" />
-            Notifications
-          </TabsTrigger>
-          <TabsTrigger value="preferences" className="flex items-center gap-2">
-            <Globe className="h-4 w-4" />
-            Preferences
-          </TabsTrigger>
-        </TabsList>
+        {/* Profile Tab */}
+        <TabsContent value="profile" className="space-y-6 animate-fade-in">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Profile Picture Card */}
+            <Card className="card-elevated hover:shadow-glow transition-all duration-300 hover:scale-[1.02]">
+              <CardHeader className="text-center">
+                <Avatar className="h-24 w-24 mx-auto mb-4">
+                  <AvatarImage src={profileImagePreview || profileData.avatar || user?.avatar} />
+                  <AvatarFallback className="text-2xl bg-gradient-primary text-primary-foreground">
+                    {(profileData.name || user?.name || 'U').charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <CardTitle className="text-lg">Profile Picture</CardTitle>
+                <CardDescription>
+                  Update your profile image
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+                <div className="flex flex-col gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="w-full"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isLoading}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload New
+                  </Button>
+                  {profileImageFile && (
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="w-full"
+                      onClick={() => {
+                        setProfileImageFile(null);
+                        setProfileImagePreview('');
+                      }}
+                    >
+                      Remove Selected
+                    </Button>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground text-center">
+                  JPG, PNG or GIF. Max size 2MB.
+                </p>
+                {profileImageFile && (
+                  <p className="text-sm text-green-600 text-center">
+                    Selected: {profileImageFile.name}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
 
-        <TabsContent value="profile" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Profile Information</CardTitle>
-              <CardDescription>
-                Your basic account information and membership details.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Name</Label>
-                  <Input value={user?.name || ''} disabled />
-                </div>
-                <div className="space-y-2">
-                  <Label>Email</Label>
-                  <Input value={user?.email || ''} disabled />
-                </div>
-                <div className="space-y-2">
-                  <Label>Role</Label>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary">{user?.role || 'User'}</Badge>
+            {/* Personal Information Card */}
+            <Card className="lg:col-span-2 card-elevated hover:shadow-glow transition-all duration-300 hover:scale-[1.02]">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <User className="h-5 w-5 text-primary" />
+                  Personal Information
+                </CardTitle>
+                <CardDescription>
+                  Update your personal and account details
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Personal Information */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Full Name</Label>
+                    <Input
+                      id="name"
+                      value={profileData.name}
+                      onChange={(e) => setProfileData(prev => ({ ...prev, name: e.target.value }))}
+                      placeholder="Enter your full name"
+                      className="transition-all duration-200 focus:scale-[1.02]"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email Address</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={profileData.email}
+                      disabled
+                      className="bg-muted"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Email cannot be changed. Contact support if needed.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Phone Number</Label>
+                    <Input
+                      id="phone"
+                      type="tel"
+                      value={profileData.phone}
+                      onChange={(e) => setProfileData(prev => ({ ...prev, phone: e.target.value }))}
+                      placeholder="+1 (555) 123-4567"
+                      className="transition-all duration-200 focus:scale-[1.02]"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Account Status</Label>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="default" className="animate-pulse">
+                        {user?.membership_plan?.name || 'Basic'}
+                      </Badge>
+                      <Badge variant="outline">
+                        {user?.role || 'User'}
+                      </Badge>
+                    </div>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Membership Plan</Label>
+
+                <Separator />
+
+                {/* Company Information */}
+                <div className="space-y-4">
                   <div className="flex items-center gap-2">
-                    <Badge variant="default">
-                      {user?.membership_plan?.name || 'Basic'}
-                    </Badge>
+                    <Building className="h-5 w-5 text-primary" />
+                    <h3 className="text-lg font-medium">Company Information</h3>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="company">Company Name</Label>
+                      <Input
+                        id="company"
+                        value={profileData.company}
+                        onChange={(e) => setProfileData(prev => ({ ...prev, company: e.target.value }))}
+                        placeholder="Enter company name"
+                        className="transition-all duration-200 focus:scale-[1.02]"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="taxId">Tax ID (Optional)</Label>
+                      <Input
+                        id="taxId"
+                        value={profileData.taxId}
+                        onChange={(e) => setProfileData(prev => ({ ...prev, taxId: e.target.value }))}
+                        placeholder="Enter tax identification number"
+                        className="transition-all duration-200 focus:scale-[1.02]"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
-              {user?.company && (
-                <div className="space-y-2">
-                  <Label>Company</Label>
-                  <Input value={user.company} disabled />
+
+                <div className="flex justify-end">
+                  <Button 
+                    onClick={handleProfileSave} 
+                    className="btn-gradient hover:scale-105 transition-all duration-200"
+                    disabled={isLoading}
+                  >
+                    <Save className="h-4 w-4 mr-2" />
+                    {isLoading ? 'Saving...' : 'Save Changes'}
+                  </Button>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
-        <TabsContent value="appearance" className="space-y-4">
-          <Card>
+        {/* Security Tab */}
+        <TabsContent value="security" className="space-y-6 animate-fade-in">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card className="card-elevated hover:shadow-glow transition-all duration-300 hover:scale-[1.02]">
             <CardHeader>
-              <CardTitle>Theme & Appearance</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5" />
+                Password & Security
+              </CardTitle>
               <CardDescription>
-                Customize how the application looks and feels.
+                Manage your password and security settings.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="theme">Theme</Label>
-                <Select
-                  value={settings.theme}
-                  onValueChange={(value) => handleSettingChange('theme', value)}
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="current-password">Current Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="current-password"
+                      type={showCurrentPassword ? "text" : "password"}
+                      value={passwordData.current_password}
+                      onChange={(e) => setPasswordData(prev => ({ ...prev, current_password: e.target.value }))}
+                      placeholder="Enter current password"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                    >
+                      {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="new-password">New Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="new-password"
+                      type={showNewPassword ? "text" : "password"}
+                      value={passwordData.new_password}
+                      onChange={(e) => setPasswordData(prev => ({ ...prev, new_password: e.target.value }))}
+                      placeholder="Enter new password"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                    >
+                      {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="confirm-password">Confirm New Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="confirm-password"
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={passwordData.new_password_confirmation}
+                      onChange={(e) => setPasswordData(prev => ({ ...prev, new_password_confirmation: e.target.value }))}
+                      placeholder="Confirm new password"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    >
+                      {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+
+                <Alert>
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    Password must be at least 8 characters long and contain uppercase, lowercase, numbers, and special characters.
+                  </AlertDescription>
+                </Alert>
+
+                <Button 
+                  onClick={handlePasswordChange}
+                  className="btn-gradient hover:scale-105 transition-all duration-200"
+                  disabled={isLoading}
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select theme" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {options.themes.map((theme) => (
-                      <SelectItem key={theme} value={theme}>
-                        {theme.charAt(0).toUpperCase() + theme.slice(1)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  <Save className="h-4 w-4 mr-2" />
+                  {isLoading ? 'Updating...' : 'Update Password'}
+                </Button>
               </div>
             </CardContent>
           </Card>
+
+            <Card className="card-elevated hover:shadow-glow transition-all duration-300 hover:scale-[1.02] border-destructive/20">
+            <CardHeader>
+              <CardTitle className="text-destructive">Danger Zone</CardTitle>
+              <CardDescription>
+                Irreversible account actions. Proceed with caution.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between p-4 border border-destructive/20 rounded-lg">
+                <div>
+                  <h4 className="font-medium">Logout from all devices</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Sign out from all devices and browsers
+                  </p>
+                </div>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setIsLogoutAllDialogOpen(true)}
+                  disabled={isLoading}
+                >
+                  <Monitor className="h-4 w-4 mr-2" />
+                  Logout All
+                </Button>
+              </div>
+
+              <div className="flex items-center justify-between p-4 border border-destructive/20 rounded-lg">
+                <div>
+                  <h4 className="font-medium text-destructive">Delete Account</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Permanently delete your account and all data
+                  </p>
+                </div>
+                <Button 
+                  variant="destructive" 
+                  onClick={() => setIsDeleteDialogOpen(true)}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Account
+                </Button>
+              </div>
+            </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
-        <TabsContent value="notifications" className="space-y-4">
-          <Card>
+        {/* Notifications Tab */}
+        <TabsContent value="notifications" className="space-y-6 animate-fade-in">
+          <Card className="card-elevated hover:shadow-glow transition-all duration-300 hover:scale-[1.02]">
             <CardHeader>
-              <CardTitle>Notification Preferences</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Bell className="h-5 w-5" />
+                Notification Preferences
+              </CardTitle>
               <CardDescription>
                 Choose how you want to be notified about important updates.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Email Notifications</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Receive notifications via email
-                  </p>
+              {Object.entries({
+                emailNotifications: { 
+                  title: 'Email Notifications', 
+                  description: 'Receive notifications via email' 
+                },
+                pushNotifications: { 
+                  title: 'Push Notifications', 
+                  description: 'Receive push notifications in your browser' 
+                },
+                marketingEmails: { 
+                  title: 'Marketing Emails', 
+                  description: 'Receive promotional and marketing emails' 
+                },
+                securityAlerts: { 
+                  title: 'Security Alerts', 
+                  description: 'Get notified about security-related events' 
+                },
+                productUpdates: { 
+                  title: 'Product Updates', 
+                  description: 'Stay informed about new features and improvements' 
+                }
+              }).map(([key, { title, description }]) => (
+                <div key={key} className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label>{title}</Label>
+                    <p className="text-sm text-muted-foreground">{description}</p>
+                  </div>
+                  <Switch
+                    checked={settings[key as keyof typeof settings] as boolean}
+                    onCheckedChange={(checked) => 
+                      setSettings(prev => ({ 
+                        ...prev, 
+                        [key]: checked
+                      }))
+                    }
+                  />
                 </div>
-                <Switch
-                  checked={settings.email_notifications}
-                  onCheckedChange={(checked) => handleSettingChange('email_notifications', checked)}
-                />
-              </div>
-              <Separator />
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Push Notifications</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Receive push notifications in your browser
-                  </p>
-                </div>
-                <Switch
-                  checked={settings.push_notifications}
-                  onCheckedChange={(checked) => handleSettingChange('push_notifications', checked)}
-                />
-              </div>
+              ))}
             </CardContent>
           </Card>
+
+          <div className="flex justify-end">
+            <Button 
+              onClick={() => {
+                // Handle saving notifications settings
+                toast({
+                  title: 'Success',
+                  description: 'Notification preferences saved successfully.',
+                });
+              }}
+              className="btn-gradient hover:scale-105 transition-all duration-200"
+              disabled={isLoading}
+            >
+              <Save className="h-4 w-4 mr-2" />
+              {isLoading ? 'Saving...' : 'Save Preferences'}
+            </Button>
+          </div>
         </TabsContent>
 
-        <TabsContent value="preferences" className="space-y-4">
-          <Card>
+        {/* Preferences Tab */}
+        <TabsContent value="preferences" className="space-y-6 animate-fade-in">
+          <Card className="card-elevated hover:shadow-glow transition-all duration-300 hover:scale-[1.02]">
             <CardHeader>
-              <CardTitle>Language & Regional Settings</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Globe className="h-5 w-5" />
+                Language & Regional Settings
+              </CardTitle>
               <CardDescription>
                 Set your language, timezone, and regional preferences.
               </CardDescription>
@@ -378,38 +711,82 @@ const Settings: React.FC = () => {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="language">Language</Label>
-                  <Select
-                    value={settings.language}
-                    onValueChange={(value) => handleSettingChange('language', value)}
-                  >
+                  <Label>Language</Label>
+                  <Select value={settings.language} onValueChange={(value) => 
+                    setSettings(prev => ({ 
+                      ...prev, 
+                      language: value
+                    }))
+                  }>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select language" />
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {options.languages.map((language) => (
-                        <SelectItem key={language} value={language}>
-                          {language.charAt(0).toUpperCase() + language.slice(1)}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="english">English</SelectItem>
+                      <SelectItem value="arabic">العربية</SelectItem>
+                      <SelectItem value="french">Français</SelectItem>
+                      <SelectItem value="spanish">Español</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="timezone">Timezone</Label>
-                  <Select
-                    value={settings.timezone}
-                    onValueChange={(value) => handleSettingChange('timezone', value)}
-                  >
+                  <Label>Timezone</Label>
+                  <Select value={settings.timezone} onValueChange={(value) => 
+                    setSettings(prev => ({ 
+                      ...prev, 
+                      timezone: value
+                    }))
+                  }>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select timezone" />
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {Object.entries(options.timezones).map(([value, label]) => (
-                        <SelectItem key={value} value={value}>
-                          {label}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="UTC">UTC</SelectItem>
+                      <SelectItem value="America/New_York">Eastern Time</SelectItem>
+                      <SelectItem value="America/Chicago">Central Time</SelectItem>
+                      <SelectItem value="America/Los_Angeles">Pacific Time</SelectItem>
+                      <SelectItem value="Europe/London">London</SelectItem>
+                      <SelectItem value="Asia/Dubai">Dubai</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Date Format</Label>
+                  <Select value={settings.dateFormat} onValueChange={(value) => 
+                    setSettings(prev => ({ 
+                      ...prev, 
+                      dateFormat: value
+                    }))
+                  }>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MM/DD/YYYY">MM/DD/YYYY</SelectItem>
+                      <SelectItem value="DD/MM/YYYY">DD/MM/YYYY</SelectItem>
+                      <SelectItem value="YYYY-MM-DD">YYYY-MM-DD</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Currency</Label>
+                  <Select value={settings.currency} onValueChange={(value) => 
+                    setSettings(prev => ({ 
+                      ...prev, 
+                      currency: value
+                    }))
+                  }>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="USD">USD ($)</SelectItem>
+                      <SelectItem value="EUR">EUR (€)</SelectItem>
+                      <SelectItem value="GBP">GBP (£)</SelectItem>
+                      <SelectItem value="AED">AED (د.إ)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -417,36 +794,119 @@ const Settings: React.FC = () => {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="card-elevated hover:shadow-glow transition-all duration-300 hover:scale-[1.02]">
             <CardHeader>
-              <CardTitle>Product & Label Settings</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Smartphone className="h-5 w-5 text-primary" />
+                Appearance</CardTitle>
               <CardDescription>
-                Configure default settings for products and labels.
+                Customize the look and feel of the application.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent>
               <div className="space-y-2">
-                <Label htmlFor="serving-unit">Default Serving Unit</Label>
-                <Select
-                  value={settings.default_serving_unit}
-                  onValueChange={(value) => handleSettingChange('default_serving_unit', value)}
-                >
+                <Label>Theme</Label>
+                <Select value={settings.theme} onValueChange={(value) => 
+                  setSettings(prev => ({ 
+                    ...prev, 
+                    theme: value
+                  }))
+                }>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select serving unit" />
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {options.serving_units.map((unit) => (
-                      <SelectItem key={unit} value={unit}>
-                        {unit.charAt(0).toUpperCase() + unit.slice(1)}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="light">Light</SelectItem>
+                    <SelectItem value="dark">Dark</SelectItem>
+                    <SelectItem value="system">System</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </CardContent>
           </Card>
+
+          <div className="flex justify-end">
+            <Button 
+              onClick={() => {
+                // Handle saving preferences settings
+                toast({
+                  title: 'Success',
+                  description: 'Preferences saved successfully.',
+                });
+              }}
+              className="btn-gradient hover:scale-105 transition-all duration-200"
+              disabled={isLoading}
+            >
+              <Save className="h-4 w-4 mr-2" />
+              {isLoading ? 'Saving...' : 'Save Preferences'}
+            </Button>
+          </div>
         </TabsContent>
+
       </Tabs>
+
+      {/* Logout from All Devices Confirmation Dialog */}
+      <Dialog open={isLogoutAllDialogOpen} onOpenChange={setIsLogoutAllDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Logout from All Devices</DialogTitle>
+            <DialogDescription>
+              This will sign you out from all devices and browsers. You'll need to sign in again on each device.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsLogoutAllDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleLogoutFromAllDevices} 
+              disabled={isLoading}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {isLoading ? 'Logging out...' : 'Logout from All Devices'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Account Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Account</DialogTitle>
+            <DialogDescription>
+              This action cannot be undone. This will permanently delete your account and remove all your data from our servers.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="delete-password">Confirm your password</Label>
+              <Input
+                id="delete-password"
+                type="password"
+                value={deleteAccountPassword}
+                onChange={(e) => setDeleteAccountPassword(e.target.value)}
+                placeholder="Enter your password to confirm"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setIsDeleteDialogOpen(false);
+              setDeleteAccountPassword('');
+            }}>
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleDeleteAccount}
+              disabled={isLoading || !deleteAccountPassword}
+            >
+              {isLoading ? 'Deleting...' : 'Delete Account'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
