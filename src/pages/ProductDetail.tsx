@@ -59,7 +59,7 @@ export default function ProductDetail() {
       setIsLoading(true)
       try {
         const response = await productsAPI.getById(id)
-        setProduct(transformProductFromAPI(response.data))
+        setProduct(transformProductFromAPI(response))
       } catch (error: any) {
         console.error('Error loading product:', error)
         toast({
@@ -402,7 +402,7 @@ export default function ProductDetail() {
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Category</span>
-                <Badge variant="secondary">{product.category}</Badge>
+                <Badge variant="secondary">{product.category?.name || 'No Category'}</Badge>
               </div>
               
               <div className="flex items-center justify-between">

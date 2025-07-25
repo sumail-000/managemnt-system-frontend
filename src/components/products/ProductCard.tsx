@@ -182,7 +182,7 @@ export function ProductCard({ product, selected, onSelect, variant = "default", 
               >
                 {product.status}
               </Badge>
-              <span className="text-xs text-muted-foreground">{product.category}</span>
+              <span className="text-xs text-muted-foreground">{product.category?.name || 'No Category'}</span>
             </div>
 
             {/* Quick Actions */}
@@ -410,7 +410,7 @@ export function ProductCard({ product, selected, onSelect, variant = "default", 
 
           {/* Category */}
           <div className="flex items-center text-xs">
-            <span className="font-medium text-primary">{product.category}</span>
+            <span className="font-medium text-primary">{product.category?.name || 'No Category'}</span>
             <span className="mx-2 text-muted-foreground">•</span>
             <span className="text-muted-foreground">{product.servingSize}</span>
           </div>
@@ -593,7 +593,7 @@ export function ProductCard({ product, selected, onSelect, variant = "default", 
 
           {/* Category */}
           <div className="flex items-center text-xs">
-            <span className="font-medium text-primary">{product.category}</span>
+            <span className="font-medium text-primary">{product.category?.name || 'No Category'}</span>
             <span className="mx-2 text-muted-foreground">•</span>
             <span className="text-muted-foreground">{product.servingSize} per serving</span>
           </div>

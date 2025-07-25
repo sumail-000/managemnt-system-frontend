@@ -35,7 +35,7 @@ export default function PublicProductView() {
         // Get the product directly by ID from the public endpoint
         const response = await productsAPI.getPublicById(id)
         // Transform the API response to Product type
-        setProduct(transformProductFromAPI(response.data))
+        setProduct(transformProductFromAPI(response))
       } catch (error: any) {
         console.error('Error loading public product:', error)
         setError(error.message || "Failed to load product")
@@ -226,7 +226,7 @@ export default function PublicProductView() {
                 <CardContent className="space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Category</span>
-                    <Badge variant="secondary">{product.category}</Badge>
+                    <Badge variant="secondary">{product.category.name}</Badge>
                   </div>
                   
                   <div className="flex items-center justify-between">

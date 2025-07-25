@@ -11,6 +11,7 @@ import ProductDetail from "./pages/ProductDetail";
 import ProductTrash from "./pages/ProductTrash";
 import PublicProductView from "./pages/PublicProductView";
 import Ingredients from "./pages/Ingredients";
+import CategoryManagement from "./pages/CategoryManagement";
 import NutritionAnalysis from "./pages/NutritionAnalysis";
 import LabelGeneratorPage from "./pages/LabelGenerator";
 import Billing from "./pages/Billing";
@@ -21,6 +22,7 @@ import Blog from "./pages/Blog";
 import NotFound from "./pages/NotFound";
 import QRCodes from "./pages/QRCodes";
 import Favorites from "./pages/Favorites";
+import Settings from "./pages/Settings";
 import { PaymentForm } from "./components/payment/PaymentForm";
 
 const App = () => {
@@ -97,6 +99,14 @@ const App = () => {
         </ProtectedRoute>
       } />
       
+      <Route path="/categories" element={
+        <ProtectedRoute>
+          <DashboardLayout>
+            <CategoryManagement />
+          </DashboardLayout>
+        </ProtectedRoute>
+      } />
+      
       <Route path="/nutrition" element={
         <ProtectedRoute>
           <DashboardLayout>
@@ -140,10 +150,7 @@ const App = () => {
       <Route path="/settings" element={
         <ProtectedRoute>
           <DashboardLayout>
-            <div className="p-6">
-              <h1 className="text-2xl font-bold">Settings</h1>
-              <p className="text-muted-foreground">Settings panel coming soon...</p>
-            </div>
+            <Settings />
           </DashboardLayout>
         </ProtectedRoute>
       } />

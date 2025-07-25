@@ -39,7 +39,7 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({ children
       </div>
       
       {/* CSS Styles */}
-      <style jsx>{`
+      <style>{`
         .ripple-circle {
           position: absolute;
           border: 2px solid rgba(34, 197, 94, 0.2);

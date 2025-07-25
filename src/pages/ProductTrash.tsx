@@ -71,7 +71,7 @@ const mockTrashedProducts: TrashedProduct[] = [
 export default function ProductTrash() {
   const { toast } = useToast()
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedProducts, setSelectedProducts] = useState<number[]>([])
+  const [selectedProducts, setSelectedProducts] = useState<string[]>([])
   const [trashedProducts, setTrashedProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
@@ -85,7 +85,12 @@ export default function ProductTrash() {
     try {
       setLoading(true)
       const response = await productsAPI.getTrashed()
-      const products = response.data.map(transformProductToCamelCase)
+      
+      // Handle Laravel pagination response structure
+      const isLaravelPagination = response && typeof response === 'object' && 'data' in response && Array.isArray(response.data)
+      const productsData = isLaravelPagination ? response.data : (Array.isArray(response) ? response : [])
+      
+      const products = productsData.map(transformProductToCamelCase)
       setTrashedProducts(products)
     } catch (error) {
       console.error('Failed to load trashed products:', error)
@@ -102,7 +107,7 @@ export default function ProductTrash() {
   const filteredProducts = trashedProducts.filter(product =>
     product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (product.description && product.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    (product.category && product.category.toLowerCase().includes(searchQuery.toLowerCase()))
+    (product.category?.name && product.category.name.toLowerCase().includes(searchQuery.toLowerCase()))
   )
 
   const handleSelectProduct = (productId: string, checked: boolean) => {
@@ -121,7 +126,7 @@ export default function ProductTrash() {
     }
   }
 
-  const handleRestore = async (productId: number) => {
+  const handleRestore = async (productId: string) => {
     try {
       setActionLoading(true)
       await productsAPI.restore(productId)
@@ -166,7 +171,7 @@ export default function ProductTrash() {
     }
   }
 
-  const handlePermanentDelete = async (productId: number) => {
+  const handlePermanentDelete = async (productId: string) => {
     try {
       setActionLoading(true)
       await productsAPI.forceDelete(productId)
@@ -377,10 +382,10 @@ export default function ProductTrash() {
                       </p>
                       <div className="flex items-center gap-2 mt-2">
                         <Badge variant="outline" className="text-xs">
-                          {product.category || 'Uncategorized'}
+                          {product.category?.name || 'Uncategorized'}
                         </Badge>
                         <span className="text-xs text-muted-foreground">
-                          Deleted {product.deletedAt ? new Date(product.deletedAt).toLocaleDateString() : 'Unknown date'}
+                          Deleted {product.deleted_at ? new Date(product.deleted_at).toLocaleDateString() : 'Unknown date'}
                         </span>
                       </div>
                     </div>

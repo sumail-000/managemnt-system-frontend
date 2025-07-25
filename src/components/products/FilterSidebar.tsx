@@ -21,6 +21,12 @@ import {
   CollapsibleTrigger 
 } from "@/components/ui/collapsible"
 
+interface Category {
+  id: string
+  name: string
+  count?: number
+}
+
 interface FilterSidebarProps {
   isOpen: boolean
   onClose: () => void
@@ -33,7 +39,7 @@ interface FilterSidebarProps {
   }
   onFiltersChange: (filters: FilterSidebarProps['filters']) => void
   onClearFilters: () => void
-  availableCategories?: string[]
+  availableCategories?: Category[]
   availableTags?: string[]
   loading?: boolean
 }
@@ -78,7 +84,7 @@ export function FilterSidebar({
 
   // Define categories and tags inside the component to access props
   const categories = availableCategories.length > 0 
-    ? availableCategories.map(name => ({ name, count: 0 }))
+    ? availableCategories
     : mockCategories
 
   const tags = availableTags.length > 0
@@ -92,10 +98,10 @@ export function FilterSidebar({
     }))
   }
 
-  const handleCategoryChange = (category: string, checked: boolean) => {
+  const handleCategoryChange = (categoryId: string, checked: boolean) => {
     const newCategories = checked
-      ? [...filters.categories, category]
-      : filters.categories.filter(c => c !== category)
+      ? [...filters.categories, categoryId]
+      : filters.categories.filter(c => c !== categoryId)
     
     onFiltersChange({ ...filters, categories: newCategories })
   }
@@ -195,25 +201,25 @@ export function FilterSidebar({
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-2 mt-2">
               {categories.map((category) => (
-                <div key={category.name} className="flex items-center justify-between">
+                <div key={category.id || category.name} className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     <Checkbox
-                      id={`category-${category.name}`}
-                      checked={filters.categories.includes(category.name)}
+                      id={`category-${category.id || category.name}`}
+                      checked={filters.categories.includes(category.id || category.name)}
                       onCheckedChange={(checked) => 
-                        handleCategoryChange(category.name, !!checked)
+                        handleCategoryChange(category.id || category.name, !!checked)
                       }
                       disabled={loading}
                     />
                     <Label 
-                      htmlFor={`category-${category.name}`}
+                      htmlFor={`category-${category.id || category.name}`}
                       className="text-sm cursor-pointer"
                     >
                       {category.name}
                     </Label>
                   </div>
                   <Badge variant="outline" className="text-xs">
-                    {category.count}
+                    {category.count || 0}
                   </Badge>
                 </div>
               ))}

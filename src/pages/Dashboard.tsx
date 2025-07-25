@@ -304,7 +304,7 @@ export default function Dashboard() {
                         {product.name}
                       </Link>
                       <p className="text-xs text-muted-foreground">
-                        {product.category} • {formatDate(product.updated_at)}
+                        {product.category?.name || 'No Category'} • {formatDate(product.updated_at)}
                       </p>
                     </div>
                     <Badge 

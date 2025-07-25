@@ -319,7 +319,7 @@ export function PaymentForm() {
         
         response = await paymentAPI.updatePaymentMethod(updateData)
         
-        if (response.data.success) {
+        if (response.success) {
           await refreshUsage()
           
           toast({
@@ -349,7 +349,7 @@ export function PaymentForm() {
             country: formData.country
           },
           card_type: cardType,
-          membership_plan_id: navigationState.planId ? navigationState.planId : userPlan.id,
+          membership_plan_id: navigationState.planId ? parseInt(navigationState.planId) : userPlan.id,
           payment_method_id: 'pm_card_visa', // This would be from Stripe Elements in real implementation
           is_upgrade: navigationState.isUpgrade || false
         }
@@ -357,7 +357,7 @@ export function PaymentForm() {
         response = await paymentAPI.createPaymentIntent(paymentData)
       }
       
-      if (response.data.success || response.success) {
+      if (response.success) {
         // Simulate successful payment processing
         // In a real implementation, you would integrate with Stripe Elements here
         await new Promise(resolve => setTimeout(resolve, 2000))
@@ -379,7 +379,7 @@ export function PaymentForm() {
         // Redirect to dashboard after successful payment
         navigate('/dashboard')
       } else {
-        throw new Error(response.data?.message || response.message || 'Payment failed')
+        throw new Error(response.message || 'Payment failed')
       }
     } catch (error: any) {
       console.error('[PaymentForm] Payment failed:', error.message)

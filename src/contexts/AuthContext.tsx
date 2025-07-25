@@ -88,8 +88,8 @@ interface PaymentMethod {
   provider?: string;
   last_four: string;
   brand: string;
-  expiry_month: string;
-  expiry_year: string;
+  expiry_month: number;
+  expiry_year: number;
   cardholder_name?: string;
   is_default: boolean;
   is_active: boolean;

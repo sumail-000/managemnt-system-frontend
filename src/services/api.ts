@@ -52,7 +52,7 @@ api.interceptors.response.use(
       status: response.status,
       url: response.config.url,
       method: response.config.method?.toUpperCase(),
-      data: response.data
+      data: response.config.responseType === 'blob' ? 'Blob data' : response.data
     });
     
     // Check for token refresh headers
@@ -67,6 +67,11 @@ api.interceptors.response.use(
       window.dispatchEvent(new CustomEvent('tokenRefreshed', { 
         detail: { newToken } 
       }));
+    }
+    
+    // For blob responses, return the full response object so frontend can access response.data
+    if (response.config.responseType === 'blob') {
+      return response;
     }
     
     // Return data as-is to maintain snake_case consistency with backend
@@ -313,6 +318,8 @@ export const membershipAPI = {
   
   getCurrentPlan: () => api.get('/user/membership-plan'),
   
+  getRecommendations: () => api.get('/user/plan-recommendations'),
+  
   upgradePlan: (planId: number) =>
     api.post('/user/upgrade-plan', { plan_id: planId }),
 };
@@ -385,7 +392,14 @@ export const paymentAPI = {
   
   getPaymentStatus: (): Promise<any> => api.get('/payment/status'),
   
-  cancelSubscription: (): Promise<any> => api.post('/payment/cancel-subscription'),
+  // Subscription Cancellation API (3-day waiting period system)
+  requestCancellation: (data: { reason?: string }): Promise<any> => api.post('/payment/request-cancellation', data),
+  
+  confirmCancellation: (data: { password: string }): Promise<any> => api.post('/payment/confirm-cancellation', data),
+  
+  cancelCancellationRequest: (): Promise<any> => api.post('/payment/cancel-cancellation-request'),
+  
+  getCancellationStatus: (): Promise<any> => api.get('/payment/cancellation-status'),
   
   updateAutoRenew: (data: { auto_renew: boolean }): Promise<any> => api.post('/payment/auto-renew', data),
   

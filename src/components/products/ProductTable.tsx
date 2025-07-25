@@ -265,7 +265,7 @@ export function ProductTable({
                     variant="outline" 
                     className="font-medium border-primary/30 text-primary bg-gradient-to-r from-primary/10 to-primary/5 px-3 py-1 text-sm hover:bg-primary/15 transition-colors"
                   >
-                    {product.category}
+                    {product.category?.name || 'No Category'}
                   </Badge>
                 </div>
 
@@ -287,7 +287,7 @@ export function ProductTable({
                   {/* Enhanced Mobile category */}
                   <div className="lg:hidden mt-2">
                     <span className="text-xs font-medium text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
-                      {product.category}
+                      {product.category?.name || 'No Category'}
                     </span>
                   </div>
                 </div>

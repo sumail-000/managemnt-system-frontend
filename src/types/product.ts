@@ -3,7 +3,11 @@ export interface Product {
   id: string;
   name: string;
   description?: string;
-  category: string;
+  category_id: string;
+  category?: {
+    id: string;
+    name: string;
+  };
   status: "draft" | "published";
   is_pinned: boolean;
   is_public: boolean;
@@ -16,6 +20,7 @@ export interface Product {
   image_path?: string; // Storage path field
   created_at: string;
   updated_at: string;
+  deleted_at?: string; // For trashed products
   user: {
     id: string;
     name: string;
@@ -26,7 +31,7 @@ export interface Product {
 export interface ProductFormData {
   name: string;
   description?: string;
-  category: string;
+  category_id: string;
   serving_size: number;
   serving_unit: string;
   servings_per_container: number;
@@ -40,10 +45,15 @@ export interface ProductFormData {
 
 // Helper function to transform API response to frontend Product type
 export const transformProductFromAPI = (apiProduct: any): Product => {
+  if (!apiProduct) {
+    throw new Error('API product data is undefined or null');
+  }
+  
   return {
     id: apiProduct.id,
     name: apiProduct.name,
     description: apiProduct.description,
+    category_id: apiProduct.category_id,
     category: apiProduct.category,
     status: apiProduct.status,
     is_pinned: apiProduct.is_pinned || false,
@@ -65,6 +75,7 @@ export const transformProductFromAPI = (apiProduct: any): Product => {
 export function transformProductToCamelCase(product: Product): ProductCamelCase {
   return {
     ...product,
+    categoryId: product.category_id,
     status: product.status === "draft" ? "Draft" : "Published",
     isPinned: product.is_pinned,
     isPublic: product.is_public,
@@ -74,6 +85,7 @@ export function transformProductToCamelCase(product: Product): ProductCamelCase 
     thumbnail: product.image, // Map the image field to thumbnail for display
     createdAt: new Date(product.created_at),
     updatedAt: new Date(product.updated_at),
+    deletedAt: product.deleted_at ? new Date(product.deleted_at) : undefined,
   };
 }
 
@@ -82,7 +94,11 @@ export interface ProductCamelCase {
   id: string;
   name: string;
   description?: string;
-  category: string;
+  categoryId: string;
+  category?: {
+    id: string;
+    name: string;
+  };
   status: "Draft" | "Published";
   isPinned: boolean;
   isPublic: boolean;
@@ -94,6 +110,7 @@ export interface ProductCamelCase {
   thumbnail?: string;
   createdAt: Date;
   updatedAt: Date;
+  deletedAt?: Date;
   user: {
     id: string;
     name: string;

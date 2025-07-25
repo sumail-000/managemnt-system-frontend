@@ -6,6 +6,7 @@ import { useToast } from '@/hooks/use-toast'
 export interface FilterState {
   search?: string
   category?: string
+  category_id?: string
   status?: string
   isPinned?: boolean
   pinnedOnly?: boolean
@@ -30,10 +31,16 @@ export interface UsePaginatedProductsOptions {
   autoLoad?: boolean
 }
 
+interface Category {
+  id: string
+  name: string
+  count?: number
+}
+
 export interface UsePaginatedProductsReturn {
   // Data
   products: ProductCamelCase[]
-  categories: string[]
+  categories: Category[]
   tags: string[]
   pagination: PaginationState
   filters: FilterState
@@ -88,7 +95,7 @@ export function usePaginatedProducts(options: UsePaginatedProductsOptions = {}):
   
   // State
   const [products, setProducts] = useState<ProductCamelCase[]>([])
-  const [categories, setCategories] = useState<string[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [tags, setTags] = useState<string[]>([])
   const [pagination, setPagination] = useState<PaginationState>({
     ...defaultPagination,
@@ -117,7 +124,8 @@ export function usePaginatedProducts(options: UsePaginatedProductsOptions = {}):
       
       // Add filters to params
       if (filters.search) params.search = filters.search
-      if (filters.category) params.category = filters.category
+      if (filters.category_id) params.category_id = filters.category_id
+      if (filters.category) params.category = filters.category // Keep for backward compatibility
       if (filters.status && filters.status !== 'all') params.status = filters.status
       if (filters.isPinned !== undefined) params.is_pinned = filters.isPinned
       if (filters.tags && filters.tags.length > 0) params.tags = filters.tags
@@ -198,15 +206,15 @@ export function usePaginatedProducts(options: UsePaginatedProductsOptions = {}):
       console.log('[usePaginatedProducts] Categories API response:', response)
       
       if (Array.isArray(response)) {
-        const categoryNames = response.map(cat => 
-          typeof cat === 'string' ? cat : cat.name
+        const categoryObjects = response.map(cat => 
+          typeof cat === 'string' ? { id: cat, name: cat } : { id: cat.id.toString(), name: cat.name, count: cat.products_count }
         )
-        setCategories(categoryNames)
+        setCategories(categoryObjects)
       } else if (response?.data && Array.isArray(response.data)) {
-        const categoryNames = response.data.map(cat => 
-          typeof cat === 'string' ? cat : cat.name
+        const categoryObjects = response.data.map(cat => 
+          typeof cat === 'string' ? { id: cat, name: cat } : { id: cat.id.toString(), name: cat.name, count: cat.products_count }
         )
-        setCategories(categoryNames)
+        setCategories(categoryObjects)
       }
     } catch (error) {
       console.error('[usePaginatedProducts] Failed to load categories:', error)

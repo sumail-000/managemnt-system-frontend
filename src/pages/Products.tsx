@@ -184,7 +184,7 @@ export default function Products() {
     const filterUpdates: any = {}
     
     if (newFilters.categories.length > 0) {
-      filterUpdates.category = newFilters.categories[0] // For now, use first category
+      filterUpdates.category_id = newFilters.categories[0] // Use category_id for filtering
     }
     
     if (newFilters.statuses.length > 0) {
@@ -276,8 +276,8 @@ export default function Products() {
               <SelectContent>
                 <SelectItem value="All">All</SelectItem>
                 {availableCategories.map(category => (
-                  <SelectItem key={category} value={category}>
-                    {category}
+                  <SelectItem key={category.id} value={category.id}>
+                    {category.name}
                   </SelectItem>
                 ))}
               </SelectContent>

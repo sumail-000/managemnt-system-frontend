@@ -20,7 +20,6 @@ import {
   Zap,
   Shield,
   Infinity,
-  TrendingDown,
   TrendingUp,
   Download,
   MapPin,
@@ -36,6 +35,7 @@ import { useAuth } from "@/contexts/AuthContext"
 import { useToast } from "@/hooks/use-toast"
 import { billingAPI, paymentAPI, membershipAPI } from '@/services/api'
 import { useNavigate } from "react-router-dom"
+import { PaymentMethodUpdateDialog } from "@/components/payment/PaymentMethodUpdateDialog"
 
 export default function Billing() {
   const { 
@@ -55,11 +55,16 @@ export default function Billing() {
   const [isLoading, setIsLoading] = useState(false)
   const [autoRenew, setAutoRenew] = useState(subscriptionDetails?.auto_renew ?? true)
   const [showCancelModal, setShowCancelModal] = useState(false)
-  const [showDowngradeModal, setShowDowngradeModal] = useState(false)
   const [showPasswordModal, setShowPasswordModal] = useState(false)
-  const [pendingAction, setPendingAction] = useState<'cancel' | 'downgrade' | null>(null)
+  const [showCancellationStatus, setShowCancellationStatus] = useState(false)
+  const [pendingAction, setPendingAction] = useState<'cancel' | null>(null)
   const [password, setPassword] = useState('')
+  const [cancellationReason, setCancellationReason] = useState('')
+  const [cancellationInfo, setCancellationInfo] = useState<any>(null)
+  const [cancellationStep, setCancellationStep] = useState<'initial' | 'password' | 'confirmed'>('initial')
   const [editingBilling, setEditingBilling] = useState(false)
+  const [planRecommendations, setPlanRecommendations] = useState<any>(null)
+  const [loadingRecommendations, setLoadingRecommendations] = useState(false)
   const [billingInfo, setBillingInfo] = useState({
     full_name: "",
     email: "",
@@ -73,7 +78,7 @@ export default function Billing() {
   })
   const [paymentMethods, setPaymentMethods] = useState(contextPaymentMethods || [])
   const [billingHistory, setBillingHistory] = useState(contextBillingHistory || [])
-  const [selectedDowngradePlan, setSelectedDowngradePlan] = useState(null)
+
   
   // Update local state when context data changes
   useEffect(() => {
@@ -104,8 +109,38 @@ export default function Billing() {
     }
   }, [contextBillingHistory])
   
+  // Sync autoRenew state with backend data
+  useEffect(() => {
+    if (subscriptionDetails?.auto_renew !== undefined) {
+      setAutoRenew(subscriptionDetails.auto_renew)
+    }
+  }, [subscriptionDetails?.auto_renew])
+  
   // Get current membership info from real API data
   const currentPlan = user?.membership_plan || { name: 'Basic', product_limit: 3, label_limit: 10, features: [] }
+  
+  // Fetch cancellation status on component mount
+  useEffect(() => {
+    const fetchCancellationStatus = async () => {
+      try {
+        const response = await paymentAPI.getCancellationStatus()
+        if (response.success && response.data) {
+          setCancellationInfo(response.data)
+        }
+      } catch (error) {
+        console.error('Failed to fetch cancellation status:', error)
+      }
+    }
+    
+    if (user?.payment_status !== 'expired' && currentPlan.name !== 'Basic') {
+      fetchCancellationStatus()
+    }
+  }, [user?.payment_status, currentPlan.name])
+
+  // Fetch plan recommendations on component mount
+  useEffect(() => {
+    fetchPlanRecommendations()
+  }, [])
   const currentUsage = {
     products: usage?.products?.current_month || 0,
     labels: usage?.labels?.current_month || 0
@@ -115,127 +150,51 @@ export default function Billing() {
 
 
 
-  // Transform API plans to match the home page structure
-  const getTransformedPlans = () => {
-    const homePlansStructure = {
-      'Basic': {
-        price: 0,
-        period: '14 days',
-        description: 'Perfect for small food businesses getting started',
-        features: [
-          'Manual product entry only',
-          'Max 3 product submissions/14 days',
-          'Standard label templates',
-          'Basic compliance feedback',
-          'Self-help support',
-          'Email notifications',
-          'Basic nutrition analysis'
-        ],
-        limitations: [
-          'No API access',
-          'No bulk operations',
-          'Limited templates'
-        ],
-        productLimit: 3,
-        labelLimit: 10,
-        popular: false
-      },
-      'Pro': {
-        price: 79,
-        period: 'month',
-        description: 'Ideal for growing businesses with advanced needs',
-        features: [
-          '20 product limit/month',
-          'Advanced label templates',
-          'Priority label validation',
-          'Label validation PDF reports',
-          'Product dashboard & history',
-          'Email + chat support',
-          'Nutritionist support',
-          'QR code generation',
-          'Multi-language labels',
-          'Allergen detection'
-        ],
-        limitations: [
-          'Limited API calls',
-          'No team collaboration'
-        ],
-        productLimit: 20,
-        labelLimit: 100,
-        popular: true
-      },
-      'Enterprise': {
-        price: 199,
-        period: 'month',
-        description: 'Complete solution for large organizations',
-        features: [
-          'Unlimited products',
-          'Bulk upload via Excel/CSV/API',
-          'Dedicated account manager',
-          'Full API access',
-          'Custom badges & certificates',
-          'Compliance dashboard',
-          'Role-based team access',
-          'Private label management',
-          'Regulatory update access',
-          '24/7 priority support',
-          'Custom integrations',
-          'White-label options'
-        ],
-        limitations: [],
-        productLimit: 999,
-        labelLimit: 9999,
-        popular: false
-      }
-    }
 
-    return Object.keys(homePlansStructure).map(planName => ({
-      name: planName,
-      ...homePlansStructure[planName],
-      current: currentPlan.name === planName
-    }))
-  }
 
-  const plans = getTransformedPlans()
 
-  const handleUpgrade = async (planName: string) => {
-    // Get the plan details to pass to payment page
-    const selectedPlan = plans.find(p => p.name === planName)
-    if (!selectedPlan) return
-    
-    // Redirect to payment page with plan information
-    navigate('/payment', { 
-      state: { 
-        planId: planName.toLowerCase(),
-        planName: selectedPlan.name,
-        price: selectedPlan.price,
-        period: selectedPlan.period,
-        isUpgrade: true,
-        currentPlan: currentPlan.name
-      } 
-    })
-  }
-
-  const handleDowngrade = (planName: string) => {
-    setPendingAction('downgrade')
-    setShowDowngradeModal(true)
-  }
 
   const handleCancelPlan = () => {
-    setPendingAction('cancel')
+    setCancellationStep('initial')
+    setCancellationReason('')
+    setPassword('')
     setShowCancelModal(true)
   }
 
-  const confirmAction = () => {
-    if (pendingAction === 'cancel') {
-      setShowCancelModal(false)
-    } else if (pendingAction === 'downgrade') {
-      setShowDowngradeModal(false)
+  const handleRequestCancellation = async () => {
+    setIsLoading(true)
+    try {
+      const response = await paymentAPI.requestCancellation({ reason: cancellationReason })
+      
+      if (response.success) {
+        if (response.requires_confirmation) {
+          setCancellationStep('password')
+          setCancellationInfo(response.cancellation_info)
+        } else {
+          // Trial cancellation - immediate
+          await refreshUsage()
+          setShowCancelModal(false)
+          toast({
+            title: "Trial Cancelled",
+            description: response.message,
+          })
+        }
+      } else {
+        throw new Error(response.message || 'Failed to request cancellation')
+      }
+    } catch (error: any) {
+      console.error('Request cancellation error:', error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to request cancellation. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
     }
-    setShowPasswordModal(true)
   }
 
-  const executeAction = async () => {
+  const handleConfirmCancellation = async () => {
     if (!password) {
       toast({
         title: "Password Required",
@@ -247,24 +206,42 @@ export default function Billing() {
 
     setIsLoading(true)
     try {
-      // Verify password first (simulate API call)
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      const response = await paymentAPI.confirmCancellation({ password })
       
-      if (pendingAction === 'cancel') {
-        await handleCancelSubscription()
-      } else if (pendingAction === 'downgrade') {
-        if (selectedDowngradePlan) {
-          await handleDowngradeSubscription(selectedDowngradePlan)
-        }
+      if (response.success) {
+        setCancellationStep('confirmed')
+        setCancellationInfo(response.cancellation_info)
+        setPassword('')
+        
+        toast({
+          title: "Cancellation Confirmed",
+          description: response.message,
+        })
+      } else {
+        throw new Error(response.message || 'Failed to confirm cancellation')
+      }
+    } catch (error: any) {
+      console.error('Confirm cancellation error:', error)
+      
+      // Handle specific error cases
+      let errorMessage = "Invalid password or confirmation failed. Please try again."
+      
+      if (error.response?.status === 422) {
+        // Password validation error - show user-friendly message
+        errorMessage = error.response?.data?.message || "The password you entered is incorrect. Please check your password and try again."
+      } else if (error.response?.status === 404) {
+        errorMessage = "No pending cancellation request found. Please try again."
+      } else if (error.response?.status === 500) {
+        errorMessage = "A server error occurred. Please try again later or contact support."
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message
+      } else if (error.message) {
+        errorMessage = error.message
       }
       
-      setShowPasswordModal(false)
-      setPassword('')
-      setPendingAction(null)
-    } catch (error) {
       toast({
-        title: "Error",
-        description: "Invalid password or action failed. Please try again.",
+        title: "Cancellation Failed",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {
@@ -272,38 +249,37 @@ export default function Billing() {
     }
   }
 
-  const handleDowngradeSubscription = async (planId: string) => {
+  const handleCancelCancellationRequest = async () => {
+    setIsLoading(true)
     try {
-      // Call API to downgrade to selected plan
-      const response = await membershipAPI.upgradePlan(parseInt(planId))
+      const response = await paymentAPI.cancelCancellationRequest()
       
-      if (response.data.success) {
-        // Refresh user data to get updated subscription
+      if (response.success) {
+        setCancellationInfo(null)
+        setShowCancelModal(false)
+        setShowCancellationStatus(false)
         await refreshUsage()
         
-        // Find the selected plan name for the success message
-        const selectedPlan = plans.find((plan: any) => plan.id === parseInt(planId))
-        
-        setShowDowngradeModal(false)
-        setSelectedDowngradePlan(null)
-        
         toast({
-          title: "Plan Downgraded",
-          description: response.data.message || `Your plan has been downgraded to ${selectedPlan?.name || 'selected plan'}. Changes will take effect at the end of your current billing period.`,
+          title: "Cancellation Cancelled",
+          description: response.message,
         })
       } else {
-        throw new Error(response.data.message || 'Failed to downgrade plan')
+        throw new Error(response.message || 'Failed to cancel cancellation request')
       }
     } catch (error: any) {
-      console.error('Downgrade subscription error:', error)
+      console.error('Cancel cancellation request error:', error)
       toast({
         title: "Error",
-        description: error.message || "Failed to downgrade plan. Please try again.",
+        description: error.message || "Failed to cancel cancellation request. Please try again.",
         variant: "destructive",
       })
-      throw error
+    } finally {
+      setIsLoading(false)
     }
   }
+
+
 
   const handleManageBilling = () => {
     toast({
@@ -349,6 +325,25 @@ export default function Billing() {
       setIsLoading(false)
     }
   }
+
+  const fetchPlanRecommendations = async () => {
+    try {
+      setLoadingRecommendations(true)
+      const response = await membershipAPI.getRecommendations()
+      
+      // Extract the actual recommendation data from the API response
+      if (response.data && response.data.type) {
+        setPlanRecommendations(response.data)
+      } else {
+        setPlanRecommendations(null)
+      }
+    } catch (error: any) {
+      console.error('Failed to fetch plan recommendations:', error)
+      setPlanRecommendations(null)
+    } finally {
+      setLoadingRecommendations(false)
+    }
+  }
   
   const exportBillingHistory = async () => {
     try {
@@ -362,12 +357,12 @@ export default function Billing() {
       
       // Create blob URL and trigger download
       const blob = new Blob([response.data], { 
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+        type: 'text/csv' 
       })
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `billing-history-${new Date().toISOString().split('T')[0]}.xlsx`
+      link.download = `billing-history-${new Date().toISOString().split('T')[0]}.csv`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -389,51 +384,43 @@ export default function Billing() {
     }
   }
 
-  const handleCancelSubscription = async () => {
-    setIsLoading(true)
+
+
+  const handlePaymentMethodUpdate = async (paymentMethodData: any) => {
     try {
-      // Call actual API to cancel subscription
-      const response = await paymentAPI.cancelSubscription()
+      // paymentMethodData is the API response that contains the updated payment method data
+      // The backend now returns the payment method data in the 'data' field
+      const updatedPaymentMethod = paymentMethodData.data || paymentMethodData;
       
-      // Update local state based on API response
-      if (response.data.success) {
-        // Refresh user data to get updated subscription status
-        await refreshUsage()
-        
-        setShowCancelModal(false)
-        toast({
-          title: "Subscription Cancelled",
-          description: response.data.message || "Your subscription will remain active until the end of the current billing period.",
-        })
-      } else {
-        throw new Error(response.data.message || 'Failed to cancel subscription')
-      }
-    } catch (error: any) {
-      console.error('Cancel subscription error:', error)
+      const updatedPaymentMethods = paymentMethods.map(pm => 
+        pm.is_default ? {
+          ...pm,
+          brand: updatedPaymentMethod.brand,
+          last_four: updatedPaymentMethod.last_four,
+          expiry_month: updatedPaymentMethod.expiry_month,
+          expiry_year: updatedPaymentMethod.expiry_year,
+          cardholder_name: updatedPaymentMethod.cardholder_name
+        } : pm
+      )
+      
+      setPaymentMethods(updatedPaymentMethods)
+      
+      // Refresh user data to sync with backend
+      await refreshUsage()
+      
+      toast({
+        title: "Success",
+        description: "Payment method updated successfully!",
+      })
+      
+    } catch (error) {
+      console.error('Failed to update payment method:', error)
       toast({
         title: "Error",
-        description: error.message || "Failed to cancel subscription. Please try again.",
-        variant: "destructive",
+        description: "Failed to update payment method. Please try again.",
+        variant: "destructive"
       })
-    } finally {
-      setIsLoading(false)
     }
-  }
-
-  const handleUpdatePaymentMethod = () => {
-    // Navigate to payment form with update context
-    navigate('/payment', { 
-      state: { 
-        isUpdate: true,
-        currentPlan: currentPlan.name,
-        returnUrl: '/billing'
-      } 
-    })
-    
-    toast({
-      title: "Redirecting",
-      description: "Opening payment method update...",
-    })
   }
 
   const handleAutoRenewChange = async (checked: boolean) => {
@@ -442,17 +429,16 @@ export default function Billing() {
       // Call API to update auto-renew setting
       const response = await paymentAPI.updateAutoRenew({ auto_renew: checked })
       
-      if (response.data.success) {
-        setAutoRenew(checked)
-        // Refresh user data to sync with backend
+      if (response.success) {
+        // Refresh user data to sync with backend - this will update autoRenew via useEffect
         await refreshUsage()
         
         toast({
           title: "Auto-renew Updated",
-          description: response.data.message || `Auto-renew has been ${checked ? 'enabled' : 'disabled'}.`,
+          description: response.message || `Auto-renew has been ${checked ? 'enabled' : 'disabled'}.`,
         })
       } else {
-        throw new Error(response.data.message || 'Failed to update auto-renew setting')
+        throw new Error(response.message || 'Failed to update auto-renew setting')
       }
     } catch (error: any) {
       console.error('Auto-renew update error:', error)
@@ -500,7 +486,22 @@ export default function Billing() {
           </p>
         </div>
         <div className="flex gap-3">
-          {currentPlan.name !== 'Basic' && (
+          {/* Show cancellation status if there's a pending/confirmed cancellation */}
+          {cancellationInfo && (cancellationInfo.status === 'pending' || cancellationInfo.status === 'confirmed') && (
+            <Button 
+              variant="outline" 
+              onClick={() => setShowCancellationStatus(true)}
+              className="hover-scale border-orange-500 text-orange-600 hover:bg-orange-50"
+            >
+              <AlertTriangle className="w-4 h-4 mr-2" />
+              {cancellationInfo.status === 'pending' ? 'Cancellation Pending' : 
+               `Cancelling in ${cancellationInfo.days_remaining} days`}
+            </Button>
+          )}
+          
+          {/* Show cancel button only if no pending cancellation */}
+          {currentPlan.name !== 'Basic' && user?.payment_status !== 'expired' && 
+           (!cancellationInfo || cancellationInfo.status === 'none') && (
             <Button 
               variant="destructive" 
               onClick={handleCancelPlan}
@@ -527,6 +528,9 @@ export default function Billing() {
                   {currentPlan.name === 'Pro' && (
                     <Badge variant="secondary" className="ml-2">Popular</Badge>
                   )}
+                  {user?.payment_status === 'expired' && (
+                    <Badge variant="destructive" className="ml-2">Cancelled</Badge>
+                  )}
                 </CardTitle>
                 <p className="text-muted-foreground">
                   {currentPlan.name === 'Basic' ? 'Free for 14 days' : 
@@ -535,21 +539,25 @@ export default function Billing() {
               </div>
             </div>
             <div className="text-right animate-fade-in">
-              <p className="text-sm text-muted-foreground">Next billing</p>
+              <p className="text-sm text-muted-foreground">
+                {user?.payment_status === 'expired' ? 'Subscription Status' : 'Next billing'}
+              </p>
               <p className="font-medium">
-                {subscriptionDetails?.next_renewal_date 
-                  ? new Date(subscriptionDetails.next_renewal_date).toLocaleDateString('en-US', { 
-                      year: 'numeric', 
-                      month: 'long', 
-                      day: 'numeric' 
-                    })
-                  : trialInfo?.trial_ends_at 
-                    ? `Trial ends ${new Date(trialInfo.trial_ends_at).toLocaleDateString('en-US', { 
+                {user?.payment_status === 'expired' 
+                  ? 'Cancelled'
+                  : subscriptionDetails?.next_renewal_date 
+                    ? new Date(subscriptionDetails.next_renewal_date).toLocaleDateString('en-US', { 
                         year: 'numeric', 
                         month: 'long', 
                         day: 'numeric' 
-                      })}`
-                    : 'No billing date available'
+                      })
+                    : trialInfo?.trial_ends_at 
+                      ? `Trial ends ${new Date(trialInfo.trial_ends_at).toLocaleDateString('en-US', { 
+                          year: 'numeric', 
+                          month: 'long', 
+                          day: 'numeric' 
+                        })}`
+                      : 'No billing date available'
                 }
               </p>
               <div className="flex items-center gap-2 mt-2">
@@ -559,7 +567,7 @@ export default function Billing() {
                   checked={autoRenew}
                   onCheckedChange={handleAutoRenewChange}
                   className="data-[state=checked]:bg-gradient-primary"
-                  disabled={currentPlan.name === 'Basic' || isLoading}
+                  disabled={currentPlan.name === 'Basic' || isLoading || user?.payment_status === 'expired'}
                 />
               </div>
             </div>
@@ -611,123 +619,7 @@ export default function Billing() {
         </CardContent>
       </Card>
 
-      {/* Available Plans */}
-      <div className="animate-fade-in">
-        <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-          <Star className="w-6 h-6 text-accent" />
-          Available Plans
-        </h2>
-        <div className="grid md:grid-cols-3 gap-6">
-          {plans.filter(plan => {
-            // Show upgrade options based on current plan
-            if (currentPlan.name === 'Basic') {
-              return plan.name === 'Pro' || plan.name === 'Enterprise'
-            } else if (currentPlan.name === 'Pro') {
-              return plan.name === 'Enterprise' || plan.name === 'Basic'
-            } else if (currentPlan.name === 'Enterprise') {
-              return plan.name === 'Pro' || plan.name === 'Basic'
-            }
-            return true
-          }).map((plan, index) => {
-            const isUpgrade = (
-              (currentPlan.name === 'Basic' && (plan.name === 'Pro' || plan.name === 'Enterprise')) ||
-              (currentPlan.name === 'Pro' && plan.name === 'Enterprise')
-            )
-            const isDowngrade = (
-              (currentPlan.name === 'Pro' && plan.name === 'Basic') ||
-              (currentPlan.name === 'Enterprise' && (plan.name === 'Pro' || plan.name === 'Basic'))
-            )
-            
-            return (
-            <Card 
-              key={plan.name} 
-              className={`relative transition-all duration-300 hover:scale-105 hover:shadow-xl animate-scale-in ${
-                plan.popular && !plan.current ? 'border-primary shadow-lg ring-2 ring-primary/20' : ''
-              } ${plan.current ? 'ring-2 ring-accent' : ''}`}
-              style={{ animationDelay: `${index * 100}ms` }}
-            >
-              {plan.popular && !plan.current && (
-                <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 animate-pulse">
-                  <Badge className="bg-gradient-primary shadow-lg">
-                    <Star className="w-3 h-3 mr-1" />
-                    Most Popular
-                  </Badge>
-                </div>
-              )}
-              {plan.current && (
-                <div className="absolute -top-3 right-4 animate-bounce">
-                  <Badge variant="outline" className="bg-background shadow-md">
-                    <CheckCircle2 className="w-3 h-3 mr-1" />
-                    Current Plan
-                  </Badge>
-                </div>
-              )}
-              <CardHeader>
-                <div className="text-center">
-                  <CardTitle className="text-xl mb-2">{plan.name}</CardTitle>
-                  <div className="flex items-baseline justify-center">
-                    <span className="text-3xl font-bold">
-                      ${plan.price}
-                    </span>
-                    <span className="text-muted-foreground ml-1">/{plan.period}</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    {plan.description}
-                  </p>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3 mb-6">
-                  {plan.features.map((feature, index) => (
-                    <div key={index} className="flex items-center gap-2 text-sm hover:bg-muted/30 p-1 rounded transition-colors">
-                      <Check className="w-4 h-4 text-success flex-shrink-0" />
-                      <span>{feature}</span>
-                    </div>
-                  ))}
-                  
-                  {/* Limitations */}
-                  {plan.limitations && plan.limitations.length > 0 && (
-                    <div className="pt-4 border-t border-border">
-                      <p className="text-xs text-muted-foreground mb-2">Limitations:</p>
-                      <div className="space-y-1">
-                        {plan.limitations.map((limitation, limitIndex) => (
-                          <div key={limitIndex} className="flex items-center space-x-2">
-                            <div className="w-1 h-1 bg-muted-foreground rounded-full" />
-                            <span className="text-xs text-muted-foreground">{limitation}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <Button 
-                  className="w-full hover-scale" 
-                  variant={plan.current ? "outline" : isUpgrade ? "default" : "destructive"}
-                  disabled={plan.current || isLoading}
-                  onClick={() => {
-                    if (isUpgrade) {
-                      handleUpgrade(plan.name)
-                    } else if (isDowngrade) {
-                      handleDowngrade(plan.name)
-                    }
-                  }}
-                >
-                  {isLoading ? (
-                    <div className="animate-pulse">Processing...</div>
-                  ) : plan.current ? (
-                    'Current Plan'
-                  ) : isUpgrade ? (
-                    'Upgrade'
-                  ) : (
-                    'Downgrade'
-                  )}
-                </Button>
-              </CardContent>
-            </Card>
-            )
-          })}
-        </div>
-      </div>
+
 
       {/* Billing Details */}
       <Card className="hover:shadow-lg transition-all duration-300 animate-scale-in">
@@ -874,15 +766,19 @@ export default function Billing() {
                 <CreditCard className="w-4 h-4" />
                 Payment Method
               </h4>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={handleUpdatePaymentMethod}
-                className="hover-scale"
+              <PaymentMethodUpdateDialog
+                currentPaymentMethod={paymentMethods.find(pm => pm.is_default)}
+                onUpdate={handlePaymentMethodUpdate}
               >
-                <Edit3 className="w-3 h-3 mr-1" />
-                Edit
-              </Button>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="hover-scale"
+                >
+                  <Edit3 className="w-3 h-3 mr-1" />
+                  Edit
+                </Button>
+              </PaymentMethodUpdateDialog>
             </div>
             
             {paymentMethods.length > 0 ? (
@@ -952,47 +848,49 @@ export default function Billing() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {billingHistory.length > 0 ? (
-              billingHistory.map((item) => (
-                <div key={item.id} className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted/30 transition-all duration-200 hover:scale-[1.01]">
-                  <div className="flex items-center gap-4">
-                    <div className="p-2 bg-muted rounded-lg">
-                      <Calendar className="w-4 h-4" />
+          <div className="max-h-96 overflow-y-auto scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
+            <div className="space-y-4 pr-2">
+              {billingHistory.length > 0 ? (
+                billingHistory.map((item) => (
+                  <div key={item.id} className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted/30 transition-all duration-200 hover:scale-[1.01]">
+                    <div className="flex items-center gap-4">
+                      <div className="p-2 bg-muted rounded-lg">
+                        <Calendar className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="font-medium">{item.description}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {new Date(item.billing_date).toLocaleDateString()} • {item.invoice_number}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium">{item.description}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {new Date(item.billing_date).toLocaleDateString()} • {item.invoice_number}
-                      </p>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <p className="font-medium">${parseFloat(item.amount.toString()).toFixed(2)} {item.currency?.toUpperCase()}</p>
+                        <Badge variant={item.status === 'paid' ? 'default' : item.status === 'pending' ? 'secondary' : 'destructive'}>
+                          {item.status}
+                        </Badge>
+                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => downloadInvoice(item.invoice_number)}
+                        className="hover-scale"
+                        disabled={isLoading}
+                        title="Download Invoice PDF"
+                      >
+                        <Download className="w-4 h-4" />
+                      </Button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <p className="font-medium">${parseFloat(item.amount.toString()).toFixed(2)} {item.currency?.toUpperCase()}</p>
-                      <Badge variant={item.status === 'paid' ? 'default' : item.status === 'pending' ? 'secondary' : 'destructive'}>
-                        {item.status}
-                      </Badge>
-                    </div>
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      onClick={() => downloadInvoice(item.invoice_number)}
-                      className="hover-scale"
-                      disabled={isLoading}
-                      title="Download Invoice PDF"
-                    >
-                      <Download className="w-4 h-4" />
-                    </Button>
-                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8">
+                  <Receipt className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">No billing history available</p>
                 </div>
-              ))
-            ) : (
-              <div className="text-center py-8">
-                <Receipt className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                <p className="text-muted-foreground">No billing history available</p>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -1104,8 +1002,54 @@ export default function Billing() {
                 </div>
               )}
               
-              {/* Upgrade suggestion for free users */}
-              {currentPlan.name === 'Basic' && !trialInfo?.is_trial && (
+              {/* Plan Recommendations */}
+              {planRecommendations && !loadingRecommendations && (
+                <div className="space-y-3">
+                  {planRecommendations.type === 'upgrade' && planRecommendations.recommended_plan && (
+                    <div className="p-4 bg-gradient-to-r from-primary/10 to-accent/10 rounded-lg hover:from-primary/20 hover:to-accent/20 transition-all duration-300 border border-primary/20">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <p className="font-medium flex items-center gap-2 text-primary">
+                            <Crown className="w-4 h-4" />
+                            {planRecommendations.recommended_plan.name} Plan Recommended
+                          </p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {planRecommendations.upgrade_reason}
+                          </p>
+                          <div className="mt-2 space-y-1">
+                            {planRecommendations.recommended_plan.key_benefits?.slice(0, 2).map((benefit: string, index: number) => (
+                              <p key={index} className="text-xs text-muted-foreground flex items-center gap-1">
+                                <Check className="w-3 h-3 text-green-600" />
+                                {benefit}
+                              </p>
+                            ))}
+                          </div>
+                          {planRecommendations.savings_message && (
+                            <p className="text-xs text-green-600 font-medium mt-2">
+                              {planRecommendations.savings_message}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {planRecommendations.type === 'message' && planRecommendations.message && (
+                    <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 rounded-lg border border-green-200 dark:border-green-800">
+                      <p className="font-medium flex items-center gap-2 text-green-800 dark:text-green-200">
+                        <Shield className="w-4 h-4" />
+                        You're on the best plan!
+                      </p>
+                      <p className="text-sm text-green-700 dark:text-green-300 mt-1">
+                        {planRecommendations.message}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Upgrade suggestion for free users (fallback) */}
+              {currentPlan.name === 'Basic' && !trialInfo?.is_trial && planRecommendations?.type !== 'upgrade' && (
                 <div className="p-4 bg-gradient-to-r from-primary/10 to-accent/10 rounded-lg hover:from-primary/20 hover:to-accent/20 transition-all duration-300">
                   <p className="font-medium flex items-center gap-2">
                     <Zap className="w-4 h-4 text-primary" />
@@ -1121,159 +1065,220 @@ export default function Billing() {
         </Card>
       </div>
 
-      {/* Downgrade Modal */}
-      {showDowngradeModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-fade-in">
-          <Card className="w-full max-w-lg mx-4 animate-scale-in">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-warning">
-                <TrendingDown className="w-5 h-5" />
-                Downgrade Subscription
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <p className="text-muted-foreground">
-                  Choose a plan to downgrade to. Changes will take effect at the end of your current billing period.
-                </p>
-                
-                <div className="space-y-3">
-                  {plans
-                    .filter(plan => {
-                      const currentPlanIndex = plans.findIndex(p => p.name === currentPlan.name)
-                      const planIndex = plans.findIndex(p => p.name === plan.name)
-                      return planIndex < currentPlanIndex
-                    })
-                    .map((plan) => (
-                      <div 
-                        key={plan.id}
-                        className="p-4 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
-                        onClick={() => {
-                          setSelectedDowngradePlan(plan)
-                        }}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h4 className="font-medium">{plan.name}</h4>
-                            <p className="text-sm text-muted-foreground">
-                              ${plan.price}/month • {plan.features?.length || 0} features
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-lg font-bold">${plan.price}</div>
-                            <div className="text-sm text-muted-foreground">per month</div>
-                          </div>
-                        </div>
-                        
-                        {plan.features && (
-                          <div className="mt-3 pt-3 border-t">
-                            <p className="text-sm font-medium mb-2">Included features:</p>
-                            <ul className="text-sm text-muted-foreground space-y-1">
-                              {plan.features.slice(0, 3).map((feature, index) => (
-                                <li key={index} className="flex items-center gap-2">
-                                  <Check className="w-3 h-3 text-green-500" />
-                                  {feature}
-                                </li>
-                              ))}
-                              {plan.features.length > 3 && (
-                                <li className="text-xs">+{plan.features.length - 3} more features</li>
-                              )}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    ))
-                  }
-                </div>
-                
-                {plans.filter(plan => {
-                  const currentPlanIndex = plans.findIndex(p => p.name === currentPlan.name)
-                  const planIndex = plans.findIndex(p => p.name === plan.name)
-                  return planIndex < currentPlanIndex
-                }).length === 0 && (
-                  <div className="text-center py-8">
-                    <AlertCircle className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground">No downgrade options available</p>
-                    <p className="text-sm text-muted-foreground mt-2">
-                      You're already on the lowest available plan.
-                    </p>
-                  </div>
-                )}
-                
-                <div className="flex gap-3 pt-4">
-                  <Button 
-                    variant="outline" 
-                    className="flex-1" 
-                    onClick={() => {
-                      setShowDowngradeModal(false)
-                      setSelectedDowngradePlan(null)
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button 
-                    variant="default" 
-                    className="flex-1"
-                    onClick={() => {
-                      if (selectedDowngradePlan) {
-                        handleDowngradeSubscription(selectedDowngradePlan.id)
-                      }
-                    }}
-                    disabled={isLoading || !selectedDowngradePlan}
-                  >
-                    {isLoading ? 'Processing...' : selectedDowngradePlan ? `Downgrade to ${selectedDowngradePlan.name}` : 'Select a Plan'}
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
 
-      {/* Cancel Subscription Modal */}
+
+      {/* 3-Step Cancel Subscription Modal */}
       {showCancelModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-fade-in">
           <Card className="w-full max-w-md mx-4 animate-scale-in">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-destructive">
                 <AlertTriangle className="w-5 h-5" />
-                Cancel Subscription
+                {cancellationStep === 'initial' && 'Cancel Subscription'}
+                {cancellationStep === 'password' && 'Confirm Cancellation'}
+                {cancellationStep === 'confirmed' && 'Cancellation Scheduled'}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <p className="text-muted-foreground">
-                  Are you sure you want to cancel your {currentPlan.name} subscription? 
-                  You'll lose access to premium features at the end of your current billing period.
-                </p>
+                {/* Step 1: Initial confirmation and reason */}
+                {cancellationStep === 'initial' && (
+                  <>
+                    <p className="text-muted-foreground">
+                      Are you sure you want to cancel your {currentPlan.name} subscription? 
+                      This action will start a 3-day waiting period before your subscription ends.
+                    </p>
+                    
+                    <div className="p-4 bg-muted/50 rounded-lg">
+                      <h4 className="font-medium mb-2">You'll lose access to:</h4>
+                      <ul className="text-sm text-muted-foreground space-y-1">
+                        {currentPlan.features?.slice(0, 3).map((feature, index) => (
+                          <li key={`cancel-feature-${index}`} className="flex items-center gap-2">
+                            <X className="w-3 h-3 text-destructive" />
+                            {feature}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="cancellation-reason">Reason for cancellation (optional)</Label>
+                      <Input
+                        id="cancellation-reason"
+                        placeholder="Help us improve by sharing why you're cancelling..."
+                        value={cancellationReason}
+                        onChange={(e) => setCancellationReason(e.target.value)}
+                        maxLength={500}
+                      />
+                    </div>
+                    
+                    <div className="flex gap-3 pt-4">
+                      <Button 
+                        variant="outline" 
+                        className="flex-1" 
+                        onClick={() => setShowCancelModal(false)}
+                      >
+                        Keep Subscription
+                      </Button>
+                      <Button 
+                        variant="destructive" 
+                        className="flex-1"
+                        onClick={handleRequestCancellation}
+                        disabled={isLoading}
+                      >
+                        {isLoading ? 'Processing...' : 'Continue'}
+                      </Button>
+                    </div>
+                  </>
+                )}
                 
-                <div className="p-4 bg-muted/50 rounded-lg">
-                  <h4 className="font-medium mb-2">You'll lose access to:</h4>
-                  <ul className="text-sm text-muted-foreground space-y-1">
-                    {currentPlan.features?.slice(0, 3).map((feature, index) => (
-                      <li key={index} className="flex items-center gap-2">
-                        <X className="w-3 h-3 text-destructive" />
-                        {feature}
-                      </li>
-                    ))}
-                  </ul>
+                {/* Step 2: Password verification */}
+                {cancellationStep === 'password' && (
+                  <>
+                    <div className="p-4 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-lg">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Lock className="w-4 h-4 text-orange-600" />
+                        <h4 className="font-medium text-orange-800 dark:text-orange-200">Security Verification Required</h4>
+                      </div>
+                      <p className="text-sm text-orange-700 dark:text-orange-300">
+                        Please enter your password to confirm the cancellation request.
+                      </p>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="password">Password</Label>
+                      <Input
+                        id="password"
+                        type="password"
+                        placeholder="Enter your password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleConfirmCancellation()}
+                      />
+                    </div>
+                    
+                    <div className="flex gap-3 pt-4">
+                      <Button 
+                        variant="outline" 
+                        className="flex-1" 
+                        onClick={() => {
+                          setCancellationStep('initial')
+                          setPassword('')
+                        }}
+                      >
+                        Back
+                      </Button>
+                      <Button 
+                        variant="destructive" 
+                        className="flex-1"
+                        onClick={handleConfirmCancellation}
+                        disabled={isLoading || !password}
+                      >
+                        {isLoading ? 'Verifying...' : 'Confirm Cancellation'}
+                      </Button>
+                    </div>
+                  </>
+                )}
+                
+                {/* Step 3: Cancellation confirmed */}
+                {cancellationStep === 'confirmed' && (
+                  <>
+                    <div className="p-4 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
+                      <div className="flex items-center gap-2 mb-2">
+                        <CheckCircle2 className="w-4 h-4 text-green-600" />
+                        <h4 className="font-medium text-green-800 dark:text-green-200">Cancellation Confirmed</h4>
+                      </div>
+                      <p className="text-sm text-green-700 dark:text-green-300">
+                        Your subscription will end in 3 days on {cancellationInfo?.effective_date}. 
+                        You can still use all features until then.
+                      </p>
+                    </div>
+                    
+                    <div className="p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                      <h4 className="font-medium mb-2 text-blue-800 dark:text-blue-200">Changed your mind?</h4>
+                      <p className="text-sm text-blue-700 dark:text-blue-300 mb-3">
+                        You can cancel this cancellation request anytime during the 3-day waiting period.
+                      </p>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={handleCancelCancellationRequest}
+                        disabled={isLoading}
+                        className="border-blue-300 text-blue-700 hover:bg-blue-100"
+                      >
+                        {isLoading ? 'Processing...' : 'Cancel Cancellation Request'}
+                      </Button>
+                    </div>
+                    
+                    <div className="flex gap-3 pt-4">
+                      <Button 
+                        variant="outline" 
+                        className="flex-1" 
+                        onClick={() => setShowCancelModal(false)}
+                      >
+                        Close
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+      
+      {/* Cancellation Status Modal */}
+      {showCancellationStatus && cancellationInfo && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-fade-in">
+          <Card className="w-full max-w-md mx-4 animate-scale-in">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-orange-600">
+                <AlertTriangle className="w-5 h-5" />
+                Cancellation Status
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="p-4 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-lg">
+                  <h4 className="font-medium mb-2 text-orange-800 dark:text-orange-200">
+                    {cancellationInfo.status === 'pending' ? 'Cancellation Pending' : 'Cancellation Confirmed'}
+                  </h4>
+                  <p className="text-sm text-orange-700 dark:text-orange-300">
+                    {cancellationInfo.status === 'pending' 
+                      ? 'Your cancellation request is pending password confirmation.'
+                      : `Your subscription will end in ${cancellationInfo.days_remaining} days on ${cancellationInfo.effective_date}.`
+                    }
+                  </p>
+                  {cancellationInfo.reason && (
+                    <p className="text-sm text-orange-600 dark:text-orange-400 mt-2">
+                      <strong>Reason:</strong> {cancellationInfo.reason}
+                    </p>
+                  )}
+                </div>
+                
+                <div className="p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                  <h4 className="font-medium mb-2 text-blue-800 dark:text-blue-200">Changed your mind?</h4>
+                  <p className="text-sm text-blue-700 dark:text-blue-300 mb-3">
+                    You can cancel this cancellation request anytime during the waiting period.
+                  </p>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={handleCancelCancellationRequest}
+                    disabled={isLoading}
+                    className="border-blue-300 text-blue-700 hover:bg-blue-100"
+                  >
+                    {isLoading ? 'Processing...' : 'Cancel Cancellation Request'}
+                  </Button>
                 </div>
                 
                 <div className="flex gap-3 pt-4">
                   <Button 
                     variant="outline" 
                     className="flex-1" 
-                    onClick={() => setShowCancelModal(false)}
+                    onClick={() => setShowCancellationStatus(false)}
                   >
-                    Keep Subscription
-                  </Button>
-                  <Button 
-                    variant="destructive" 
-                    className="flex-1"
-                    onClick={handleCancelSubscription}
-                    disabled={isLoading}
-                  >
-                    {isLoading ? 'Processing...' : 'Cancel Subscription'}
+                    Close
                   </Button>
                 </div>
               </div>

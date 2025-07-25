@@ -43,6 +43,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { useToast } from "@/hooks/use-toast"
 import { productsAPI } from "@/services/api"
+import { CategoryModal } from "@/components/common"
+import { useCategories } from "@/hooks/useCategories"
 
 // Import product images
 import organicYogurtImage from "@/assets/organic-greek-yogurt.jpg"
@@ -54,7 +56,7 @@ import margheritaPizzaImage from "@/assets/margherita-pizza.jpg"
 const productSchema = z.object({
   name: z.string().min(1, "Product name is required").max(255, "Name too long"),
   description: z.string().optional(),
-  category: z.string().min(1, "Category is required"),
+  category_id: z.string().min(1, "Category is required"),
   serving_size: z.number().min(0, "Serving size must be positive"),
   serving_unit: z.string().min(1, "Serving unit is required"),
   servings_per_container: z.number().min(1, "Must have at least 1 serving"),
@@ -66,10 +68,7 @@ const productSchema = z.object({
 
 type ProductFormData = z.infer<typeof productSchema>
 
-const categories = [
-  "Dairy", "Snacks", "Oils", "Spreads", "Beverages", "Grains", 
-  "Fruits", "Vegetables", "Meat", "Seafood", "Bakery", "Frozen"
-]
+// Categories are now loaded dynamically from the API
 
 const servingUnits = [
   "g", "kg", "ml", "l", "cups", "tbsp", "tsp", "pieces", "slices", "oz", "lb"
@@ -94,13 +93,22 @@ export default function ProductForm() {
   const [uploadMethod, setUploadMethod] = useState<"upload" | "url">("url")
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [currentTab, setCurrentTab] = useState("basic")
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false)
+  
+  // Category management
+  const {
+    categories,
+    loading: categoriesLoading,
+    createCategory,
+    refresh: refreshCategories
+  } = useCategories()
 
   const form = useForm<ProductFormData>({
     resolver: zodResolver(productSchema),
     defaultValues: {
       name: "",
       description: "",
-      category: "",
+      category_id: "",
       serving_size: 0,
       serving_unit: "g",
       servings_per_container: 1,
@@ -147,7 +155,7 @@ export default function ProductForm() {
           const formData = {
             name: product.name || '',
             description: product.description || "",
-            category: product.category || '',
+            category_id: product.category_id || '',
             serving_size: parseFloat(product.serving_size) || 0,
             serving_unit: product.serving_unit || 'g',
             servings_per_container: parseInt(product.servings_per_container) || 1,
@@ -224,7 +232,7 @@ export default function ProductForm() {
         productData = new FormData()
         productData.append('name', data.name)
         productData.append('description', data.description || '')
-        productData.append('category', data.category)
+        productData.append('category_id', data.category_id)
         productData.append('serving_size', data.serving_size.toString())
         productData.append('serving_unit', data.serving_unit)
         productData.append('servings_per_container', data.servings_per_container.toString())
@@ -257,7 +265,7 @@ export default function ProductForm() {
         productData = {
           name: data.name,
           description: data.description,
-          category: data.category,
+          category_id: data.category_id,
           serving_size: data.serving_size,
           serving_unit: data.serving_unit,
           servings_per_container: data.servings_per_container,
@@ -660,31 +668,50 @@ export default function ProductForm() {
                   <CardHeader>
                     <CardTitle>Category</CardTitle>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="space-y-4">
                     <FormField
                       control={form.control}
-                      name="category"
+                      name="category_id"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Product Category *</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select category" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {categories.map(category => (
-                                <SelectItem key={category} value={category}>
-                                  {category}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <div className="flex gap-2">
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl>
+                                <SelectTrigger className="flex-1">
+                                  <SelectValue placeholder={categoriesLoading ? "Loading categories..." : "Select category"} />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {categories.map(category => (
+                                  <SelectItem key={category.id} value={category.id}>
+                                    {category.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setIsCategoryModalOpen(true)}
+                              disabled={categoriesLoading}
+                            >
+                              <Plus className="h-4 w-4 mr-2" />
+                              Add Category
+                            </Button>
+                          </div>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
+                    
+                    {/* Category count info */}
+                    {categories.length > 0 && (
+                      <p className="text-sm text-muted-foreground">
+                        {categories.length} categories available
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -828,6 +855,19 @@ export default function ProductForm() {
               </Card>
             </TabsContent>
           </Tabs>
+          
+          {/* Category Modal */}
+          <CategoryModal
+            isOpen={isCategoryModalOpen}
+            onClose={() => setIsCategoryModalOpen(false)}
+            existingCategories={categories}
+            onCategoryCreated={(category) => {
+              // Refresh categories and select the new one
+              refreshCategories()
+              form.setValue('category_id', category.id)
+              setIsCategoryModalOpen(false)
+            }}
+          />
           
           {/* Tab Navigation */}
           <div className="flex justify-between mt-6 pt-4 border-t border-border">
