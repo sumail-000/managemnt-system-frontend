@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Create axios instance with base configuration
 const api = axios.create({
-  baseURL: 'http://localhost:8000/api',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api',
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -285,6 +285,16 @@ export const productsAPI = {
     return api.patch(`/products/${id}/toggle-pin`);
   },
   
+  toggleFavorite: (id: number | string) => {
+    console.log('[PRODUCTS_API] Toggle favorite product request initiated', { id });
+    return api.patch(`/products/${id}/toggle-favorite`);
+  },
+
+  getFavorites: (params?: { search?: string; category?: string; sort_by?: string; sort_order?: string; page?: number; per_page?: number }) => {
+    console.log('[PRODUCTS_API] Get favorites request initiated', params);
+    return api.get('/products/favorites/list', { params });
+  },
+  
   // Categories and tags
   getCategories: () => {
     console.log('[PRODUCTS_API] Get categories request initiated');
@@ -322,25 +332,21 @@ export const productsAPI = {
     console.log('[PRODUCTS_API] Get public product by ID request initiated', { id });
     return api.get(`/products/public/${id}`);
   },
+  
+  // Image URL extraction
+  extractImageUrl: (url: string) => {
+    console.log('[PRODUCTS_API] Extract image URL request initiated', { url });
+    return api.post('/products/extract-image-url', { url });
+  },
+  
+  // Product metrics
+  getMetrics: (productIds: number[]) => {
+    console.log('[PRODUCTS_API] Get product metrics request initiated', { productIds });
+    return api.post('/products/metrics', { product_ids: productIds });
+  },
 };
 
-// Ingredients API
-export const ingredientsAPI = {
-  getAll: (params?: { search?: string; page?: number }) =>
-    api.get('/ingredients', { params }),
-  
-  getById: (id: number) => api.get(`/ingredients/${id}`),
-  
-  create: (ingredientData: any) => api.post('/ingredients', ingredientData),
-  
-  update: (id: number, ingredientData: any) =>
-    api.put(`/ingredients/${id}`, ingredientData),
-  
-  delete: (id: number) => api.delete(`/ingredients/${id}`),
-  
-  search: (query: string) =>
-    api.get('/ingredients/search', { params: { q: query } }),
-};
+
 
 // Membership Plans API
 export const membershipAPI = {
@@ -480,9 +486,13 @@ export const edamamAPI = {
   
   // Nutrition Analysis API
   nutrition: {
-    analyze: (ingredients: string[]) => {
-      console.log('[EDAMAM_API] Nutrition analysis request initiated', { ingredients });
-      return api.post('/edamam/nutrition/analyze', { ingredients });
+    analyze: (ingredients: string[], productId?: string) => {
+      console.log('[EDAMAM_API] Nutrition analysis request initiated', { ingredients, productId });
+      const payload: any = { ingredients: ingredients };
+      if (productId) {
+        payload.product_id = productId;
+      }
+      return api.post('/edamam/nutrition/analyze', payload);
     },
     
     batchAnalyze: (ingredientSets: string[][]) => {
@@ -498,6 +508,61 @@ export const edamamAPI = {
     clearCache: () => {
       console.log('[EDAMAM_API] Clear nutrition cache request initiated');
       return api.delete('/edamam/nutrition/cache');
+    },
+    
+    saveAutoTags: (data: {
+      product_id: string;
+      auto_tags: string[];
+      analysis_name?: string;
+      notes?: string;
+    }) => {
+      console.log('[NUTRITION_API] Save auto tags request initiated', data);
+      return api.post('/nutrition/auto-tags/save', data);
+    },
+    
+    saveNutritionData: (data: {
+      product_id: string;
+      basic_nutrition: {
+        total_calories: number;
+        servings: number;
+        weight_per_serving: number;
+      };
+      macronutrients: {
+        protein: number;
+        carbohydrates: number;
+        fat: number;
+        fiber: number;
+      };
+      micronutrients: Record<string, any>;
+      daily_values: Record<string, any>;
+      health_labels: string[];
+      diet_labels: string[];
+      allergens: string[];
+      warnings: Array<{
+        type: string;
+        message: string;
+        severity: string;
+      }>;
+      high_nutrients: Array<any>;
+      nutrition_summary: Record<string, any>;
+      analysis_metadata: {
+        analyzed_at: string;
+        ingredient_query: string;
+        product_name: string;
+      };
+    }) => {
+      console.log('[NUTRITION_API] Save comprehensive nutrition data request initiated', data);
+      return api.post('/nutrition/save-data', data);
+    },
+
+    checkNutritionData: (productId: string) => {
+      console.log('[NUTRITION_API] Check nutrition data request initiated', { productId });
+      return api.post('/nutrition/check-data', { product_id: productId });
+    },
+
+    loadNutritionData: (productId: string) => {
+      console.log('[NUTRITION_API] Load nutrition data request initiated', { productId });
+      return api.post('/nutrition/load-data', { product_id: productId });
     }
   },
   
@@ -515,12 +580,20 @@ export const edamamAPI = {
       excluded?: string[];
     }) => {
       console.log('[EDAMAM_API] Recipe search request initiated', { query, params });
-      return api.get('/edamam/recipe/search', { params: { query, ...params } });
+      const searchParams = {
+        type: 'public',
+        q: query,
+        to: params?.limit || 10,
+        from: 0,
+        ...params
+      };
+      delete searchParams.limit; // Remove limit as we use 'to' instead
+      return api.get('/edamam/recipes/search', { params: searchParams });
     },
     
     getById: (id: string) => {
       console.log('[EDAMAM_API] Recipe details request initiated', { id });
-      return api.get('/edamam/recipe/show', { params: { id } });
+      return api.get('/edamam/recipes/show', { params: { id } });
     },
     
     getRandom: (count: number = 10, params?: {
@@ -531,22 +604,22 @@ export const edamamAPI = {
       dishType?: string[];
     }) => {
       console.log('[EDAMAM_API] Random recipes request initiated', { count, params });
-      return api.get('/edamam/recipe/random', { params: { count, ...params } });
+      return api.get('/edamam/recipes/random', { params: { count, ...params } });
     },
     
     getSuggestions: (ingredients: string[], limit: number = 10) => {
       console.log('[EDAMAM_API] Recipe suggestions request initiated', { ingredients, limit });
-      return api.get('/edamam/recipe/suggest', { params: { ingredients: ingredients.join(','), limit } });
+      return api.get('/edamam/recipes/suggest', { params: { ingredients: ingredients.join(','), limit } });
     },
     
     getFilters: () => {
       console.log('[EDAMAM_API] Recipe filters request initiated');
-      return api.get('/edamam/recipe/filters');
+      return api.get('/edamam/recipes/filters');
     },
     
     clearCache: () => {
       console.log('[EDAMAM_API] Clear recipe cache request initiated');
-      return api.delete('/edamam/recipe/cache');
+      return api.delete('/edamam/recipes/cache');
     },
     
     generateIngredients: (productName: string, options?: {
@@ -573,6 +646,64 @@ export const edamamAPI = {
         ...options
       });
     }
+  }
+};
+
+// Collections API
+export const collectionsAPI = {
+  getAll: () => {
+    console.log('[COLLECTIONS_API] Get all collections request initiated');
+    return api.get('/collections');
+  },
+  
+  create: (data: {
+    name: string;
+    description?: string;
+    color?: string;
+  }) => {
+    console.log('[COLLECTIONS_API] Create collection request initiated', data);
+    return api.post('/collections', data);
+  },
+  
+  getById: (id: string) => {
+    console.log('[COLLECTIONS_API] Get collection by ID request initiated', { id });
+    return api.get(`/collections/${id}`);
+  },
+  
+  update: (id: string, data: {
+    name: string;
+    description?: string;
+    color?: string;
+  }) => {
+    console.log('[COLLECTIONS_API] Update collection request initiated', { id, data });
+    return api.put(`/collections/${id}`, data);
+  },
+  
+  delete: (id: string) => {
+    console.log('[COLLECTIONS_API] Delete collection request initiated', { id });
+    return api.delete(`/collections/${id}`);
+  },
+  
+  addProduct: (collectionId: string, productId: string) => {
+    console.log('[COLLECTIONS_API] Add product to collection request initiated', { collectionId, productId });
+    return api.post(`/collections/${collectionId}/products`, { product_id: productId });
+  },
+  
+  removeProduct: (collectionId: string, productId: string) => {
+    console.log('[COLLECTIONS_API] Remove product from collection request initiated', { collectionId, productId });
+    return api.delete(`/collections/${collectionId}/products/${productId}`);
+  },
+  
+  getProducts: (collectionId: string, params?: {
+    page?: number;
+    per_page?: number;
+    search?: string;
+    category_id?: string;
+    sort_by?: string;
+    sort_order?: string;
+  }) => {
+    console.log('[COLLECTIONS_API] Get collection products request initiated', { collectionId, params });
+    return api.get(`/collections/${collectionId}/products`, { params });
   }
 };
 

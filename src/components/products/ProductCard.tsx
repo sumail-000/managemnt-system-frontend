@@ -8,7 +8,8 @@ import {
   Trash2, 
   Eye,
   Calendar,
-  Package
+  Package,
+  Heart
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -66,6 +67,29 @@ export function ProductCard({ product, selected, onSelect, variant = "default", 
       toast({
         title: "Error",
         description: error.response?.data?.message || "Failed to toggle pin status",
+        variant: "destructive"
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleFavorite = async () => {
+    if (isLoading) return
+    
+    setIsLoading(true)
+    try {
+      await productsAPI.toggleFavorite(product.id)
+      toast({
+        title: product.isFavorite ? "Removed from favorites" : "Added to favorites",
+        description: `${product.name} has been ${product.isFavorite ? 'removed from' : 'added to'} favorites.`
+      })
+      onRefresh?.()
+    } catch (error: any) {
+      console.error('Error toggling favorite:', error)
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to toggle favorite status",
         variant: "destructive"
       })
     } finally {
@@ -165,9 +189,14 @@ export function ProductCard({ product, selected, onSelect, variant = "default", 
                 <h3 className="font-semibold text-foreground truncate">
                   {product.name}
                 </h3>
-                {product.isPinned && (
-                  <Pin className="h-3 w-3 text-accent fill-current flex-shrink-0" />
-                )}
+                <div className="flex gap-1">
+                  {product.isFavorite && (
+                    <Heart className="h-3 w-3 text-red-500 fill-current flex-shrink-0" />
+                  )}
+                  {product.isPinned && (
+                    <Pin className="h-3 w-3 text-accent fill-current flex-shrink-0" />
+                  )}
+                </div>
               </div>
               <p className="text-sm text-muted-foreground truncate">
                 {product.description}
@@ -226,6 +255,10 @@ export function ProductCard({ product, selected, onSelect, variant = "default", 
                     <Pin className="h-4 w-4 mr-2" />
                     {product.isPinned ? "Unpin" : "Pin"} Product
                   </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleFavorite} disabled={isLoading}>
+                    <Heart className={cn("h-4 w-4 mr-2", product.isFavorite && "fill-current text-red-500")} />
+                    {product.isFavorite ? "Remove from" : "Add to"} Favorites
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
@@ -277,14 +310,19 @@ export function ProductCard({ product, selected, onSelect, variant = "default", 
           />
         </div>
 
-        {/* Pin Indicator */}
-        {product.isPinned && (
-          <div className="absolute top-3 right-3 z-10">
+        {/* Pin and Favorite Indicators */}
+        <div className="absolute top-3 right-3 z-10 flex gap-2">
+          {product.isFavorite && (
+            <div className="bg-red-500/20 backdrop-blur-sm rounded-full p-1">
+              <Heart className="h-4 w-4 text-red-500 fill-current" />
+            </div>
+          )}
+          {product.isPinned && (
             <div className="bg-accent/20 backdrop-blur-sm rounded-full p-1">
               <Pin className="h-4 w-4 text-accent fill-current" />
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Product Image */}
         <div className="relative aspect-square bg-muted overflow-hidden">
@@ -370,6 +408,10 @@ export function ProductCard({ product, selected, onSelect, variant = "default", 
                 <DropdownMenuItem onClick={handlePin} disabled={isLoading}>
                   <Pin className="h-4 w-4 mr-2" />
                   {product.isPinned ? "Unpin" : "Pin"} Product
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleFavorite} disabled={isLoading}>
+                  <Heart className={cn("h-4 w-4 mr-2", product.isFavorite && "fill-current text-red-500")} />
+                  {product.isFavorite ? "Remove from" : "Add to"} Favorites
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <AlertDialog>
@@ -462,14 +504,19 @@ export function ProductCard({ product, selected, onSelect, variant = "default", 
         />
       </div>
 
-      {/* Pin Indicator */}
-      {product.isPinned && (
-        <div className="absolute top-3 right-3 z-10">
-          <div className="bg-accent/10 backdrop-blur-sm rounded-full p-1.5">
+      {/* Pin and Favorite Indicators */}
+      <div className="absolute top-3 right-3 z-10 flex gap-2">
+        {product.isFavorite && (
+          <div className="bg-red-500/20 backdrop-blur-sm rounded-full p-1">
+            <Heart className="h-4 w-4 text-red-500 fill-current" />
+          </div>
+        )}
+        {product.isPinned && (
+          <div className="bg-accent/20 backdrop-blur-sm rounded-full p-1">
             <Pin className="h-4 w-4 text-accent fill-current" />
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Product Image */}
       <div className="relative h-48 bg-gradient-to-br from-muted to-muted/50 overflow-hidden">
@@ -552,6 +599,10 @@ export function ProductCard({ product, selected, onSelect, variant = "default", 
               <DropdownMenuItem onClick={handlePin} disabled={isLoading}>
                 <Pin className="h-4 w-4 mr-2" />
                 {product.isPinned ? "Unpin" : "Pin"} Product
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleFavorite} disabled={isLoading}>
+                <Heart className={cn("h-4 w-4 mr-2", product.isFavorite && "fill-current text-red-500")} />
+                {product.isFavorite ? "Remove from" : "Add to"} Favorites
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <AlertDialog>

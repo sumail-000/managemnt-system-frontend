@@ -17,7 +17,6 @@ import {
   Scale, 
   Users, 
   Clock,
-  Upload,
   Link as LinkIcon,
   Package,
   Search,
@@ -45,11 +44,11 @@ export function RecipeAnalyzer({
   isAnalyzing 
 }: RecipeAnalyzerProps) {
   const [recipeName, setRecipeName] = useState("")
-  const [servings, setServings] = useState("4")
+  // NULLED: No default servings - user must specify
+  const [servings, setServings] = useState("")
   const [prepTime, setPrepTime] = useState("")
-  const [ingredients, setIngredients] = useState<Ingredient[]>([
-    { id: "1", name: "", quantity: "", unit: "g" }
-  ])
+  // NULLED: No default ingredients - user must add manually
+  const [ingredients, setIngredients] = useState<Ingredient[]>([])
   const [recipeUrl, setRecipeUrl] = useState("")
   const [analysisMode, setAnalysisMode] = useState<"product" | "manual" | "url">("product")
   
@@ -193,6 +192,8 @@ export function RecipeAnalyzer({
     ])
   }
 
+
+
   const removeIngredient = (id: string) => {
     if (ingredients.length > 1) {
       setIngredients(ingredients.filter(ingredient => ingredient.id !== id))
@@ -265,44 +266,267 @@ export function RecipeAnalyzer({
     onAnalysisStart()
 
     try {
-      // Simulate API call to Edamam
-      await new Promise(resolve => setTimeout(resolve, 2000))
-
-      // Mock response data
-      const mockData = {
-        totalCalories: 420,
-        macros: {
-          protein: 25.3,
-          carbs: 45.2,
-          fat: 18.7,
-          fiber: 8.1
-        },
-        micros: {
-          'Vitamin C': 45.2,
-          'Iron': 3.4,
-          'Calcium': 120.5,
-          'Sodium': 680.2,
-          'Potassium': 890.1
-        },
-        allergens: ['gluten', 'dairy', 'eggs'],
-        warnings: [
-          {
-            type: 'warning' as const,
-            message: 'High sodium content (680mg) - exceeds recommended daily intake',
-            severity: 'medium' as const
-          },
-          {
-            type: 'info' as const,
-            message: 'Good source of fiber and protein',
-            severity: 'low' as const
-          }
-        ],
-        servings: parseInt(servings),
-        weightPerServing: 150
+      // Prepare ingredients for API call
+      let ingredientLines: string[] = []
+      
+      if (analysisMode === "product" && selectedProduct) {
+        // Use product ingredients
+        ingredientLines = ingredientQuery.split('\n').filter(line => line.trim())
+      } else if (analysisMode === "manual") {
+        // Use manual ingredients
+        const validIngredients = ingredients.filter(ing => 
+          ing.name.trim() && ing.quantity.trim()
+        )
+        ingredientLines = validIngredients.map(ing => 
+          `${ing.quantity} ${ing.unit} ${ing.name}`
+        )
+      } else if (analysisMode === "url") {
+        // For URL mode, we would need to extract ingredients from the URL
+        // For now, use a placeholder
+        ingredientLines = [`Recipe from ${recipeUrl}`]
       }
 
-      console.log('Calling onAnalysisComplete with:', mockData, recipeName)
-      onAnalysisComplete(mockData, recipeName)
+      console.log('Analyzing ingredients:', ingredientLines)
+      
+      // Make actual API call to nutrition analysis
+      const response = await fetch('/api/edamam/nutrition/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          title: recipeName,
+          ingr: ingredientLines,
+          yield: parseInt(servings)
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status} ${response.statusText}`)
+      }
+
+      const apiData = await response.json()
+      console.log('=== COMPREHENSIVE NUTRITION API RESPONSE DEBUG ===', {
+        fullResponse: apiData,
+        responseType: typeof apiData,
+        hasSuccess: 'success' in apiData,
+        hasData: 'data' in apiData,
+        keys: Object.keys(apiData || {})
+      })
+      
+      // Enhanced response format handling with debugging
+      let nutritionData
+      if (apiData.success !== undefined) {
+        console.log('🔍 Detected wrapped response format')
+        if (!apiData.success) {
+          console.error('❌ API returned success: false', apiData)
+          throw new Error(apiData.message || 'Nutrition analysis failed')
+        }
+        nutritionData = apiData.data
+        console.log('✅ Extracted data from wrapped response:', nutritionData)
+      } else {
+        console.log('🔍 Detected direct response format')
+        nutritionData = apiData
+      }
+
+      // Validate essential data structure
+      if (!nutritionData) {
+        console.error('❌ No nutrition data found in response')
+        throw new Error('No nutrition data received from API')
+      }
+
+      console.log('=== NUTRITION DATA STRUCTURE ANALYSIS ===', {
+        hasCalories: 'calories' in nutritionData,
+        hasTotalNutrients: 'totalNutrients' in nutritionData,
+        hasNutritionSummary: 'nutritionSummary' in nutritionData,
+        hasTotalDaily: 'totalDaily' in nutritionData,
+        hasHealthLabels: 'healthLabels' in nutritionData,
+        hasCautions: 'cautions' in nutritionData,
+        hasDietLabels: 'dietLabels' in nutritionData,
+        hasYield: 'yield' in nutritionData,
+        hasTotalWeight: 'totalWeight' in nutritionData,
+        totalNutrientsKeys: nutritionData.totalNutrients ? Object.keys(nutritionData.totalNutrients) : [],
+        nutritionSummaryStructure: nutritionData.nutritionSummary || null
+      })
+
+      // Enhanced macro extraction with multiple fallback paths
+      const extractMacroValue = (paths: string[], fallback = 0) => {
+        for (const path of paths) {
+          try {
+            const value = path.split('.').reduce((obj, key) => obj?.[key], nutritionData)
+            if (typeof value === 'number' && !isNaN(value)) {
+              console.log(`✅ Found macro value for path ${path}:`, value)
+              return Math.round(value * 100) / 100 // Round to 2 decimal places
+            }
+          } catch (e) {
+            console.log(`❌ Failed to extract from path ${path}:`, e)
+          }
+        }
+        console.log(`⚠️ Using fallback value ${fallback} for paths:`, paths)
+        return fallback
+      }
+
+      // Enhanced micronutrient extraction with comprehensive mapping
+      // Fixed to return proper format: {label, quantity, unit, percentage}
+      const extractMicronutrients = () => {
+        const microMap = {
+          'VITC': 'Vitamin C',
+          'FE': 'Iron',
+          'CA': 'Calcium',
+          'NA': 'Sodium',
+          'K': 'Potassium',
+          'MG': 'Magnesium',
+          'P': 'Phosphorus',
+          'ZN': 'Zinc',
+          'VITA_RAE': 'Vitamin A',
+          'VITB6A': 'Vitamin B6',
+          'VITB12': 'Vitamin B12',
+          'VITD': 'Vitamin D',
+          'TOCPHA': 'Vitamin E',
+          'VITK1': 'Vitamin K',
+          'FOLDFE': 'Folate',
+          'NIA': 'Niacin',
+          'RIBF': 'Riboflavin',
+          'THIA': 'Thiamin'
+        }
+
+        const micros: Record<string, {label: string, quantity: number, unit: string, percentage: number}> = {}
+        
+        // Extract from totalNutrients if available
+        if (nutritionData.totalNutrients) {
+          for (const [key, nutrient] of Object.entries(nutritionData.totalNutrients)) {
+            if (typeof nutrient === 'object' && nutrient !== null) {
+              micros[key] = {
+                label: (nutrient as any).label || microMap[key] || key,
+                quantity: (nutrient as any).quantity || 0,
+                unit: (nutrient as any).unit || '',
+                percentage: (nutrient as any).percentage || 0
+              }
+            }
+          }
+        } else {
+          // Fallback: create entries for known micronutrients with zero values
+          for (const [key, label] of Object.entries(microMap)) {
+            micros[key] = {
+              label,
+              quantity: 0,
+              unit: 'mg',
+              percentage: 0
+            }
+          }
+        }
+
+        console.log('🔬 Extracted micronutrients (fixed format):', micros)
+        return micros
+      }
+
+      // Enhanced allergen detection
+      const extractAllergens = () => {
+        const healthLabels = nutritionData.healthLabels || []
+        console.log('🔍 Processing health labels for allergens:', healthLabels)
+        
+        const allergenMap = {
+          'gluten': ['gluten', 'wheat'],
+          'dairy': ['dairy', 'milk'],
+          'eggs': ['egg'],
+          'peanuts': ['peanut'],
+          'tree nuts': ['tree_nut', 'tree nut'],
+          'soy': ['soy'],
+          'fish': ['fish'],
+          'shellfish': ['shellfish', 'crustacean']
+        }
+
+        const detectedAllergens = new Set<string>()
+        
+        for (const label of healthLabels) {
+          const lowerLabel = label.toLowerCase().replace(/[-_]/g, ' ')
+          for (const [allergen, keywords] of Object.entries(allergenMap)) {
+            if (keywords.some(keyword => lowerLabel.includes(keyword))) {
+              detectedAllergens.add(allergen)
+              console.log(`✅ Detected allergen '${allergen}' from label '${label}'`)
+            }
+          }
+        }
+
+        return Array.from(detectedAllergens)
+      }
+
+      // Enhanced warning system
+      const generateWarnings = () => {
+        const warnings = []
+        
+        // Process cautions
+        if (nutritionData.cautions && Array.isArray(nutritionData.cautions)) {
+          warnings.push(...nutritionData.cautions.map((caution: string) => ({
+            type: 'warning' as const,
+            message: caution,
+            severity: 'medium' as const
+          })))
+          console.log('⚠️ Added caution warnings:', nutritionData.cautions)
+        }
+
+        // Process diet labels as info
+        if (nutritionData.dietLabels && Array.isArray(nutritionData.dietLabels)) {
+          warnings.push(...nutritionData.dietLabels.map((label: string) => ({
+            type: 'info' as const,
+            message: `Diet compatible: ${label.replace(/[-_]/g, ' ').toLowerCase()}`,
+            severity: 'low' as const
+          })))
+          console.log('ℹ️ Added diet label info:', nutritionData.dietLabels)
+        }
+
+        // Process high daily value warnings
+        if (nutritionData.totalDaily) {
+          const highNutrients = Object.entries(nutritionData.totalDaily)
+            .filter(([key, nutrient]: [string, any]) => nutrient?.quantity > 50)
+            .map(([key, nutrient]: [string, any]) => {
+              const severity = nutrient.quantity > 100 ? 'high' : 'medium'
+              return {
+                type: 'warning' as const,
+                message: `High ${nutrient.label || key}: ${nutrient.quantity.toFixed(1)}% daily value`,
+                severity: severity as 'high' | 'medium'
+              }
+            })
+          
+          warnings.push(...highNutrients)
+          console.log('📊 Added high nutrient warnings:', highNutrients)
+        }
+
+        return warnings
+      }
+
+      // Comprehensive data transformation with debugging
+      const transformedData = {
+        totalCalories: Math.round(nutritionData.calories || 0),
+        macros: {
+          protein: extractMacroValue([
+            'nutritionSummary.macronutrients.protein.grams',
+            'totalNutrients.PROCNT.quantity'
+          ]),
+          carbs: extractMacroValue([
+            'nutritionSummary.macronutrients.carbs.grams',
+            'totalNutrients.CHOCDF.quantity'
+          ]),
+          fat: extractMacroValue([
+            'nutritionSummary.macronutrients.fat.grams',
+            'totalNutrients.FAT.quantity'
+          ]),
+          fiber: extractMacroValue([
+            'nutritionSummary.fiber',
+            'totalNutrients.FIBTG.quantity'
+          ])
+        },
+        micros: extractMicronutrients(),
+        allergens: extractAllergens(),
+        warnings: generateWarnings(),
+        servings: parseInt(servings) || 1,
+        weightPerServing: Math.round(nutritionData.totalWeight || 100)
+      }
+
+      console.log('=== TRANSFORMED DATA ===', transformedData)
+      console.log('Calling onAnalysisComplete with:', transformedData, recipeName)
+      onAnalysisComplete(transformedData, recipeName)
       
       toast({
         title: "Analysis complete",
@@ -310,10 +534,13 @@ export function RecipeAnalyzer({
       })
 
     } catch (error) {
+      console.error('❌ Recipe analysis error:', error)
       onAnalysisError()
+      
+      const errorMessage = error instanceof Error ? error.message : 'Failed to analyze recipe'
       toast({
         title: "Analysis failed",
-        description: "There was an error analyzing your recipe. Please try again.",
+        description: `There was an error analyzing your recipe: ${errorMessage}`,
         variant: "destructive"
       })
     }
@@ -542,45 +769,63 @@ export function RecipeAnalyzer({
                 </Button>
               </div>
               
-              <div className="space-y-3">
-                {ingredients.map((ingredient, index) => (
-                  <div key={ingredient.id} className="flex gap-2 items-end">
-                    <div className="flex-1">
-                      <Input
-                        placeholder="Ingredient name"
-                        value={ingredient.name}
-                        onChange={(e) => updateIngredient(ingredient.id, "name", e.target.value)}
-                      />
-                    </div>
-                    <div className="w-24">
-                      <Input
-                        placeholder="Amount"
-                        value={ingredient.quantity}
-                        onChange={(e) => updateIngredient(ingredient.id, "quantity", e.target.value)}
-                      />
-                    </div>
-                    <div className="w-20">
-                      <select
-                        className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
-                        value={ingredient.unit}
-                        onChange={(e) => updateIngredient(ingredient.id, "unit", e.target.value)}
-                      >
-                        {unitOptions.map(unit => (
-                          <option key={unit} value={unit}>{unit}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => removeIngredient(ingredient.id)}
-                      disabled={ingredients.length <= 1}
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
+
+              
+              {/* Individual Ingredients */}
+              {ingredients.length > 0 && (
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium">Individual Ingredients ({ingredients.length})</Label>
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {ingredients.map((ingredient, index) => (
+                      <div key={ingredient.id} className="flex gap-2 items-end p-3 bg-muted/20 rounded-lg">
+                        <div className="flex-1">
+                          <Input
+                            placeholder="Ingredient name"
+                            value={ingredient.name}
+                            onChange={(e) => updateIngredient(ingredient.id, "name", e.target.value)}
+                            className="text-sm"
+                          />
+                        </div>
+                        <div className="w-24">
+                          <Input
+                            placeholder="Amount"
+                            value={ingredient.quantity}
+                            onChange={(e) => updateIngredient(ingredient.id, "quantity", e.target.value)}
+                            className="text-sm"
+                          />
+                        </div>
+                        <div className="w-20">
+                          <select
+                            className="w-full h-9 px-2 rounded-md border border-input bg-background text-sm"
+                            value={ingredient.unit}
+                            onChange={(e) => updateIngredient(ingredient.id, "unit", e.target.value)}
+                          >
+                            {unitOptions.map(unit => (
+                              <option key={unit} value={unit}>{unit}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => removeIngredient(ingredient.id)}
+                          className="h-9 w-9"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
+              
+              {ingredients.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground border-2 border-dashed border-muted rounded-lg">
+                  <Package className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No ingredients added yet</p>
+                  <p className="text-xs">Add ingredients individually</p>
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-4">

@@ -27,7 +27,12 @@ interface NutritionData {
     fat: number
     fiber: number
   }
-  micros: Record<string, number>
+  micros: Record<string, {
+    label: string
+    quantity: number
+    unit: string
+    percentage: number
+  }>
   allergens: string[]
   warnings: Array<{
     type: 'warning' | 'error' | 'info'
@@ -36,6 +41,22 @@ interface NutritionData {
   }>
   servings: number
   weightPerServing: number
+  totalDaily?: Record<string, {
+    label: string
+    quantity: number
+    unit: string
+  }>
+  dietLabels?: string[]
+  nutritionSummary?: {
+    macronutrients?: {
+      protein?: { grams: number }
+      carbs?: { grams: number }
+      fat?: { grams: number }
+    }
+    fiber?: number
+    [key: string]: any
+  }
+  healthLabels?: string[]
 }
 
 interface NutritionExportProps {

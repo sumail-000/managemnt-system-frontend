@@ -1,3 +1,98 @@
+// Nutritional Data interface
+export interface NutritionalData {
+  id: number;
+  product_id: number;
+  basic_nutrition: {
+    total_calories: number;
+    servings: number;
+    weight_per_serving: number;
+  };
+  macronutrients: {
+    protein: number;
+    carbohydrates: number;
+    fat: number;
+    fiber: number;
+  };
+  micronutrients: Record<string, {
+    label: string;
+    quantity: number;
+    unit: string;
+    percentage: number;
+  }>;
+  daily_values: Record<string, {
+    label: string;
+    quantity: number;
+    unit: string;
+  }>;
+  health_labels?: string[];
+  diet_labels?: string[];
+  allergens?: string[];
+  warnings?: Array<{
+    type: 'warning' | 'error' | 'info';
+    message: string;
+    severity: 'low' | 'medium' | 'high';
+  }>;
+  high_nutrients?: Array<{
+    nutrient: string;
+    label: string;
+    percentage: number;
+    level: 'very_high' | 'high' | 'moderate';
+  }>;
+  nutrition_summary?: any;
+  analysis_metadata: {
+    analyzed_at: string;
+    ingredient_query: string;
+    product_name?: string;
+  };
+  created_at: string;
+  updated_at: string;
+}
+
+// Ingredient interface
+export interface Ingredient {
+  id: string;
+  name: string;
+  pivot?: {
+    amount?: number;
+    unit?: string;
+    order?: number;
+  };
+}
+
+// Collection interface
+export interface Collection {
+  id: string;
+  name: string;
+  description?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// QR Code interface
+export interface QrCode {
+  id: string;
+  product_id: string;
+  url_slug: string;
+  image_path?: string;
+  scan_count: number;
+  last_scanned_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// Label interface
+export interface Label {
+  id: string;
+  product_id: string;
+  qr_code_id?: string;
+  name: string;
+  template_type: string;
+  content: any;
+  image_path?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 // Shared Product type definition
 export interface Product {
   id: string;
@@ -10,6 +105,7 @@ export interface Product {
   };
   status: "draft" | "published";
   is_pinned: boolean;
+  is_favorite: boolean;
   is_public: boolean;
   serving_size: number;
   serving_unit: string;
@@ -18,6 +114,11 @@ export interface Product {
   image?: string; // This is the main image field returned by backend
   image_url?: string; // Direct URL field
   image_path?: string; // Storage path field
+  ingredients?: Ingredient[]; // Product ingredients with pivot data
+  ingredient_notes?: string; // Free-text ingredient notes
+  collections?: Collection[]; // Collections this product belongs to
+  qrCodes?: QrCode[]; // QR codes associated with this product
+  labels?: Label[]; // Labels associated with this product
   created_at: string;
   updated_at: string;
   deleted_at?: string; // For trashed products
@@ -25,6 +126,7 @@ export interface Product {
     id: string;
     name: string;
   };
+  nutritional_data?: NutritionalData[];
 }
 
 // Helper type for API operations
@@ -57,6 +159,7 @@ export const transformProductFromAPI = (apiProduct: any): Product => {
     category: apiProduct.category,
     status: apiProduct.status,
     is_pinned: apiProduct.is_pinned || false,
+    is_favorite: apiProduct.is_favorite || false,
     is_public: apiProduct.is_public || false,
     serving_size: apiProduct.serving_size,
     serving_unit: apiProduct.serving_unit,
@@ -65,6 +168,11 @@ export const transformProductFromAPI = (apiProduct: any): Product => {
     image: apiProduct.image,
     image_url: apiProduct.image_url,
     image_path: apiProduct.image_path,
+    ingredients: apiProduct.ingredients || [],
+    ingredient_notes: apiProduct.ingredient_notes,
+    collections: apiProduct.collections || [],
+    qrCodes: apiProduct.qr_codes || [],
+    labels: apiProduct.labels || [],
     created_at: apiProduct.created_at,
     updated_at: apiProduct.updated_at,
     user: apiProduct.user,
@@ -78,6 +186,7 @@ export function transformProductToCamelCase(product: Product): ProductCamelCase 
     categoryId: product.category_id,
     status: product.status === "draft" ? "Draft" : "Published",
     isPinned: product.is_pinned,
+    isFavorite: product.is_favorite,
     isPublic: product.is_public,
     servingSize: product.serving_size,
     servingUnit: product.serving_unit,
@@ -101,6 +210,7 @@ export interface ProductCamelCase {
   };
   status: "Draft" | "Published";
   isPinned: boolean;
+  isFavorite: boolean;
   isPublic: boolean;
   servingSize: number;
   servingUnit: string;

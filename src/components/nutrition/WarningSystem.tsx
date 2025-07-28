@@ -5,19 +5,16 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { Input } from "@/components/ui/input"
+
 import { 
   AlertTriangle, 
   Shield, 
   Info, 
   X, 
-  Settings, 
   Heart,
   Zap,
   Scale,
-  TrendingUp,
   CheckCircle2,
   XCircle
 } from "lucide-react"
@@ -36,8 +33,29 @@ interface NutritionData {
     fat: number
     fiber: number
   }
-  micros: Record<string, number>
+  micros: Record<string, {
+    label: string
+    quantity: number
+    unit: string
+    percentage: number
+  }>
   servings: number
+  totalDaily?: Record<string, {
+    label: string
+    quantity: number
+    unit: string
+  }>
+  dietLabels?: string[]
+  nutritionSummary?: {
+    macronutrients?: {
+      protein?: { grams: number }
+      carbs?: { grams: number }
+      fat?: { grams: number }
+    }
+    fiber?: number
+    [key: string]: any
+  }
+  healthLabels?: string[]
 }
 
 interface WarningSystemProps {
@@ -45,30 +63,32 @@ interface WarningSystemProps {
   nutritionData: NutritionData
 }
 
-interface ThresholdSettings {
-  sodium: number
-  sugar: number
-  fat: number
-  calories: number
-  enabled: boolean
-}
+
 
 export function WarningSystem({ warnings, nutritionData }: WarningSystemProps) {
-  const [thresholds, setThresholds] = useState<ThresholdSettings>({
+  const thresholds = {
     sodium: 2300, // mg per day
     sugar: 50,    // g per day
     fat: 65,      // g per day
     calories: 2000, // per day
     enabled: true
-  })
+  }
   
   const [filterSeverity, setFilterSeverity] = useState<"all" | "high" | "medium" | "low">("all")
   const [showResolved, setShowResolved] = useState(false)
 
   // Calculate nutrition per serving
+  // Updated to use correct micronutrient keys (NA for sodium)
+  const getSodiumValue = () => {
+    const sodium = nutritionData.micros['NA'] || nutritionData.micros['Sodium']
+    if (typeof sodium === 'object' && sodium?.quantity) return sodium.quantity
+    if (typeof sodium === 'number') return sodium
+    return 0
+  }
+
   const perServing = {
     calories: Math.round(nutritionData.totalCalories / nutritionData.servings),
-    sodium: Math.round((nutritionData.micros['Sodium'] || 0) / nutritionData.servings),
+    sodium: Math.round(getSodiumValue() / nutritionData.servings),
     fat: Math.round(nutritionData.macros.fat / nutritionData.servings),
     carbs: Math.round(nutritionData.macros.carbs / nutritionData.servings)
   }
@@ -77,36 +97,58 @@ export function WarningSystem({ warnings, nutritionData }: WarningSystemProps) {
   const generateThresholdWarnings = (): Warning[] => {
     const thresholdWarnings: Warning[] = []
     
-    if (perServing.sodium > thresholds.sodium * 0.3) { // 30% of daily value per serving
+    // Enhanced sodium warning with better thresholds
+    if (perServing.sodium > thresholds.sodium * 0.2) { // 20% of daily value per serving
+      const severityLevel = perServing.sodium > thresholds.sodium * 0.4 ? 'high' : 'medium'
       thresholdWarnings.push({
         type: 'warning',
-        message: `High sodium content: ${perServing.sodium}mg per serving (>${Math.round(thresholds.sodium * 0.3)}mg recommended)`,
-        severity: perServing.sodium > thresholds.sodium * 0.5 ? 'high' : 'medium'
+        message: `High sodium content: ${perServing.sodium}mg per serving (>${Math.round(thresholds.sodium * 0.2)}mg recommended per serving)`,
+        severity: severityLevel
       })
     }
     
-    if (perServing.calories > thresholds.calories * 0.4) { // 40% of daily calories
+    // Enhanced calorie warning
+    if (perServing.calories > thresholds.calories * 0.25) { // 25% of daily calories per serving
+      const severityLevel = perServing.calories > thresholds.calories * 0.4 ? 'high' : 'medium'
       thresholdWarnings.push({
         type: 'warning', 
-        message: `High calorie content: ${perServing.calories} calories per serving`,
-        severity: perServing.calories > thresholds.calories * 0.6 ? 'high' : 'medium'
+        message: `High calorie content: ${perServing.calories} calories per serving (>${Math.round(thresholds.calories * 0.25)} recommended per serving)`,
+        severity: severityLevel
       })
     }
     
-    if (perServing.fat > thresholds.fat * 0.4) { // 40% of daily fat
+    // Enhanced fat warning
+    if (perServing.fat > thresholds.fat * 0.25) { // 25% of daily fat per serving
+      const severityLevel = perServing.fat > thresholds.fat * 0.4 ? 'high' : 'medium'
       thresholdWarnings.push({
         type: 'warning',
-        message: `High fat content: ${perServing.fat}g per serving`,
-        severity: perServing.fat > thresholds.fat * 0.6 ? 'high' : 'medium'
+        message: `High fat content: ${perServing.fat}g per serving (>${Math.round(thresholds.fat * 0.25)}g recommended per serving)`,
+        severity: severityLevel
       })
     }
 
-    // Positive warnings (good nutrition)
-    if (nutritionData.macros.fiber >= 5) {
+    // Enhanced fiber assessment (per serving)
+    const fiberPerServing = Math.round(nutritionData.macros.fiber / nutritionData.servings)
+    if (fiberPerServing >= 3) {
       thresholdWarnings.push({
         type: 'info',
-        message: `Excellent fiber content: ${nutritionData.macros.fiber}g per recipe`,
+        message: `Good fiber content: ${fiberPerServing}g per serving (${nutritionData.macros.fiber}g total)`,
         severity: 'low'
+      })
+    } else if (nutritionData.macros.fiber >= 5) {
+      thresholdWarnings.push({
+        type: 'info',
+        message: `Excellent total fiber: ${nutritionData.macros.fiber}g per recipe`,
+        severity: 'low'
+      })
+    }
+
+    // Additional threshold warnings based on daily value percentages
+    if (nutritionData.micros['NA']?.percentage && nutritionData.micros['NA'].percentage > 50) {
+      thresholdWarnings.push({
+        type: 'warning',
+        message: `Very high sodium: ${nutritionData.micros['NA'].percentage.toFixed(1)}% of daily value`,
+        severity: nutritionData.micros['NA'].percentage > 100 ? 'high' : 'medium'
       })
     }
 
@@ -146,12 +188,7 @@ export function WarningSystem({ warnings, nutritionData }: WarningSystemProps) {
     }
   }
 
-  // Traffic light system
-  const getTrafficLightColor = (value: number, threshold: number) => {
-    if (value <= threshold * 0.3) return 'bg-success'
-    if (value <= threshold * 0.6) return 'bg-warning'
-    return 'bg-destructive'
-  }
+
 
   return (
     <div className="space-y-6">
@@ -214,10 +251,8 @@ export function WarningSystem({ warnings, nutritionData }: WarningSystemProps) {
       </div>
 
       <Tabs defaultValue="warnings" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-1">
           <TabsTrigger value="warnings">Active Warnings</TabsTrigger>
-          <TabsTrigger value="traffic-light">Traffic Light</TabsTrigger>
-          <TabsTrigger value="settings">Threshold Settings</TabsTrigger>
         </TabsList>
 
         <TabsContent value="warnings">
@@ -246,7 +281,7 @@ export function WarningSystem({ warnings, nutritionData }: WarningSystemProps) {
             </CardHeader>
             <CardContent>
               {filteredWarnings.length > 0 ? (
-                <div className="space-y-3">
+                <div className="grid gap-3 md:grid-cols-2">
                   {filteredWarnings.map((warning, index) => {
                     const WarningIcon = getWarningIcon(warning.type)
                     return (
@@ -254,9 +289,9 @@ export function WarningSystem({ warnings, nutritionData }: WarningSystemProps) {
                         <WarningIcon className="h-4 w-4" />
                         <div className="flex items-center justify-between w-full">
                           <div className="flex-1">
-                            <AlertDescription>{warning.message}</AlertDescription>
+                            <AlertDescription className="text-sm">{warning.message}</AlertDescription>
                           </div>
-                          <Badge className={getSeverityBadgeColor(warning.severity)}>
+                          <Badge className={`${getSeverityBadgeColor(warning.severity)} text-xs`}>
                             {warning.severity}
                           </Badge>
                         </div>
@@ -268,8 +303,12 @@ export function WarningSystem({ warnings, nutritionData }: WarningSystemProps) {
                 <div className="text-center py-8">
                   <CheckCircle2 className="w-12 h-12 text-success mx-auto mb-4" />
                   <h3 className="text-lg font-medium mb-2">No Warnings Found</h3>
-                  <p className="text-muted-foreground">
+                  <p className="text-muted-foreground mb-2">
                     This recipe meets all current regulatory and health guidelines.
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    ✓ No cautions or allergen warnings detected<br/>
+                    ✓ Nutritional thresholds within acceptable ranges
                   </p>
                 </div>
               )}
@@ -277,138 +316,7 @@ export function WarningSystem({ warnings, nutritionData }: WarningSystemProps) {
           </Card>
         </TabsContent>
 
-        <TabsContent value="traffic-light">
-          <Card className="dashboard-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="w-5 h-5" />
-                Traffic Light Nutrition Labeling
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-3 border border-border rounded-lg">
-                    <div>
-                      <span className="font-medium">Calories per serving</span>
-                      <p className="text-sm text-muted-foreground">{perServing.calories} kcal</p>
-                    </div>
-                    <div className={`w-4 h-4 rounded-full ${getTrafficLightColor(perServing.calories, thresholds.calories * 0.25)}`}></div>
-                  </div>
 
-                  <div className="flex items-center justify-between p-3 border border-border rounded-lg">
-                    <div>
-                      <span className="font-medium">Sodium per serving</span>
-                      <p className="text-sm text-muted-foreground">{perServing.sodium}mg</p>
-                    </div>
-                    <div className={`w-4 h-4 rounded-full ${getTrafficLightColor(perServing.sodium, thresholds.sodium * 0.25)}`}></div>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 border border-border rounded-lg">
-                    <div>
-                      <span className="font-medium">Fat per serving</span>
-                      <p className="text-sm text-muted-foreground">{perServing.fat}g</p>
-                    </div>
-                    <div className={`w-4 h-4 rounded-full ${getTrafficLightColor(perServing.fat, thresholds.fat * 0.25)}`}></div>
-                  </div>
-                </div>
-
-                <div className="p-4 bg-muted/50 rounded-lg">
-                  <h4 className="font-medium mb-3">Traffic Light Guide</h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-success rounded-full"></div>
-                      <span>Green: Low - Healthier choice</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-warning rounded-full"></div>
-                      <span>Amber: Medium - Okay in moderation</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-destructive rounded-full"></div>
-                      <span>Red: High - Limit consumption</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="settings">
-          <Card className="dashboard-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Settings className="w-5 h-5" />
-                Custom Threshold Settings
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label htmlFor="enable-thresholds">Enable Custom Thresholds</Label>
-                  <p className="text-sm text-muted-foreground">Use custom limits for warnings</p>
-                </div>
-                <Switch
-                  id="enable-thresholds"
-                  checked={thresholds.enabled}
-                  onCheckedChange={(enabled) => setThresholds(prev => ({ ...prev, enabled }))}
-                />
-              </div>
-
-              {thresholds.enabled && (
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="sodium-threshold">Sodium Limit (mg/day)</Label>
-                    <Input
-                      id="sodium-threshold"
-                      type="number"
-                      value={thresholds.sodium}
-                      onChange={(e) => setThresholds(prev => ({ ...prev, sodium: parseInt(e.target.value) || 2300 }))}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="fat-threshold">Fat Limit (g/day)</Label>
-                    <Input
-                      id="fat-threshold"
-                      type="number"
-                      value={thresholds.fat}
-                      onChange={(e) => setThresholds(prev => ({ ...prev, fat: parseInt(e.target.value) || 65 }))}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="calories-threshold">Calorie Limit (kcal/day)</Label>
-                    <Input
-                      id="calories-threshold"
-                      type="number"
-                      value={thresholds.calories}
-                      onChange={(e) => setThresholds(prev => ({ ...prev, calories: parseInt(e.target.value) || 2000 }))}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="sugar-threshold">Sugar Limit (g/day)</Label>
-                    <Input
-                      id="sugar-threshold"
-                      type="number"
-                      value={thresholds.sugar}
-                      onChange={(e) => setThresholds(prev => ({ ...prev, sugar: parseInt(e.target.value) || 50 }))}
-                    />
-                  </div>
-                </div>
-              )}
-
-              <div className="p-4 bg-muted/50 rounded-lg">
-                <p className="text-sm text-muted-foreground">
-                  <strong>Note:</strong> These thresholds are based on general dietary guidelines. 
-                  Consult with nutrition professionals for personalized recommendations.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
     </div>
   )

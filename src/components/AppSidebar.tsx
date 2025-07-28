@@ -33,10 +33,11 @@ const mainItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Products", url: "/products", icon: Package },
   { title: "Add Product", url: "/products/new", icon: Plus },
-  { title: "Ingredients", url: "/ingredients", icon: ChefHat },
+
 ]
 
 const managementItems = [
+  { title: "Recipe Search", url: "/recipe-search", icon: ChefHat },
   { title: "Category Management", url: "/categories", icon: Tag },
   { title: "Nutrition Analysis", url: "/nutrition", icon: BarChart3 },
   { title: "Label Generator", url: "/labels", icon: FileText },

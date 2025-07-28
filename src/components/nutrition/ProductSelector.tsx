@@ -6,9 +6,11 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
-import { productsAPI } from "@/services/api"
+import { productsAPI, edamamAPI } from "@/services/api"
 import { Product, transformProductFromAPI } from "@/types/product"
+import { NutritionCheckResponse, NutritionLoadResponse } from "@/types/api"
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -21,7 +23,9 @@ import {
   Clock,
   BarChart3,
   ChevronsLeft,
-  ChevronsRight
+  ChevronsRight,
+  Database,
+  Eye
 } from "lucide-react"
 
 // Interface for product display in nutrition analysis
@@ -37,6 +41,9 @@ interface NutritionProduct {
   rating?: number;
   prep_time?: string;
   calories_per_serving?: number;
+  image?: string;
+  image_url?: string;
+  image_path?: string;
 }
 
 interface ProductSelectorProps {
@@ -54,7 +61,7 @@ export default function ProductSelector({
   selectedProduct, 
   ingredientQuery,
   onIngredientQueryChange,
-  isAnalyzing 
+  isAnalyzing
 }: ProductSelectorProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [currentPage, setCurrentPage] = useState(0)
@@ -63,37 +70,99 @@ export default function ProductSelector({
   const [totalPages, setTotalPages] = useState(0)
   const [totalProducts, setTotalProducts] = useState(0)
   const [productsPerPage, setProductsPerPage] = useState(5)
+  const [loadingNutritionData, setLoadingNutritionData] = useState(false)
+  const [showDataFoundDialog, setShowDataFoundDialog] = useState(false)
+  const [nutritionDataExists, setNutritionDataExists] = useState<boolean | null>(null)
+
   const { toast } = useToast()
 
   // Function to fetch products from API
   const fetchProducts = async (page: number = 0, search: string = "") => {
+    console.log('=== FETCHING PRODUCTS ===')
+    console.log('Search query:', search)
+    console.log('Current page:', page)
+    console.log('Products per page:', productsPerPage)
     setLoading(true)
     try {
-      const response = await productsAPI.getAll({
+      const response: any = await productsAPI.getAll({
         search: search || undefined,
-        status: 'published', // Only show published products for nutrition analysis
         page: page + 1, // API uses 1-based pagination
         per_page: productsPerPage
       })
       
+      console.log('=== PRODUCTS API RESPONSE ===')
+      console.log('Full response:', response)
+      console.log('Products data:', response)
+      console.log('Total products:', response.total)
+      
+      // Debug: Check each product for image data
+      if (response.data && response.data.length > 0) {
+        console.log('=== PRODUCT IMAGE DEBUG ===')
+        response.data.forEach((product: any, index: number) => {
+          console.log(`Product ${index + 1} (${product.name}):`, {
+            id: product.id,
+            name: product.name,
+            image: product.image,
+            image_url: product.image_url,
+            image_path: product.image_path,
+            status: product.status,
+            ingredient_notes: product.ingredient_notes
+          })
+        })
+      }
+      
       // Transform API products to NutritionProduct format
-      const transformedProducts: NutritionProduct[] = response.data.map((product: any) => ({
-        id: product.id,
-        name: product.name,
-        description: product.description,
-        category: product.category || { id: product.category_id, name: 'Unknown' },
-        status: product.status,
-        serving_size: product.serving_size,
-        serving_unit: product.serving_unit,
-        servings_per_container: product.servings_per_container,
-        rating: 4.5, // Default rating since not in API
-        prep_time: "0 min", // Default prep time
-        calories_per_serving: 120 // Default calories
-      }))
+      const transformedProducts: NutritionProduct[] = (response.data || []).map((product: any) => {
+        // Format creation time
+        let creationTime = "Unknown";
+        if (product.created_at) {
+          const createdDate = new Date(product.created_at);
+          const now = new Date();
+          const diffTime = Math.abs(now.getTime() - createdDate.getTime());
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          
+          if (diffDays === 1) {
+            creationTime = "1 day ago";
+          } else if (diffDays < 30) {
+            creationTime = `${diffDays} days ago`;
+          } else if (diffDays < 365) {
+            const months = Math.floor(diffDays / 30);
+            creationTime = months === 1 ? "1 month ago" : `${months} months ago`;
+          } else {
+            const years = Math.floor(diffDays / 365);
+            creationTime = years === 1 ? "1 year ago" : `${years} years ago`;
+          }
+        }
+        
+        return {
+          id: product.id,
+          name: product.name,
+          description: product.description,
+          category: product.category || { id: product.category_id, name: 'Unknown' },
+          status: product.status,
+          serving_size: product.serving_size,
+          serving_unit: product.serving_unit,
+          servings_per_container: product.servings_per_container,
+          rating: undefined, // Remove hardcoded rating since not available in backend
+          prep_time: creationTime, // Use actual creation time from API
+          calories_per_serving: undefined, // Remove calorie display
+          image: product.image,
+          image_url: product.image_url,
+          image_path: product.image_path
+        };
+      })
       
       setProducts(transformedProducts)
-      setTotalPages(response.data.last_page || 1)
-      setTotalProducts(response.data.total || transformedProducts.length)
+      setTotalPages(response.last_page || 1)
+      setTotalProducts(response.total || transformedProducts.length)
+      
+      console.log('ProductSelector - API Response:', {
+        total: response.total,
+        last_page: response.last_page,
+        current_page: response.current_page,
+        per_page: response.per_page,
+        data_length: response.data?.length
+      })
     } catch (error) {
       console.error('Error fetching products:', error)
       toast({
@@ -145,35 +214,144 @@ export default function ProductSelector({
     setCurrentPage(0) // Reset to first page when changing page size
   }
 
+
+
   const handleProductSelect = async (product: NutritionProduct) => {
     onProductSelect(product)
     
+    // Debug: Log the selected product
+    console.log('=== PRODUCT SELECTION DEBUG ===')
+    console.log('Selected product:', product)
+    console.log('Product ID:', product.id)
+    console.log('Product name:', product.name)
+    
     // Try to fetch real ingredient data from the product
     try {
-      const productDetails = await productsAPI.getById(product.id)
+      const productDetails: any = await productsAPI.getById(product.id)
+      console.log('=== PRODUCT DETAILS API RESPONSE ===')
+      console.log('Full API response:', productDetails)
+      console.log('Product data:', productDetails)
       
-      // Check if product has ingredient notes or ingredients
-      let ingredientText = ""
-      
-      if (productDetails.data && productDetails.data.ingredient_notes) {
-        ingredientText = productDetails.data.ingredient_notes
-      } else if (productDetails.data && productDetails.data.ingredients && productDetails.data.ingredients.length > 0) {
-        // Format ingredients list
-        ingredientText = productDetails.data.ingredients.map((ing: any) => {
-          const quantity = ing.quantity ? `${ing.quantity}${ing.unit || ''}` : ''
-          return quantity ? `${ing.name} ${quantity}` : ing.name
-        }).join(', ')
-      } else {
-        // Fallback to basic product info
-        ingredientText = `${product.name} - ${product.serving_size}${product.serving_unit} per serving`
+      // Debug: Check all possible ingredient-related fields
+      if (productDetails) {
+        console.log('=== INGREDIENT DATA CHECK ===')
+        console.log('ingredient_notes:', productDetails.ingredient_notes)
+        console.log('ingredients array:', productDetails.ingredients)
+        console.log('ingredients length:', productDetails.ingredients ? productDetails.ingredients.length : 'undefined')
+        console.log('All product fields:', Object.keys(productDetails))
+        
+        // Check for any serving-related data that might be interfering
+        console.log('=== SERVING DATA CHECK ===')
+        console.log('serving_size:', productDetails.serving_size)
+        console.log('serving_unit:', productDetails.serving_unit)
+        console.log('nutritional_data:', productDetails.nutritional_data)
       }
       
+      // Check if product has ingredients array or ingredient notes
+      let ingredientText = ""
+      
+      if (productDetails.ingredients && productDetails.ingredients.length > 0) {
+        // Priority 1: Format ingredients array if available - Updated format for Edamam API
+        ingredientText = productDetails.ingredients.map((ing: any) => {
+          console.log('Processing ingredient:', ing)
+          // Check if ingredient has pivot data (from many-to-many relationship)
+          const pivotData = ing.pivot || {}
+          const quantity = pivotData.amount || ing.quantity || ''
+          const unit = pivotData.unit || ing.unit || ''
+          const displayQuantity = quantity ? `${quantity}${unit}` : ''
+          // Format: "ingredient quantity" (e.g., "lemon 1.10g") instead of "ingredient (quantity)"
+          return displayQuantity ? `${ing.name} ${displayQuantity}` : ing.name
+        }).join('\n') // Use newlines instead of commas for better readability
+        console.log('✅ Using formatted ingredients array:', ingredientText)
+      } else if (productDetails.ingredient_notes && productDetails.ingredient_notes.trim()) {
+        // Priority 2: Use ingredient notes as fallback
+        ingredientText = productDetails.ingredient_notes
+        console.log('✅ Using ingredient notes as fallback:', ingredientText)
+      } else {
+        // Priority 3: Request user to add ingredient information
+        ingredientText = `Please add ingredient information for ${product.name}.\n\nExample format:\nflour 200g\nsugar 150g\neggs 2\nmilk 250ml\nbutter 100g\nvanilla extract 5ml`
+        console.log('❌ No ingredient data found, using placeholder')
+        console.log('Reason: ingredients array empty or null, ingredient_notes empty or null')
+      }
+      
+      console.log('=== FINAL INGREDIENT TEXT ===')
+      console.log('Setting ingredient text:', ingredientText)
       onIngredientQueryChange(ingredientText || "No ingredient information available for this product")
     } catch (error) {
-      console.error('Error fetching product details:', error)
+      console.error('❌ Error fetching product details:', error)
       // Fallback ingredient text
-      onIngredientQueryChange(`${product.name} - ${product.serving_size}${product.serving_unit} per serving`)
+      onIngredientQueryChange(`Please add ingredient information for ${product.name}.\n\nExample format:\nflour 200g\nsugar 150g\neggs 2\nmilk 250ml\nbutter 100g\nvanilla extract 5ml`)
     }
+    
+    // Check if nutrition data exists for this product
+    checkNutritionDataExists(product.id)
+  }
+
+  const checkNutritionDataExists = async (productId: string) => {
+    try {
+      const response = await edamamAPI.nutrition.checkNutritionData(productId) as unknown as NutritionCheckResponse
+      // Fix: Due to axios interceptor, exists field is at response.exists, not response.data.exists
+      setNutritionDataExists(response.exists)
+    } catch (error) {
+      console.error('Error checking nutrition data:', error)
+      setNutritionDataExists(false)
+    }
+  }
+
+  const handleLoadData = async () => {
+    if (!selectedProduct) return
+    
+    setLoadingNutritionData(true)
+    try {
+      const response = await edamamAPI.nutrition.checkNutritionData(selectedProduct.id) as unknown as NutritionCheckResponse
+      
+      // Debug logging to see the actual response structure
+      console.log('[PRODUCT_SELECTOR] Full API response:', response)
+      console.log('[PRODUCT_SELECTOR] Response exists field:', response.exists)
+      console.log('[PRODUCT_SELECTOR] Response exists type:', typeof response.exists)
+      
+      // Fix: Due to axios interceptor returning response.data, the exists field is at response.exists
+      // The interceptor extracts the data from {success: true, exists: true, data: {...}} 
+      // So response.exists contains the exists field, not response.data.exists
+      if (response.exists) {
+        setShowDataFoundDialog(true)
+      } else {
+        toast({
+          title: "No Data Found",
+          description: "No nutrition data found for this product in the database.",
+          variant: "destructive"
+        })
+      }
+    } catch (error) {
+      console.error('Error checking nutrition data:', error)
+      toast({
+        title: "Error",
+        description: "Failed to check nutrition data. Please try again.",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingNutritionData(false)
+    }
+  }
+
+  const handleViewNutritionData = async () => {
+    if (!selectedProduct) return
+    
+    try {
+      // Navigate to nutrition page with URL parameters for loading existing data
+      // The NutritionAnalysis component will detect these parameters and load the data
+      window.location.href = `/nutrition?productId=${selectedProduct.id}&loadData=true`
+      
+    } catch (error) {
+      console.error('Error navigating to nutrition data:', error)
+      toast({
+        title: "Error",
+        description: "Failed to navigate to nutrition data. Please try again.",
+        variant: "destructive"
+      })
+    }
+    
+    setShowDataFoundDialog(false)
   }
 
   return (
@@ -319,11 +497,30 @@ export default function ProductSelector({
                   }`}
                   onClick={() => handleProductSelect(product)}
                 >
-                  <div className="flex items-start gap-4">
-                    {/* Product Image Placeholder */}
-                    <div className="w-20 h-20 rounded-lg bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 flex items-center justify-center flex-shrink-0">
-                      <Package2 className="w-8 h-8 text-primary/60" />
+                  {/* Selection Indicator - Top Left */}
+                  {selectedProduct?.id === product.id && (
+                    <div className="absolute top-2 left-2 w-5 h-5 rounded-full bg-primary flex items-center justify-center z-10">
+                      <Check className="w-3 h-3 text-primary-foreground" />
                     </div>
+                  )}
+                  
+                  <div className="flex items-start gap-4">
+                    {/* Product Image */}
+                     <div className="w-20 h-20 rounded-lg bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                       {product.image_url || product.image ? (
+                         <img 
+                           src={product.image_url || product.image} 
+                           alt={product.name}
+                           className="w-full h-full object-cover"
+                           onError={(e) => {
+                             // Fallback to placeholder on image load error
+                             e.currentTarget.style.display = 'none'
+                             e.currentTarget.nextElementSibling?.classList.remove('hidden')
+                           }}
+                         />
+                       ) : null}
+                       <Package2 className={`w-8 h-8 text-primary/60 ${product.image_url || product.image ? 'hidden' : ''}`} />
+                     </div>
                     
                     {/* Product Details */}
                     <div className="flex-1 min-w-0">
@@ -339,17 +536,15 @@ export default function ProductSelector({
                           {/* Product Stats */}
                           <div className="flex items-center gap-4 text-xs text-muted-foreground mb-3">
                             <div className="flex items-center gap-1">
-                              <BarChart3 className="w-3 h-3" />
-                              {product.calories_per_serving} cal
-                            </div>
-                            <div className="flex items-center gap-1">
                               <Clock className="w-3 h-3" />
-                              {product.prep_time}
+                              Created {product.prep_time}
                             </div>
-                            <div className="flex items-center gap-1">
-                              <Star className="w-3 h-3 fill-current text-yellow-500" />
-                              {product.rating}
-                            </div>
+                            {product.rating && (
+                              <div className="flex items-center gap-1">
+                                <Star className="w-3 h-3 fill-current text-yellow-500" />
+                                {product.rating}
+                              </div>
+                            )}
                           </div>
 
                           {/* Badges */}
@@ -369,12 +564,34 @@ export default function ProductSelector({
                           </div>
                         </div>
                         
-                        {/* Selection Indicator */}
-                        {selectedProduct?.id === product.id && (
-                          <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-                            <Check className="w-4 h-4 text-primary-foreground" />
-                          </div>
-                        )}
+                        {/* Action Buttons */}
+                        <div className="flex items-center justify-center min-h-[120px] ml-4">
+                          {/* Load Data Button - Only show when product is selected */}
+                          {selectedProduct?.id === product.id && (
+                            <Button
+                              variant="outline"
+                              size="default"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleLoadData()
+                              }}
+                              disabled={loadingNutritionData}
+                              className="h-11 px-6 font-semibold text-sm bg-gradient-to-r from-primary/5 to-primary/10 border-primary/30 hover:border-primary hover:bg-gradient-to-r hover:from-primary/10 hover:to-primary/20 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95"
+                            >
+                              {loadingNutritionData ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                                  <span>Loading...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Database className="w-4 h-4 mr-2" />
+                                  <span>Load Data</span>
+                                </>
+                              )}
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -451,6 +668,37 @@ export default function ProductSelector({
           )}
         </CardContent>
       </Card>
+
+      {/* Data Found Dialog */}
+      <Dialog open={showDataFoundDialog} onOpenChange={setShowDataFoundDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Database className="w-5 h-5 text-green-600" />
+              Data Found in Database
+            </DialogTitle>
+            <DialogDescription>
+              Nutrition data for <strong>{selectedProduct?.name}</strong> was found in the database.
+              Would you like to view the existing nutritional analysis?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowDataFoundDialog(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleViewNutritionData}
+              className="flex items-center gap-2"
+            >
+              <Eye className="w-4 h-4" />
+              View
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

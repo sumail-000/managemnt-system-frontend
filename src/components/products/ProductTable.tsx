@@ -9,7 +9,8 @@ import {
   Eye,
   ArrowUpDown,
   Clock,
-  Tag
+  Tag,
+  Heart
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -75,6 +76,33 @@ export function ProductTable({
       toast({
         title: "Error",
         description: error.response?.data?.message || "Failed to toggle pin status",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingProducts(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(productId)
+        return newSet
+      })
+    }
+  }
+
+  const handleFavorite = async (productId: string, isFavorite: boolean) => {
+    if (loadingProducts.has(productId)) return
+    
+    setLoadingProducts(prev => new Set(prev).add(productId))
+    try {
+      await productsAPI.toggleFavorite(productId)
+      toast({
+        title: isFavorite ? "Removed from favorites" : "Added to favorites",
+        description: "Favorite status updated successfully."
+      })
+      onRefresh?.()
+    } catch (error: any) {
+      console.error('Error toggling favorite:', error)
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to toggle favorite status",
         variant: "destructive"
       })
     } finally {
@@ -214,12 +242,18 @@ export function ProductTable({
                 {/* Product Info */}
                 <div className="col-span-5 lg:col-span-4">
                   <div className="flex items-center space-x-4">
-                    {/* Pin Icon */}
-                    <div className="w-5 flex-shrink-0">
+                    {/* Pin and Favorite Icons */}
+                    <div className="w-10 flex-shrink-0 flex items-center gap-1">
                       {product.isPinned && (
                         <div className="relative">
                           <Pin className="h-4 w-4 text-primary fill-current animate-pulse" />
                           <div className="absolute inset-0 h-4 w-4 text-primary/20 fill-current animate-ping" />
+                        </div>
+                      )}
+                      {product.isFavorite && (
+                        <div className="relative">
+                          <Heart className="h-4 w-4 text-red-500 fill-current animate-pulse" />
+                          <div className="absolute inset-0 h-4 w-4 text-red-500/20 fill-current animate-ping" />
                         </div>
                       )}
                     </div>
@@ -406,6 +440,14 @@ export function ProductTable({
                         >
                           <Pin className="h-4 w-4 mr-3 text-primary" />
                           {product.isPinned ? "Unpin" : "Pin"} Product
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={() => handleFavorite(product.id, product.isFavorite)} 
+                          disabled={loadingProducts.has(product.id)}
+                          className="hover:bg-primary/10"
+                        >
+                          <Heart className={`h-4 w-4 mr-3 ${product.isFavorite ? 'text-red-500 fill-current' : 'text-primary'}`} />
+                          {product.isFavorite ? "Remove from" : "Add to"} Favorites
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <AlertDialog>

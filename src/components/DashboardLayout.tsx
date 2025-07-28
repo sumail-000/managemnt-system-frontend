@@ -15,6 +15,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext"
 import { useToast } from "@/hooks/use-toast"
 import { logService } from "@/services/logService"
+import { getAvatarUrl } from "@/utils/storage"
 
 interface DashboardLayoutProps {
   children: ReactNode
@@ -114,9 +115,20 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                     <div className="w-8 h-8 rounded-full overflow-hidden bg-slate-600 flex items-center justify-center">
                       {user?.avatar ? (
                         <img 
-                          src={user.avatar} 
+                          src={getAvatarUrl(user.avatar)} 
                           alt={user.name || 'User'} 
                           className="w-full h-full object-cover"
+                          onError={(e) => {
+                            console.error('Header avatar image failed to load:', {
+                              src: e.currentTarget.src,
+                              userAvatar: user?.avatar
+                            });
+                          }}
+                          onLoad={() => {
+                            console.log('Header avatar image loaded successfully:', {
+                              src: getAvatarUrl(user.avatar)
+                            });
+                          }}
                         />
                       ) : (
                         <User className="h-4 w-4 text-slate-200" />
@@ -127,13 +139,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 <DropdownMenuContent align="end" className="w-56">
                   <DropdownMenuLabel>My Account</DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => window.location.href = '/settings'}>
                     <UserCircle className="mr-2 h-4 w-4" />
                     <span>Profile</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <Settings className="mr-2 h-4 w-4" />
-                    <span>Settings</span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem 

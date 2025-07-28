@@ -39,34 +39,8 @@ interface TrashedProduct {
   thumbnail?: string
 }
 
-// Mock trashed products
-const mockTrashedProducts: TrashedProduct[] = [
-  {
-    id: "trash-1",
-    name: "Expired Milk Product",
-    description: "Old dairy product that was removed",
-    category: "Dairy",
-    deletedAt: new Date("2024-01-18"),
-    deletedBy: "John Doe",
-    thumbnail: "https://images.unsplash.com/photo-1563636619-e9143da7973b?w=300&h=200&fit=crop"
-  },
-  {
-    id: "trash-2",
-    name: "Discontinued Snack",
-    description: "Snack product that's no longer available",
-    category: "Snacks",
-    deletedAt: new Date("2024-01-15"),
-    deletedBy: "Jane Smith"
-  },
-  {
-    id: "trash-3",
-    name: "Test Product",
-    description: "Product created for testing purposes",
-    category: "Other",
-    deletedAt: new Date("2024-01-10"),
-    deletedBy: "Admin"
-  }
-]
+// Mock trashed products - NULLED: Using real API data instead
+const mockTrashedProducts: TrashedProduct[] = []
 
 export default function ProductTrash() {
   const { toast } = useToast()

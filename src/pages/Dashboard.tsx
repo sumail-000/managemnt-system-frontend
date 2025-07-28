@@ -14,17 +14,22 @@ import {
   CheckCircle,
   Star,
   Crown,
-  Info
+  Info,
+  Zap,
+  ArrowUpRight
 } from "lucide-react"
 import { Link } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
 import { productsAPI } from "@/services/api"
 import { Product } from "@/types/product"
+import { ProductSelector } from "@/components/ProductSelector"
+import { ComplianceFeedback } from "@/components/ComplianceFeedback"
 
 export default function Dashboard() {
   const { user, usage, usagePercentages: usage_percentages, trialInfo: trial_info, subscriptionDetails: subscription_details } = useAuth()
   const [recentProducts, setRecentProducts] = useState<Product[]>([])
   const [isLoadingProducts, setIsLoadingProducts] = useState(true)
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   
   // Debug logging
   console.log('[DASHBOARD] Debug data:', {
@@ -203,127 +208,175 @@ export default function Dashboard() {
 
       {/* Scrollable Content */}
       <div className="space-y-6 p-6">
-        {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* Enhanced Stats Cards */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat, index) => (
-          <Card key={index} className="dashboard-card">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
-              <stat.icon className={`h-4 w-4 ${stat.color}`} />
+          <Card key={index} className="group relative overflow-hidden border-0 bg-gradient-to-br from-card via-card to-card/50 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground group-hover:text-foreground transition-colors">
+                {stat.title}
+              </CardTitle>
+              <div className="p-2 rounded-lg bg-gradient-to-br from-background/50 to-background/30 group-hover:from-primary/10 group-hover:to-accent/10 transition-all duration-300">
+                <stat.icon className={`h-5 w-5 ${stat.color} group-hover:scale-110 transition-transform duration-300`} />
+              </div>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stat.value}</div>
-              <p className="text-xs text-muted-foreground">
-                <span className="text-success">{stat.change}</span> from last month
-              </p>
+            <CardContent className="relative">
+              <div className="text-3xl font-bold text-foreground mb-2 group-hover:text-primary transition-colors">
+                {stat.value}
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="flex items-center text-xs">
+                  <TrendingUp className="h-3 w-3 text-success mr-1" />
+                  <span className="text-success font-medium">{stat.change.split(' ')[0]}</span>
+                </div>
+                <span className="text-xs text-muted-foreground">from last month</span>
+              </div>
+              <div className="mt-3 h-1 bg-muted rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-to-r from-primary to-accent transition-all duration-1000 ease-out"
+                  style={{ width: `${Math.min(100, (parseInt(stat.value.replace(/[^0-9]/g, '')) / 1000) * 100)}%` }}
+                />
+              </div>
             </CardContent>
           </Card>
         ))}
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {/* Quick Actions */}
-        <Card className="dashboard-card">
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
+        {/* Enhanced Quick Actions */}
+        <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/80 shadow-lg hover:shadow-xl transition-all duration-300">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-accent/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+          <CardHeader className="relative border-b border-border/50">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-primary/10 to-accent/10">
+                <Zap className="w-5 h-5 text-primary" />
+              </div>
+              Quick Actions
+            </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-3">
-            <Button variant="outline" className="justify-start" asChild>
+          <CardContent className="relative grid gap-3 pt-6">
+            <Button variant="outline" className="group/btn justify-start h-12 border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-all duration-200" asChild>
               <Link to="/products/new">
-                <Plus className="w-4 h-4 mr-2" />
+                <div className="p-1.5 rounded-md bg-gradient-to-br from-green-100 to-green-50 mr-3 group-hover/btn:from-green-200 group-hover/btn:to-green-100 transition-all">
+                  <Plus className="w-4 h-4 text-green-600" />
+                </div>
                 Create New Product
               </Link>
             </Button>
             <Button 
               variant="outline" 
-              className="justify-start" 
+              className="group/btn justify-start h-12 border-border/50 hover:border-accent/50 hover:bg-accent/5 transition-all duration-200" 
               asChild
               disabled={membershipInfo.name === 'Basic'}
             >
               <Link to="/nutrition">
-                <BarChart3 className="w-4 h-4 mr-2" />
+                <div className="p-1.5 rounded-md bg-gradient-to-br from-blue-100 to-blue-50 mr-3 group-hover/btn:from-blue-200 group-hover/btn:to-blue-100 transition-all">
+                  <BarChart3 className="w-4 h-4 text-blue-600" />
+                </div>
                 Analyze Nutrition
                 {membershipInfo.name === 'Basic' && (
-                  <Badge variant="secondary" className="ml-auto">Pro+</Badge>
+                  <Badge variant="secondary" className="ml-auto bg-gradient-to-r from-amber-100 to-amber-50 text-amber-700">Pro+</Badge>
                 )}
               </Link>
             </Button>
-            <Button variant="outline" className="justify-start" asChild>
+            <Button variant="outline" className="group/btn justify-start h-12 border-border/50 hover:border-purple-400/50 hover:bg-purple-400/5 transition-all duration-200" asChild>
               <Link to="/labels">
-                <FileText className="w-4 h-4 mr-2" />
+                <div className="p-1.5 rounded-md bg-gradient-to-br from-purple-100 to-purple-50 mr-3 group-hover/btn:from-purple-200 group-hover/btn:to-purple-100 transition-all">
+                  <FileText className="w-4 h-4 text-purple-600" />
+                </div>
                 Generate Label
               </Link>
             </Button>
             <Button 
               variant="outline" 
-              className="justify-start" 
+              className="group/btn justify-start h-12 border-border/50 hover:border-orange-400/50 hover:bg-orange-400/5 transition-all duration-200" 
               asChild
               disabled={membershipInfo.name === 'Basic'}
             >
               <Link to="/qr-codes">
-                <QrCode className="w-4 h-4 mr-2" />
+                <div className="p-1.5 rounded-md bg-gradient-to-br from-orange-100 to-orange-50 mr-3 group-hover/btn:from-orange-200 group-hover/btn:to-orange-100 transition-all">
+                  <QrCode className="w-4 h-4 text-orange-600" />
+                </div>
                 Create QR Code
                 {membershipInfo.name === 'Basic' && (
-                  <Badge variant="secondary" className="ml-auto">Pro+</Badge>
+                  <Badge variant="secondary" className="ml-auto bg-gradient-to-r from-amber-100 to-amber-50 text-amber-700">Pro+</Badge>
                 )}
               </Link>
             </Button>
           </CardContent>
         </Card>
 
-        {/* Recent Products */}
-        <Card className="dashboard-card">
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2 justify-center">
-              <Package className="w-5 h-5" />
+        {/* Enhanced Recent Products */}
+        <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/80 shadow-lg hover:shadow-xl transition-all duration-300">
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+          <CardHeader className="relative border-b border-border/50">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/20 dark:to-indigo-900/20">
+                <Package className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              </div>
               Recent Products
             </CardTitle>
           </CardHeader>
-          <CardContent className="relative">
+          <CardContent className="relative pt-6">
             <div className="space-y-3 min-h-[200px]">
               {isLoadingProducts ? (
                 <div className="space-y-3">
                   {[1, 2].map((i) => (
-                    <div key={i} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                    <div key={i} className="group/item flex items-center justify-between p-4 bg-gradient-to-r from-muted/30 to-muted/50 rounded-xl border border-border/30">
                       <div className="space-y-2">
-                        <div className="h-4 bg-muted rounded w-32 animate-pulse"></div>
-                        <div className="h-3 bg-muted rounded w-24 animate-pulse"></div>
+                        <div className="h-4 bg-gradient-to-r from-muted to-muted/70 rounded-md w-32 animate-pulse"></div>
+                        <div className="h-3 bg-gradient-to-r from-muted to-muted/70 rounded-md w-24 animate-pulse"></div>
                       </div>
-                      <div className="h-6 bg-muted rounded w-16 animate-pulse"></div>
+                      <div className="h-6 bg-gradient-to-r from-muted to-muted/70 rounded-full w-16 animate-pulse"></div>
                     </div>
                   ))}
                 </div>
               ) : recentProducts.length > 0 ? (
                 recentProducts.map((product) => (
-                  <div key={product.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                    <div>
+                  <div key={product.id} className="group/item flex items-center justify-between p-4 bg-gradient-to-r from-background/50 to-background/30 rounded-xl border border-border/30 hover:border-primary/30 hover:bg-primary/5 transition-all duration-300 hover:scale-[1.02]">
+                    <div className="flex-1">
                       <Link 
                         to={`/products/${product.id}`}
-                        className="font-medium text-sm hover:text-primary transition-colors"
+                        className="font-semibold text-sm text-foreground hover:text-primary transition-colors duration-200 block"
                       >
                         {product.name}
                       </Link>
-                      <p className="text-xs text-muted-foreground">
-                        {product.category?.name || 'No Category'} • {formatDate(product.updated_at)}
-                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/20">
+                          {product.category?.name || 'No Category'}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">•</span>
+                        <span className="text-xs text-muted-foreground">{formatDate(product.updated_at)}</span>
+                      </div>
                     </div>
                     <Badge 
                       variant={product.status === "published" ? "default" : "secondary"}
-                      className="text-xs"
+                      className={`text-xs ${product.status === "published" 
+                        ? "bg-gradient-to-r from-green-500 to-emerald-500 text-white border-0" 
+                        : "bg-gradient-to-r from-amber-100 to-orange-100 text-amber-700 border-amber-200"
+                      }`}
                     >
-                      {product.status === "published" ? "Published" : "Draft"}
+                      {product.status === "published" ? "✓ Published" : "⏳ Draft"}
                     </Badge>
                   </div>
                 ))
               ) : (
                 <div className="flex items-center justify-center h-full py-8">
                   <div className="text-center">
-                    <Package className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                    <h4 className="font-medium text-foreground mb-2">No products available</h4>
-                    <p className="text-sm text-muted-foreground mb-4">
+                    <div className="relative">
+                      <div className="w-16 h-16 bg-gradient-to-br from-muted/20 to-muted/40 rounded-full mx-auto mb-4 flex items-center justify-center">
+                        <Package className="w-8 h-8 text-muted-foreground" />
+                      </div>
+                      <div className="absolute -top-1 -right-1 w-6 h-6 bg-gradient-to-br from-primary to-accent rounded-full flex items-center justify-center">
+                        <Plus className="w-3 h-3 text-white" />
+                      </div>
+                    </div>
+                    <h4 className="font-semibold text-foreground mb-2">No products available</h4>
+                    <p className="text-sm text-muted-foreground mb-4 max-w-sm">
                       You haven't created any products yet. Start by adding your first product to begin managing your inventory.
                     </p>
-                    <Button size="sm" asChild>
+                    <Button size="sm" className="bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 text-white border-0" asChild>
                       <Link to="/products/new">
                         <Plus className="w-4 h-4 mr-2" />
                         Create Your First Product
@@ -333,34 +386,53 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
-            {/* View All Products button positioned at bottom center */}
-            <div className="flex justify-center mt-4">
-              <Button variant="outline" size="sm" className="w-full" asChild>
-                <Link to="/products">View All Products</Link>
+            {/* Enhanced View All Products button */}
+            <div className="flex justify-center mt-6 pt-4 border-t border-border/30">
+              <Button variant="outline" size="sm" className="w-full bg-gradient-to-r from-background to-background/80 hover:from-primary/5 hover:to-accent/5 border-border/50 hover:border-primary/30 transition-all duration-300" asChild>
+                <Link to="/products" className="flex items-center gap-2">
+                  <Package className="w-4 h-4" />
+                  View All Products
+                  <ArrowUpRight className="w-3 h-3" />
+                </Link>
               </Button>
             </div>
           </CardContent>
         </Card>
 
-        {/* Alerts & Notifications */}
-        <Card className="dashboard-card">
-          <CardHeader>
-            <CardTitle>Alerts & Notifications</CardTitle>
+        {/* Enhanced Alerts & Notifications */}
+        <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/80 shadow-lg hover:shadow-xl transition-all duration-300">
+          <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-orange-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+          <CardHeader className="relative border-b border-border/50">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-900/20 dark:to-orange-900/20">
+                <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              Alerts & Notifications
+            </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="relative pt-6">
             <div className="space-y-3">
               {alerts.map((alert, index) => (
-                <div key={index} className="p-3 rounded-lg border border-border">
-                  <div className="flex items-start space-x-2">
-                    {alert.type === "warning" ? (
-                      <AlertTriangle className="w-4 h-4 text-warning mt-0.5" />
-                    ) : (
-                      <CheckCircle className="w-4 h-4 text-primary mt-0.5" />
-                    )}
+                <div key={index} className="group/alert p-4 rounded-xl border border-border/30 bg-gradient-to-r from-background/50 to-background/30 hover:border-primary/30 hover:bg-primary/5 transition-all duration-300 hover:scale-[1.02]">
+                  <div className="flex items-start space-x-3">
+                    <div className={`p-2 rounded-lg ${alert.type === "warning" 
+                      ? "bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-900/20 dark:to-orange-900/20" 
+                      : "bg-gradient-to-br from-green-100 to-emerald-100 dark:from-green-900/20 dark:to-emerald-900/20"
+                    }`}>
+                      {alert.type === "warning" ? (
+                        <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                      ) : (
+                        <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+                      )}
+                    </div>
                     <div className="flex-1">
-                      <p className="text-sm">{alert.message}</p>
-                      <Button variant="link" size="sm" className="p-0 h-auto">
-                        {alert.action}
+                      <p className="text-sm font-medium text-foreground mb-2">{alert.message}</p>
+                      <Button 
+                        variant="link" 
+                        size="sm" 
+                        className="p-0 h-auto text-primary hover:text-accent transition-colors duration-200 font-medium"
+                      >
+                        {alert.action} →
                       </Button>
                     </div>
                   </div>
@@ -371,20 +443,59 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Membership Status */}
-      <Card className="dashboard-card">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Star className="w-5 h-5 text-accent" />
+      {/* Compliance Feedback Section */}
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-foreground">Compliance Feedback</h2>
+            <p className="text-muted-foreground">
+              Select a product to view detailed nutritional compliance metrics and analysis.
+            </p>
+          </div>
+        </div>
+        
+        {/* Product Selection */}
+        <ProductSelector 
+          onProductSelect={setSelectedProduct}
+          selectedProductId={selectedProduct?.id}
+        />
+        
+        {/* Compliance Metrics */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-foreground">Key Nutrition Metrics</h3>
+          <ComplianceFeedback product={selectedProduct} />
+        </div>
+      </div>
+
+      {/* Enhanced Membership Status */}
+      <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/80 shadow-lg hover:shadow-xl transition-all duration-300">
+        <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 via-blue-500/5 to-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+        <CardHeader className="relative border-b border-border/50">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <div className="p-2 rounded-lg bg-gradient-to-br from-purple-100 via-blue-100 to-indigo-100 dark:from-purple-900/20 dark:via-blue-900/20 dark:to-indigo-900/20">
+              <Crown className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+            </div>
             Membership Status
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between">
+        <CardContent className="relative pt-6">
+          <div className="flex items-center justify-between mb-6">
             <div>
-              <h3 className="font-semibold">{membershipInfo.name} Membership</h3>
+              <div className="flex items-center gap-3 mb-2">
+                <h3 className="font-bold text-xl text-foreground">{membershipInfo.name}</h3>
+                <Badge className={`${membershipInfo.name === 'Basic' 
+                  ? 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-700 border-gray-300' 
+                  : membershipInfo.name === 'Pro'
+                  ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white border-0'
+                  : 'bg-gradient-to-r from-purple-500 via-pink-500 to-indigo-500 text-white border-0'
+                }`}>
+                  {membershipInfo.name === 'Enterprise' ? '✨ Enterprise' : membershipInfo.name}
+                </Badge>
+              </div>
               <p className="text-sm text-muted-foreground">
-              {currentUsage.products}/{usage?.products?.unlimited ? '∞' : membershipInfo.product_limit} products used this month
+              <span className="font-medium text-foreground">{currentUsage.products}</span>
+              <span className="text-muted-foreground">/{usage?.products?.unlimited ? '∞' : membershipInfo.product_limit}</span>
+              <span className="text-muted-foreground"> products used this month</span>
               {(() => {
                 // Show trial info if user is on trial (any plan)
                 if (trial_info && trial_info.remaining_days !== undefined) {
@@ -406,25 +517,43 @@ export default function Dashboard() {
               })()}
             </p>
             </div>
-            <Button variant="outline" asChild>
-              <Link to="/billing">Manage Plan</Link>
+            <Button variant="outline" className="bg-gradient-to-r from-background to-background/80 hover:from-primary/5 hover:to-accent/5 border-border/50 hover:border-primary/30 transition-all duration-300" asChild>
+              <Link to="/billing" className="flex items-center gap-2">
+                <Star className="w-4 h-4" />
+                Manage Plan
+              </Link>
             </Button>
           </div>
-          <div className="mt-4 bg-muted rounded-full h-2">
-            <div 
-              className="bg-gradient-primary h-2 rounded-full" 
-              style={{ 
-                width: usage?.products?.unlimited 
-                  ? "100%" 
-                  : `${usage_percentages?.products || 0}%` 
-              }} 
-            />
+          <div className="space-y-3">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Usage Progress</span>
+              <span className="font-medium text-foreground">
+                {usage?.products?.unlimited ? '100%' : `${Math.round(usage_percentages?.products || 0)}%`}
+              </span>
+            </div>
+            <div className="relative h-3 bg-muted rounded-full overflow-hidden">
+              <div 
+                className="absolute inset-0 bg-gradient-to-r from-primary via-accent to-purple-500 rounded-full transition-all duration-1000 ease-out" 
+                style={{ 
+                  width: usage?.products?.unlimited 
+                    ? "100%" 
+                    : `${usage_percentages?.products || 0}%` 
+                }} 
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent rounded-full" />
+            </div>
           </div>
           {membershipInfo.name === 'Basic' && (
-            <div className="mt-4 p-3 bg-muted/50 rounded-lg">
-              <p className="text-sm text-muted-foreground">
-                Upgrade to Pro for advanced features!
-              </p>
+            <div className="mt-6 p-4 bg-gradient-to-r from-primary/5 via-accent/5 to-purple-500/5 rounded-xl border border-primary/20">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-gradient-to-br from-primary/10 to-accent/10">
+                  <TrendingUp className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-medium text-foreground">Upgrade to unlock more!</p>
+                  <p className="text-sm text-muted-foreground">Get unlimited products, advanced analytics, and priority support.</p>
+                </div>
+              </div>
             </div>
           )}
         </CardContent>

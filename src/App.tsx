@@ -10,7 +10,7 @@ import ProductForm from "./pages/ProductForm";
 import ProductDetail from "./pages/ProductDetail";
 import ProductTrash from "./pages/ProductTrash";
 import PublicProductView from "./pages/PublicProductView";
-import Ingredients from "./pages/Ingredients";
+
 import CategoryManagement from "./pages/CategoryManagement";
 import NutritionAnalysis from "./pages/NutritionAnalysis";
 import LabelGeneratorPage from "./pages/LabelGenerator";
@@ -23,7 +23,21 @@ import NotFound from "./pages/NotFound";
 import QRCodes from "./pages/QRCodes";
 import Favorites from "./pages/Favorites";
 import Settings from "./pages/Settings";
+import RecipeSearch from "./pages/RecipeSearch";
 import { PaymentForm } from "./components/payment/PaymentForm";
+
+// Admin Panel Components
+import AdminPanel from "./pages/AdminPanel";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminUsers from "./pages/admin/AdminUsers";
+import AdminProducts from "./pages/admin/AdminProducts";
+import AdminAnalytics from "./pages/admin/AdminAnalytics";
+import AdminReports from "./pages/admin/AdminReports";
+import AdminSupport from "./pages/admin/AdminSupport";
+import AdminProfile from "./pages/admin/AdminProfile";
+import AdminSettings from "./pages/admin/AdminSettings";
+import AdminNotifications from "./pages/admin/AdminNotifications";
+import AdminMaintenance from "./pages/admin/AdminMaintenance";
 
 const App = () => {
   console.log('[App] Application initialized');
@@ -91,13 +105,7 @@ const App = () => {
         </ProtectedRoute>
       } />
       
-      <Route path="/ingredients" element={
-        <ProtectedRoute>
-          <DashboardLayout>
-            <Ingredients />
-          </DashboardLayout>
-        </ProtectedRoute>
-      } />
+
       
       <Route path="/categories" element={
         <ProtectedRoute>
@@ -131,6 +139,14 @@ const App = () => {
         </ProtectedRoute>
       } />
       
+      <Route path="/recipe-search" element={
+        <ProtectedRoute>
+          <DashboardLayout>
+            <RecipeSearch />
+          </DashboardLayout>
+        </ProtectedRoute>
+      } />
+      
       <Route path="/favorites" element={
         <ProtectedRoute>
           <DashboardLayout>
@@ -154,6 +170,20 @@ const App = () => {
           </DashboardLayout>
         </ProtectedRoute>
       } />
+      
+      {/* Admin Panel Routes */}
+      <Route path="/admin-panel" element={<AdminPanel />}>
+        <Route index element={<AdminDashboard />} />
+        <Route path="users" element={<AdminUsers />} />
+        <Route path="products" element={<AdminProducts />} />
+        <Route path="analytics" element={<AdminAnalytics />} />
+        <Route path="reports" element={<AdminReports />} />
+        <Route path="support" element={<AdminSupport />} />
+        <Route path="profile" element={<AdminProfile />} />
+        <Route path="settings" element={<AdminSettings />} />
+        <Route path="notifications" element={<AdminNotifications />} />
+        <Route path="maintenance" element={<AdminMaintenance />} />
+      </Route>
       
       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
       <Route path="*" element={<NotFound />} />

@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { getAvatarUrl } from '@/utils/storage';
 
 const Settings: React.FC = () => {
   const { user, logout, logoutFromAllDevices, changePassword, deleteAccount, updateUser } = useAuth();
@@ -142,12 +143,36 @@ const Settings: React.FC = () => {
       // Add image file if selected
       if (profileImageFile) {
         formData.append('avatar', profileImageFile);
+        console.log('Avatar file being uploaded:', {
+          name: profileImageFile.name,
+          size: profileImageFile.size,
+          type: profileImageFile.type
+        });
       }
       
       // Only make API call if there are changes
       if (formData.has('name') || formData.has('email') || formData.has('company') || 
           formData.has('contact_number') || formData.has('tax_id') || formData.has('avatar')) {
-        await updateUser(formData);
+        console.log('Sending profile update request...');
+        const response = await updateUser(formData);
+        console.log('Profile update response:', response);
+        
+        // Update profile data with the response
+        if (response?.user) {
+          console.log('Updated user data:', {
+            avatar: response.user.avatar,
+            name: response.user.name
+          });
+          
+          setProfileData({
+            name: response.user.name || '',
+            email: response.user.email || '',
+            phone: response.user.contact_number || '',
+            company: response.user.company || '',
+            taxId: response.user.tax_id || '',
+            avatar: response.user.avatar || ''
+          });
+        }
         
         // Clear the image file and preview after successful upload
         setProfileImageFile(null);
@@ -159,6 +184,7 @@ const Settings: React.FC = () => {
         description: 'Your profile information has been saved successfully.',
       });
     } catch (error: any) {
+      console.error('Profile update error:', error);
       toast({
         title: 'Error',
         description: error.message || 'Failed to update profile.',
@@ -317,7 +343,22 @@ const Settings: React.FC = () => {
             <Card className="card-elevated hover:shadow-glow transition-all duration-300 hover:scale-[1.02]">
               <CardHeader className="text-center">
                 <Avatar className="h-24 w-24 mx-auto mb-4">
-                  <AvatarImage src={profileImagePreview || profileData.avatar || user?.avatar} />
+                  <AvatarImage 
+                    src={profileImagePreview || getAvatarUrl(profileData.avatar || user?.avatar)} 
+                    onError={(e) => {
+                      console.error('Avatar image failed to load:', {
+                        src: e.currentTarget.src,
+                        profileImagePreview,
+                        profileDataAvatar: profileData.avatar,
+                        userAvatar: user?.avatar
+                      });
+                    }}
+                    onLoad={() => {
+                      console.log('Avatar image loaded successfully:', {
+                        src: profileImagePreview || getAvatarUrl(profileData.avatar || user?.avatar)
+                      });
+                    }}
+                  />
                   <AvatarFallback className="text-2xl bg-gradient-primary text-primary-foreground">
                     {(profileData.name || user?.name || 'U').charAt(0).toUpperCase()}
                   </AvatarFallback>

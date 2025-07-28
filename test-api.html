@@ -9,13 +9,18 @@
     <div id="result"></div>
 
     <script>
+        // Dynamic base URL - reads from environment or defaults to localhost
+        const API_BASE_URL = window.location.hostname === 'localhost' 
+            ? 'http://localhost:8000/api'
+            : `${window.location.protocol}//${window.location.hostname}/api`;
+        
         async function testAPI() {
             const resultDiv = document.getElementById('result');
             resultDiv.innerHTML = 'Testing...';
             
             try {
                 // First, let's test if we can reach the API
-                const response = await fetch('http://localhost:8000/api/user/plan-recommendations', {
+                const response = await fetch(`${API_BASE_URL}/user/plan-recommendations`, {
                     method: 'GET',
                     headers: {
                         'Content-Type': 'application/json',

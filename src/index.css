@@ -198,6 +198,45 @@
     transform: translateY(-2px);
     box-shadow: var(--shadow-lg);
   }
+
+  /* Custom Scrollbar Styles */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thumb-amber-300::-webkit-scrollbar-thumb {
+    background-color: hsl(45 93% 47%);
+    border-radius: 3px;
+  }
+
+  .scrollbar-track-amber-100::-webkit-scrollbar-track {
+    background-color: hsl(48 100% 96%);
+    border-radius: 3px;
+  }
+
+  .dark .scrollbar-thumb-amber-600::-webkit-scrollbar-thumb {
+    background-color: hsl(45 93% 47%);
+    border-radius: 3px;
+  }
+
+  .dark .scrollbar-track-amber-900\/20::-webkit-scrollbar-track {
+    background-color: hsl(30 83% 9% / 0.2);
+    border-radius: 3px;
+  }
+
+  /* Hover effects for scrollbar */
+  .scrollbar-thumb-amber-300::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(45 93% 42%);
+  }
+
+  .dark .scrollbar-thumb-amber-600::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(45 93% 52%);
+  }
 }
 
 @layer utilities {

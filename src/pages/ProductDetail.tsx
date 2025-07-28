@@ -39,8 +39,15 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
-import { productsAPI } from "@/services/api"
-import { Product, transformProductFromAPI } from "@/types/product"
+import { productsAPI, edamamAPI, collectionsAPI } from "@/services/api"
+import { Product, NutritionalData, transformProductFromAPI } from "@/types/product"
+import { formatDistanceToNow } from "date-fns"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Progress } from "@/components/ui/progress"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { AlertTriangle, Zap, Heart, Leaf, Shield, QrCode, BarChart3, Plus } from "lucide-react"
+import { NutritionDashboard } from "@/components/nutrition/NutritionDashboard"
+import { WarningSystem } from "@/components/nutrition/WarningSystem"
 
 
 
@@ -51,6 +58,103 @@ export default function ProductDetail() {
   
   const [product, setProduct] = useState<Product | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [nutritionalData, setNutritionalData] = useState<NutritionalData | null>(null)
+  const [collections, setCollections] = useState<any[]>([])
+  const [productCollections, setProductCollections] = useState<any[]>([])
+  const [loadingNutrition, setLoadingNutrition] = useState(false)
+  const [loadingCollections, setLoadingCollections] = useState(false)
+  
+  // Transform nutritional data to match NutritionData interface for components
+  const transformedNutritionData = nutritionalData ? {
+    totalCalories: nutritionalData.basic_nutrition?.total_calories || 0,
+    macros: {
+      protein: nutritionalData.macronutrients?.protein || 0,
+      carbs: nutritionalData.macronutrients?.carbohydrates || 0,
+      fat: nutritionalData.macronutrients?.fat || 0,
+      fiber: nutritionalData.macronutrients?.fiber || 0
+    },
+    micros: nutritionalData.micronutrients || {},
+    allergens: nutritionalData.allergens || [],
+    warnings: nutritionalData.warnings || [],
+    servings: nutritionalData.basic_nutrition?.servings || 1,
+    weightPerServing: nutritionalData.basic_nutrition?.weight_per_serving || 100,
+    healthLabels: nutritionalData.health_labels || [],
+    dietLabels: nutritionalData.diet_labels || [],
+    highNutrients: nutritionalData.high_nutrients || [],
+    totalDaily: nutritionalData.daily_values || {},
+    nutritionSummary: nutritionalData.nutrition_summary || {}
+  } : null;
+
+  // Load nutritional data for the product
+  const loadNutritionalData = async (productId: string) => {
+    try {
+      setLoadingNutrition(true);
+      const response = await edamamAPI.nutrition.loadNutritionData(productId);
+      
+      // Use the same data access pattern as NutritionAnalysis component
+      const savedData = response.data;
+      
+      console.log('=== LOADED NUTRITION DATA FROM DATABASE (ProductDetail) ===', savedData);
+      
+      if (savedData) {
+        // Transform saved data back to NutritionData interface (same as NutritionAnalysis)
+        const transformedData: NutritionalData = {
+          id: savedData.id || 0,
+          product_id: savedData.product_id || parseInt(id),
+          basic_nutrition: {
+            total_calories: savedData.basic_nutrition?.total_calories || 0,
+            servings: savedData.basic_nutrition?.servings || 1,
+            weight_per_serving: savedData.basic_nutrition?.weight_per_serving || 100
+          },
+          macronutrients: {
+            protein: savedData.macronutrients?.protein || 0,
+            carbohydrates: savedData.macronutrients?.carbohydrates || 0,
+            fat: savedData.macronutrients?.fat || 0,
+            fiber: savedData.macronutrients?.fiber || 0
+          },
+          micronutrients: savedData.micronutrients || {},
+          allergens: savedData.allergens || [],
+          warnings: savedData.warnings || [],
+          health_labels: savedData.health_labels || [],
+          diet_labels: savedData.diet_labels || [],
+          high_nutrients: savedData.high_nutrients || [],
+          nutrition_summary: savedData.nutrition_summary || {},
+          daily_values: savedData.daily_values || {},
+          analysis_metadata: savedData.analysis_metadata || {
+            analyzed_at: new Date().toISOString(),
+            ingredient_query: '',
+            product_name: product?.name || ''
+          },
+          created_at: savedData.created_at || new Date().toISOString(),
+          updated_at: savedData.updated_at || new Date().toISOString()
+        };
+        
+        setNutritionalData(transformedData);
+        console.log('=== TRANSFORMED NUTRITION DATA (ProductDetail) ===', transformedData);
+      }
+    } catch (error) {
+      console.error('Error loading nutritional data:', error);
+      // Don't show error toast for missing nutrition data as it's optional
+    } finally {
+      setLoadingNutrition(false);
+    }
+  };
+
+  // Load collections data
+  const loadCollections = async () => {
+    try {
+      setLoadingCollections(true);
+      const response = await collectionsAPI.getAll();
+      console.log('=== ALL COLLECTIONS DEBUG ===');
+      console.log('Collections API response:', response);
+      console.log('Collections data:', response.data);
+      setCollections(response.data || []);
+    } catch (error) {
+      console.error('Error loading collections:', error);
+    } finally {
+      setLoadingCollections(false);
+    }
+  };
 
   useEffect(() => {
     const loadProduct = async () => {
@@ -59,7 +163,27 @@ export default function ProductDetail() {
       setIsLoading(true)
       try {
         const response = await productsAPI.getById(id)
-        setProduct(transformProductFromAPI(response))
+        const transformedProduct = transformProductFromAPI(response)
+        setProduct(transformedProduct)
+        
+        // Load additional data
+        await Promise.all([
+          loadNutritionalData(id),
+          loadCollections()
+        ]);
+        
+        // Extract product collections if available
+        console.log('=== PRODUCT COLLECTIONS DEBUG ===');
+        console.log('Raw API response:', response);
+        console.log('Transformed product:', transformedProduct);
+        console.log('Product collections:', transformedProduct.collections);
+        
+        if (transformedProduct.collections) {
+          setProductCollections(transformedProduct.collections);
+          console.log('Set productCollections to:', transformedProduct.collections);
+        } else {
+          console.log('No collections found in transformed product');
+        }
       } catch (error: any) {
         console.error('Error loading product:', error)
         toast({
@@ -177,6 +301,28 @@ export default function ProductDetail() {
     toast({
       title: "Link copied",
       description: "Public link has been copied to clipboard."
+    })
+  }
+
+  const handleGenerateQRCode = () => {
+    if (!product?.is_public) {
+      toast({
+        title: "Product is not public",
+        description: "You need to make this product public before generating QR code.",
+        variant: "destructive"
+      })
+      return
+    }
+    
+    const publicUrl = `${window.location.origin}/public/product/${id}`
+    navigate('/qr-codes', {
+      state: {
+        productId: product.id,
+        productName: product.name,
+        publicUrl: publicUrl,
+        presetContent: publicUrl,
+        presetType: 'url'
+      }
     })
   }
 
@@ -319,32 +465,85 @@ export default function ProductDetail() {
       <div className="grid gap-6 md:grid-cols-3">
         {/* Left Column - Main Info */}
         <div className="md:col-span-2 space-y-6">
-          {/* Product Image */}
-          <Card>
-            <CardContent className="p-0">
-              {product.image ? (
-                <img
-                  src={product.image}
-                  alt={product.name}
-                  className="w-full h-64 object-cover rounded-lg"
-                />
-              ) : (
-                <div className="w-full h-64 bg-muted rounded-lg flex items-center justify-center">
-                  <Package className="h-16 w-16 text-muted-foreground" />
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          {/* Product Image and Description Side by Side */}
+          <div className="grid gap-6 md:grid-cols-2">
+            {/* Product Image */}
+            <Card>
+              <CardContent className="p-0">
+                {product.image ? (
+                  <img
+                    src={product.image}
+                    alt={product.name}
+                    className="w-full h-64 object-cover rounded-lg"
+                  />
+                ) : (
+                  <div className="w-full h-64 bg-muted rounded-lg flex items-center justify-center">
+                    <Package className="h-16 w-16 text-muted-foreground" />
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
-          {/* Description */}
+            {/* Description */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Description</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground leading-relaxed">
+                  {product.description}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Ingredients Section - Now prominently displayed */}
           <Card>
             <CardHeader>
-              <CardTitle>Description</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Leaf className="h-5 w-5" />
+                Ingredients
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-muted-foreground leading-relaxed">
-                {product.description}
-              </p>
+              {product.ingredients && product.ingredients.length > 0 ? (
+                <div className="space-y-3">
+                  <div className="grid gap-2">
+                    {product.ingredients.map((ingredient: any, index: number) => (
+                      <div key={ingredient.id || index} className="flex items-center justify-between p-2 bg-muted/50 rounded-lg">
+                        <span className="font-medium">{ingredient.name}</span>
+                        {(ingredient.pivot?.amount || ingredient.pivot?.unit) && (
+                          <Badge variant="outline">
+                            {ingredient.pivot.amount} {ingredient.pivot.unit}
+                          </Badge>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  {product.ingredient_notes && (
+                    <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <h4 className="font-medium text-blue-900 mb-2">Ingredient Notes</h4>
+                      <p className="text-blue-800 text-sm">{product.ingredient_notes}</p>
+                    </div>
+                  )}
+                </div>
+              ) : product.ingredient_notes ? (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <h4 className="font-medium text-blue-900 mb-2">Ingredient Notes</h4>
+                  <p className="text-blue-800 text-sm">{product.ingredient_notes}</p>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Leaf className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p>No ingredients added yet</p>
+                  <Button variant="outline" size="sm" className="mt-2" asChild>
+                    <Link to={`/products/${product.id}/edit`}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Ingredients
+                    </Link>
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -390,6 +589,12 @@ export default function ProductDetail() {
               </CardContent>
             </Card>
           )}
+
+
+
+          {/* 3. Removed Safety & Compliance - moved to end */}
+
+          {/* 4. Functional Integration - Removed Collections & duplicate Quick Actions */}
         </div>
 
         {/* Right Column - Sidebar */}
@@ -483,21 +688,158 @@ export default function ProductDetail() {
                 Share Product
               </Button>
               
+              <Button variant="outline" className="w-full justify-start" asChild>
+                <Link to={`/nutrition?product_id=${product.id}`}>
+                  <BarChart3 className="w-4 h-4 mr-2" />
+                  Nutrition Analysis
+                </Link>
+              </Button>
+              
+              <Button variant="outline" className="w-full justify-start">
+                <Download className="w-4 h-4 mr-2" />
+                Generate Nutrition Label
+              </Button>
+              
+              {product.is_public && (
+                <Button variant="outline" className="w-full justify-start" onClick={handleGenerateQRCode}>
+                  <QrCode className="w-4 h-4 mr-2" />
+                  Generate QR Code
+                </Button>
+              )}
+              
               <Button variant="outline" className="w-full justify-start">
                 <Download className="w-4 h-4 mr-2" />
                 Export Data
               </Button>
-              
-              <Separator />
-              
-              <Button variant="outline" className="w-full justify-start" onClick={handleDuplicate}>
-                <Copy className="w-4 h-4 mr-2" />
-                Duplicate Product
-              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Collections */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Package className="h-5 w-5" />
+                Collections
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loadingCollections ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                </div>
+              ) : productCollections && productCollections.length > 0 ? (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    {productCollections.map((collection: any) => (
+                      <Badge key={collection.id} variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                        {collection.name}
+                      </Badge>
+                    ))}
+                  </div>
+                  <Button variant="outline" size="sm" className="w-full">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Manage Collections
+                  </Button>
+                </div>
+              ) : (
+                <div className="text-center py-6 text-muted-foreground">
+                  <Package className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">Not in any collections</p>
+                  <Button variant="outline" size="sm" className="mt-2">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add to Collection
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
       </div>
+
+      {/* Full-Width Nutritional Information Section */}
+      <div className="mt-8">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Nutritional Information
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loadingNutrition ? (
+              <div className="space-y-3">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-4 w-1/2" />
+              </div>
+            ) : nutritionalData ? (
+              <Tabs defaultValue="dashboard" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+                  <TabsTrigger value="warnings">Warnings</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="dashboard" className="space-y-4">
+                  <NutritionDashboard 
+                    data={transformedNutritionData}
+                  />
+                </TabsContent>
+                
+                <TabsContent value="warnings" className="space-y-4">
+                  <WarningSystem 
+                    warnings={transformedNutritionData?.warnings || []}
+                    nutritionData={transformedNutritionData}
+                  />
+                </TabsContent>
+              </Tabs>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <BarChart3 className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                <p>No nutritional data available</p>
+                <Button variant="outline" size="sm" className="mt-2" asChild>
+                  <Link to={`/nutrition?product_id=${product.id}`}>
+                    <Zap className="h-4 w-4 mr-2" />
+                    Analyze Nutrition
+                  </Link>
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Safety & Compliance Information - Moved to end */}
+      {nutritionalData && nutritionalData.allergens?.length > 0 && (
+        <div className="mt-8">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5" />
+                Safety & Compliance
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {/* Allergen Warnings */}
+              {nutritionalData.allergens && nutritionalData.allergens.length > 0 && (
+                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <h4 className="font-medium text-yellow-900 mb-2 flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4" />
+                    Allergen Warnings
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {nutritionalData.allergens.map((allergen: string) => (
+                      <Badge key={allergen} variant="destructive">
+                        {allergen}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }

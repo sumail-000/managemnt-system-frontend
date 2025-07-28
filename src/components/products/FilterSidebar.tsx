@@ -44,26 +44,10 @@ interface FilterSidebarProps {
   loading?: boolean
 }
 
-// Use provided categories and tags, fallback to mock data
-const mockCategories = [
-  { name: "Dairy", count: 23 },
-  { name: "Snacks", count: 45 },
-  { name: "Oils", count: 12 },
-  { name: "Spreads", count: 18 },
-  { name: "Beverages", count: 34 },
-  { name: "Grains", count: 29 }
-]
+// Use provided categories and tags, fallback to empty arrays
+const mockCategories: { name: string; count: number }[] = []
 
-const mockTags = [
-  { name: "Organic", count: 67 },
-  { name: "Gluten Free", count: 45 },
-  { name: "High Protein", count: 32 },
-  { name: "Vegan", count: 28 },
-  { name: "Low Sugar", count: 24 },
-  { name: "Natural", count: 19 },
-  { name: "Premium", count: 15 },
-  { name: "Whole Grain", count: 13 }
-]
+const mockTags: { name: string; count: number }[] = []
 
 export function FilterSidebar({ 
   isOpen, 

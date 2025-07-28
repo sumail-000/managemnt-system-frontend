@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useParams, useNavigate, Link } from "react-router-dom"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -16,7 +16,8 @@ import {
   Settings,
   Tags,
   GripVertical,
-  FileText
+  FileText,
+  Copy
 } from "lucide-react"
 import {
   DndContext,
@@ -63,10 +64,13 @@ import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
+
 import { useToast } from "@/hooks/use-toast"
 import { productsAPI } from "@/services/api"
 import { CategoryModal } from "@/components/common"
 import { useCategories } from "@/hooks/useCategories"
+import { ImageUrlExtractionResponse } from "@/types/api"
+import { getStorageUrl } from "@/utils/storage"
 
 // Import product images
 import organicYogurtImage from "@/assets/organic-greek-yogurt.jpg"
@@ -91,7 +95,7 @@ const productSchema = z.object({
 type ProductFormData = z.infer<typeof productSchema>
 
 // Sortable Ingredient Item Component
-function SortableIngredientItem({ ingredient, onRemove }: { ingredient: {id: string, name: string, quantity: number, unit: string}, onRemove: (id: string) => void }) {
+function SortableIngredientItem({ ingredient, onRemove }: { ingredient: {id: string, text: string}, onRemove: (id: string) => void }) {
   const {
     attributes,
     listeners,
@@ -121,7 +125,7 @@ function SortableIngredientItem({ ingredient, onRemove }: { ingredient: {id: str
         <GripVertical className="h-4 w-4 text-muted-foreground" />
       </div>
       <div className="flex-1">
-        <span className="text-sm font-medium">{ingredient.name} {ingredient.quantity} {ingredient.unit}</span>
+        <span className="text-sm font-medium">{ingredient.text}</span>
       </div>
       <Button
         type="button"
@@ -156,15 +160,18 @@ export default function ProductForm() {
   const [imageUrl, setImageUrl] = useState("")
   const [uploadMethod, setUploadMethod] = useState<"upload" | "url">("url")
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [isGoogleUrl, setIsGoogleUrl] = useState(false)
+  const [extractedUrl, setExtractedUrl] = useState<string | null>(null)
+  const [isProcessingUrl, setIsProcessingUrl] = useState(false)
   const [currentTab, setCurrentTab] = useState("basic")
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false)
   
   // Ingredients state
-  const [manualIngredients, setManualIngredients] = useState<{id: string, name: string, quantity: number, unit: string}[]>([])
+  const [manualIngredients, setManualIngredients] = useState<{id: string, text: string}[]>([])
   const [newIngredient, setNewIngredient] = useState("")
-  const [newQuantity, setNewQuantity] = useState<number>(0)
-  const [newUnit, setNewUnit] = useState("g")
   const [ingredientNotes, setIngredientNotes] = useState("")
+  const [bulkIngredients, setBulkIngredients] = useState("")
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   
   // Drag and drop sensors
@@ -187,17 +194,13 @@ export default function ProductForm() {
 
   // Ingredient management functions
   const addManualIngredient = () => {
-    if (newIngredient.trim() && newQuantity > 0 && !manualIngredients.some(item => item.name === newIngredient.trim())) {
+    if (newIngredient.trim() && !manualIngredients.some(item => item.text === newIngredient.trim())) {
       const newIngredientItem = {
         id: `ingredient-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        name: newIngredient.trim(),
-        quantity: newQuantity,
-        unit: newUnit
+        text: newIngredient.trim()
       }
       setManualIngredients([...manualIngredients, newIngredientItem])
       setNewIngredient("")
-      setNewQuantity(0)
-      setNewUnit("g")
       toast({
         title: "Ingredient added",
         description: `"${newIngredient.trim()}" has been added to the ingredients list.`
@@ -211,7 +214,7 @@ export default function ProductForm() {
     if (ingredient) {
       toast({
         title: "Ingredient removed",
-        description: `"${ingredient.name}" has been removed from the ingredients list.`
+        description: `"${ingredient.text}" has been removed from the ingredients list.`
       })
     }
   }
@@ -232,6 +235,86 @@ export default function ProductForm() {
         return newOrder
       })
     }
+  }
+
+  // Bulk ingredient functions
+  const parseBulkIngredients = () => {
+    if (!bulkIngredients.trim()) return
+    
+    const lines = bulkIngredients.split('\n').filter(line => line.trim())
+    const newIngredients: {id: string, text: string}[] = []
+    
+    lines.forEach(line => {
+      const trimmedLine = line.trim()
+      if (trimmedLine && !manualIngredients.some(item => item.text === trimmedLine)) {
+        newIngredients.push({
+          id: `ingredient-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          text: trimmedLine
+        })
+      }
+    })
+    
+    if (newIngredients.length > 0) {
+      setManualIngredients([...manualIngredients, ...newIngredients])
+      setBulkIngredients('')
+      toast({
+        title: "Ingredients added",
+        description: `${newIngredients.length} ingredient(s) have been added to the list.`
+      })
+    } else {
+      toast({
+        title: "No new ingredients",
+        description: "All ingredients are already in the list or input is empty.",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string
+        
+        if (file.type === 'application/json') {
+          const jsonData = JSON.parse(content)
+          if (Array.isArray(jsonData)) {
+            setBulkIngredients(jsonData.join('\n'))
+          } else if (jsonData.ingredients && Array.isArray(jsonData.ingredients)) {
+            setBulkIngredients(jsonData.ingredients.join('\n'))
+          } else {
+            throw new Error('Invalid JSON format')
+          }
+        } else {
+          setBulkIngredients(content)
+        }
+        
+        toast({
+          title: "File loaded",
+          description: "Ingredients have been loaded from the file."
+        })
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to parse the file. Please check the format.",
+          variant: "destructive"
+        })
+      }
+    }
+    
+    reader.readAsText(file)
+    event.target.value = ''
+  }
+
+  const clearAllIngredients = () => {
+    setManualIngredients([])
+    toast({
+      title: "All ingredients cleared",
+      description: "The ingredient list has been cleared."
+    })
   }
 
 
@@ -288,7 +371,7 @@ export default function ProductForm() {
           const formData = {
             name: product.name || '',
             description: product.description || "",
-            category_id: product.category_id || '',
+            category_id: product.category_id ? product.category_id.toString() : '',
             serving_size: parseFloat(product.serving_size) || 0,
             serving_unit: product.serving_unit || 'g',
             servings_per_container: parseInt(product.servings_per_container) || 1,
@@ -310,7 +393,7 @@ export default function ProductForm() {
             
             // If we have an image_path, construct the full URL
             if (product.image_path && !imageUrl) {
-              imageUrl = `http://localhost:8000/storage/${product.image_path}`
+              imageUrl = getStorageUrl(product.image_path)
             }
             
             if (imageUrl) {
@@ -322,12 +405,19 @@ export default function ProductForm() {
           
           // Load existing ingredients if available
           if (product.ingredients && Array.isArray(product.ingredients)) {
-            const existingIngredients = product.ingredients.map((ingredient: any, index: number) => ({
-              id: ingredient.id ? ingredient.id.toString() : `ingredient-${Date.now()}-${index}`,
-              name: ingredient.name || '',
-              quantity: parseFloat(ingredient.quantity) || 0,
-              unit: ingredient.unit || 'g'
-            }))
+            const existingIngredients = product.ingredients.map((ingredient: any, index: number) => {
+              // Convert structured ingredient to free text format
+              let text = ingredient.name || ''
+              if (ingredient.quantity && ingredient.unit) {
+                text += ` ${ingredient.quantity} ${ingredient.unit}`
+              } else if (ingredient.quantity) {
+                text += ` ${ingredient.quantity}`
+              }
+              return {
+                id: ingredient.id ? ingredient.id.toString() : `ingredient-${Date.now()}-${index}`,
+                text: text.trim()
+              }
+            })
             setManualIngredients(existingIngredients)
           }
           
@@ -385,7 +475,7 @@ export default function ProductForm() {
         productData = new FormData()
         productData.append('name', data.name)
         productData.append('description', data.description || '')
-        productData.append('category_id', data.category_id)
+        productData.append('category_id', parseInt(data.category_id).toString())
         productData.append('serving_size', data.serving_size.toString())
         productData.append('serving_unit', data.serving_unit)
         productData.append('servings_per_container', data.servings_per_container.toString())
@@ -397,9 +487,7 @@ export default function ProductForm() {
         if (ingredients.length > 0) {
           ingredients.forEach((ingredient, index) => {
             productData.append(`ingredients[${index}][id]`, ingredient.id.toString())
-            productData.append(`ingredients[${index}][name]`, ingredient.name)
-            productData.append(`ingredients[${index}][quantity]`, ingredient.quantity.toString())
-            productData.append(`ingredients[${index}][unit]`, ingredient.unit)
+            productData.append(`ingredients[${index}][text]`, ingredient.text)
             productData.append(`ingredients[${index}][order]`, (index + 1).toString())
           })
         } else {
@@ -433,7 +521,7 @@ export default function ProductForm() {
         productData = {
           name: data.name,
           description: data.description,
-          category_id: data.category_id,
+          category_id: parseInt(data.category_id),
           serving_size: data.serving_size,
           serving_unit: data.serving_unit,
           servings_per_container: data.servings_per_container,
@@ -445,9 +533,7 @@ export default function ProductForm() {
           // Add ingredients to JSON data
           ingredients: ingredients.length > 0 ? ingredients.map((ingredient, index) => ({
             id: ingredient.id,
-            name: ingredient.name,
-            quantity: ingredient.quantity,
-            unit: ingredient.unit,
+            text: ingredient.text,
             order: index + 1
           })) : [],
           
@@ -455,9 +541,9 @@ export default function ProductForm() {
           ingredient_notes: ingredientNotes
         }
         
-        // Add image URL if provided
+        // Add image URL if provided - use extracted URL if available, otherwise use original URL
         if (imageUrl && uploadMethod === "url") {
-          productData.image_url = imageUrl
+          productData.image_url = extractedUrl || imageUrl
         }
         
         headers['Content-Type'] = 'application/json'
@@ -478,6 +564,17 @@ export default function ProductForm() {
           ? "Your product has been updated successfully." 
           : "Your product has been created successfully."
       })
+      
+      // Show additional info popup for new products
+      if (!isEdit) {
+        setTimeout(() => {
+          toast({
+            title: "Next Step: Complete Recipe Details",
+            description: "Head over to the Nutritional Analysis tab to complete your recipe details and nutritional information.",
+            duration: 8000, // Show for 8 seconds
+          })
+        }, 1500) // Show after 1.5 seconds
+      }
       
       // Navigate back to products list
       navigate("/products")
@@ -519,9 +616,51 @@ export default function ProductForm() {
     }
   }
 
-  const handleImageUrlChange = (url: string) => {
+  const handleImageUrlChange = async (url: string) => {
     setImageUrl(url)
-    setImagePreview(url)
+    
+    if (url.trim()) {
+      setIsProcessingUrl(true)
+      try {
+        // Call the backend API to extract and validate the image URL
+        const response = await productsAPI.extractImageUrl(url)
+        // The API interceptor already extracts response.data, so response is the actual data
+        const data: ImageUrlExtractionResponse = response as any
+        
+        // Check if the API call was successful (no error)
+        if (!data.error) {
+          setIsGoogleUrl(data.is_google_url)
+          setExtractedUrl(data.extracted_url !== url ? data.extracted_url : null)
+          
+          if (data.is_valid_image && data.extracted_url) {
+            // Use the extracted URL for preview
+            setImagePreview(data.extracted_url)
+          } else {
+            // Try to load the original URL anyway, but show a warning
+            setImagePreview(url)
+          }
+        } else {
+          // If API call fails, fall back to direct URL
+          setImagePreview(url)
+          setIsGoogleUrl(false)
+          setExtractedUrl(null)
+        }
+      } catch (error) {
+        console.error('Error extracting image URL:', error)
+        // Fall back to direct URL on error
+        setImagePreview(url)
+        setIsGoogleUrl(false)
+        setExtractedUrl(null)
+      } finally {
+        setIsProcessingUrl(false)
+      }
+    } else {
+      setImagePreview(null)
+      setIsGoogleUrl(false)
+      setExtractedUrl(null)
+      setIsProcessingUrl(false)
+    }
+    
     setSelectedFile(null) // Clear file when using URL
   }
 
@@ -549,7 +688,7 @@ export default function ProductForm() {
               {isEdit ? "Edit Product" : "Add New Product"}
             </h1>
             <p className="text-muted-foreground">
-              {isEdit ? "Update product information" : "Create a new food product"}
+              {isEdit ? "Update product information" : "Fill in the product details below"}
             </p>
           </div>
         </div>
@@ -595,14 +734,14 @@ export default function ProductForm() {
 
             {/* Basic Information */}
             <TabsContent value="basic" className="space-y-6">
-              <div className="grid gap-6 md:grid-cols-2">
+              <div className="grid gap-6 md:grid-cols-2 items-stretch">
                 {/* Left Column */}
                 <div className="space-y-6">
-                  <Card>
+                  <Card className="h-full flex flex-col">
                     <CardHeader>
                       <CardTitle>Product Details</CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-4">
+                    <CardContent className="space-y-4 flex-1">
                       <FormField
                         control={form.control}
                         name="name"
@@ -619,6 +758,8 @@ export default function ProductForm() {
                           </FormItem>
                         )}
                       />
+
+
 
                       <FormField
                         control={form.control}
@@ -646,11 +787,11 @@ export default function ProductForm() {
 
                 {/* Right Column */}
                 <div className="space-y-6">
-                  <Card>
+                  <Card className="h-full flex flex-col">
                     <CardHeader>
                       <CardTitle>Product Image</CardTitle>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="flex-1">
                       <div className="space-y-4">
                         {/* Upload Method Selection */}
                         <div className="flex gap-2">
@@ -709,11 +850,64 @@ export default function ProductForm() {
                         {uploadMethod === "url" && (
                           <div className="space-y-2">
                             <Label>Image URL</Label>
-                            <Input
-                              placeholder="https://example.com/image.jpg"
-                              value={imageUrl}
-                              onChange={(e) => handleImageUrlChange(e.target.value)}
-                            />
+                            <div className="relative">
+                              <Input
+                                placeholder="https://example.com/image.jpg"
+                                value={imageUrl}
+                                onChange={(e) => handleImageUrlChange(e.target.value)}
+                                disabled={isProcessingUrl}
+                              />
+                              {isProcessingUrl && (
+                                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                                </div>
+                              )}
+                            </div>
+                            
+                            {/* Processing indicator */}
+                            {isProcessingUrl && (
+                              <div className="p-2 bg-gray-50 border border-gray-200 rounded-md">
+                                <div className="flex items-center gap-2">
+                                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600"></div>
+                                  <p className="text-xs text-gray-600">Processing URL...</p>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Google URL Detection Feedback */}
+                            {isGoogleUrl && extractedUrl && (
+                              <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                                <div className="flex items-start gap-2">
+                                  <div className="text-blue-600 mt-0.5">
+                                    <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                    </svg>
+                                  </div>
+                                  <div className="flex-1">
+                                    <p className="text-sm font-medium text-blue-800">Google Search URL Detected</p>
+                                    <p className="text-xs text-blue-600 mt-1">We've extracted the direct image URL for you:</p>
+                                    <p className="text-xs text-blue-700 mt-1 font-mono bg-blue-100 p-1 rounded break-all">{extractedUrl}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {isGoogleUrl && !extractedUrl && (
+                              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                                <div className="flex items-start gap-2">
+                                  <div className="text-yellow-600 mt-0.5">
+                                    <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                    </svg>
+                                  </div>
+                                  <div className="flex-1">
+                                    <p className="text-sm font-medium text-yellow-800">Google Search URL Detected</p>
+                                    <p className="text-xs text-yellow-600 mt-1">For better results, right-click on the image in Google and select "Copy image address" instead of copying the search result URL.</p>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            
                             {imageUrl && !imagePreview && (
                               <Button
                                 type="button"
@@ -777,7 +971,13 @@ export default function ProductForm() {
                             placeholder="150" 
                             type="number"
                             {...field}
+                            value={field.value === 0 ? '' : field.value}
                             onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                            onFocus={(e) => {
+                              if (field.value === 0) {
+                                field.onChange('')
+                              }
+                            }}
                           />
                         </FormControl>
                         <FormMessage />
@@ -847,7 +1047,7 @@ export default function ProductForm() {
                     <div className="space-y-3">
                       <div className="flex gap-2">
                         <Input
-                          placeholder="Enter ingredient name..."
+                          placeholder="Enter ingredient (e.g., Chopped Chicken 1 cup)..."
                           value={newIngredient}
                           onChange={(e) => setNewIngredient(e.target.value)}
                           onKeyPress={(e) => {
@@ -858,38 +1058,78 @@ export default function ProductForm() {
                           }}
                           className="flex-1"
                         />
-                      </div>
-                      <div className="flex gap-2">
-                        <Input
-                          type="number"
-                          placeholder="Quantity"
-                          value={newQuantity || ''}
-                          onChange={(e) => setNewQuantity(parseFloat(e.target.value) || 0)}
-                          className="flex-1"
-                          min="0"
-                          step="0.1"
-                        />
-                        <Select value={newUnit} onValueChange={setNewUnit}>
-                          <SelectTrigger className="w-24">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {servingUnits.map(unit => (
-                              <SelectItem key={unit} value={unit}>
-                                {unit}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
                         <Button
                           type="button"
                           onClick={addManualIngredient}
-                          disabled={!newIngredient.trim() || newQuantity <= 0}
+                          disabled={!newIngredient.trim()}
                         >
                           <Plus className="h-4 w-4" />
                         </Button>
                       </div>
                     </div>
+                    
+                    {/* Bulk Import Section */}
+                    <Card className="bg-muted/30">
+                      <CardContent className="pt-4">
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-sm font-medium">Bulk Import</Label>
+                            <div className="flex gap-2">
+                              <Button
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                size="sm"
+                                variant="outline"
+                              >
+                                <Upload className="w-4 h-4 mr-1" />
+                                Upload File
+                              </Button>
+                              <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept=".json,.txt"
+                                onChange={handleFileUpload}
+                                className="hidden"
+                              />
+                              {manualIngredients.length > 0 && (
+                                <Button
+                                  type="button"
+                                  onClick={clearAllIngredients}
+                                  size="sm"
+                                  variant="outline"
+                                >
+                                  <X className="w-4 h-4 mr-1" />
+                                  Clear All
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                          
+                          <Textarea
+                            placeholder={`Paste ingredients here, one per line:\n\n2 cups flour\n1 tsp salt\n3 tbsp olive oil\n500g chicken breast\n\nOr upload a JSON/text file`}
+                            value={bulkIngredients}
+                            onChange={(e) => setBulkIngredients(e.target.value)}
+                            rows={4}
+                            className="resize-none text-sm"
+                          />
+                          
+                          <div className="flex justify-between items-center">
+                            <p className="text-xs text-muted-foreground">
+                              Supports: "2 cups flour", "1 tsp salt", or just "chicken breast"
+                            </p>
+                            <Button
+                              type="button"
+                              onClick={parseBulkIngredients}
+                              size="sm"
+                              disabled={!bulkIngredients.trim()}
+                            >
+                              <FileText className="w-4 h-4 mr-1" />
+                              Parse & Add
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
                     
                     {/* Manual Ingredients List */}
                     {manualIngredients.length > 0 && (
@@ -931,7 +1171,7 @@ export default function ProductForm() {
                       <div className="text-center py-8 text-muted-foreground">
                         <Package className="h-8 w-8 mx-auto mb-2 opacity-50" />
                         <p className="text-sm">No ingredients added yet</p>
-                        <p className="text-xs">Add ingredients manually using the input above</p>
+                        <p className="text-xs">Use bulk import or add ingredients individually</p>
                       </div>
                     )}
                   </CardContent>
@@ -993,7 +1233,7 @@ export default function ProductForm() {
                             </FormControl>
                             <SelectContent>
                               {categories.map(category => (
-                                <SelectItem key={category.id} value={category.id}>
+                                <SelectItem key={category.id} value={category.id.toString()}>
                                   {category.name}
                                 </SelectItem>
                               ))}
@@ -1171,10 +1411,12 @@ export default function ProductForm() {
             onCategoryCreated={(category) => {
               // Refresh categories and select the new one
               refreshCategories()
-              form.setValue('category_id', category.id)
+              form.setValue('category_id', category.id.toString())
               setIsCategoryModalOpen(false)
             }}
           />
+          
+
           
           {/* Tab Navigation */}
           <div className="flex justify-between mt-6 pt-4 border-t border-border">
