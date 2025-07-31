@@ -157,23 +157,7 @@ class IngredientApiService {
     return { tags, allergens };
   }
 
-  async bulkImportIngredients(file: File): Promise<Ingredient[]> {
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      
-      const response = await axios.post<Ingredient[]>(`${API_BASE_URL}/bulk-import`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-      
-      return response.data;
-    } catch (error) {
-      console.error('Failed to bulk import ingredients:', error);
-      throw new Error('Failed to bulk import ingredients');
-    }
-  }
+
 
   async exportIngredients(format: 'csv' | 'json' = 'csv'): Promise<Blob> {
     try {

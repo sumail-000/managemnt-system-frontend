@@ -12,25 +12,37 @@ export interface QrCodeGenerationOptions {
 export interface QrCodeData {
   id: number;
   url_slug: string;
-  image_url: string | null;
+  image_url: string;
+  image_path: string;
+  public_url?: string;
   scan_count: number;
   last_scanned_at: string | null;
   created_at: string;
   download_url: string;
   product_name?: string;
   product_id?: number;
+  is_premium?: boolean;
+  unique_code?: string;
+  analytics?: QrCodeAnalytics;
+  product?: {
+    id: number;
+    name: string;
+  };
 }
 
 export interface QrCodeGenerationResponse {
   success: boolean;
   message: string;
-  data?: {
-    qr_code: QrCodeData;
-    image_url: string;
-    public_url: string;
-    download_url: string;
-  };
+  qr_code?: QrCodeData;
+  image_url?: string;
+  public_url?: string;
+  download_url?: string;
   upgrade_required?: boolean;
+  user_plan?: {
+    is_premium: boolean;
+    is_enterprise: boolean;
+    plan_name: string;
+  };
 }
 
 export interface QrCodeAnalytics {
@@ -45,7 +57,54 @@ export interface QrCodeAnalytics {
     product_name: string;
     scan_count: number;
     last_scanned_at: string | null;
+    unique_code?: string;
   }>;
+  top_qr_codes?: Array<{
+    id: number;
+    product_name?: string;
+    scan_count: number;
+    last_scanned_at: string | null;
+    created_at: string;
+    is_premium?: boolean;
+    product?: {
+      id: number;
+      name: string;
+    };
+  }>;
+  scan_trends?: Array<{
+    scan_date: string;
+    daily_scans: number;
+    date?: string;
+    scans?: number;
+  }>;
+  recent_scans?: Array<{
+    product_name?: string;
+    device_type?: string;
+    location?: string;
+    scanned_at: string;
+  }>;
+}
+
+export interface QrCodeDetailedAnalytics {
+  total_scans: number;
+  last_scanned: string | null;
+  premium_analytics: boolean;
+  scans_today?: number;
+  scans_this_week?: number;
+  scans_this_month?: number;
+  recent_scans?: Array<{
+    timestamp: string;
+    data: {
+      user_agent?: string;
+      ip_address?: string;
+      referrer?: string;
+      device_type?: string;
+      location?: string;
+    };
+  }>;
+  qr_code_id?: number;
+  days_active?: number;
+  avg_scans_per_day?: number;
 }
 
 class QrCodeService {
@@ -54,25 +113,48 @@ class QrCodeService {
    */
   async generateQrCode(productId: number, options: QrCodeGenerationOptions = {}): Promise<QrCodeGenerationResponse> {
     try {
+      console.log('🔧 [SERVICE DEBUG] Starting generateQrCode service call')
+      console.log('🔧 [SERVICE DEBUG] Product ID:', productId)
+      console.log('🔧 [SERVICE DEBUG] Options:', options)
+      
       // Validate options before sending to API
       const validation = this.validateOptions(options);
+      console.log('🔧 [SERVICE DEBUG] Validation result:', validation)
+      
       if (!validation.valid) {
+        console.warn('🔧 [SERVICE DEBUG] Validation failed, returning error response')
         return {
           success: false,
           message: `Validation failed: ${validation.errors.join(', ')}`
         };
       }
 
+      console.log('🔧 [SERVICE DEBUG] Making API call to:', `/qr-codes/products/${productId}/generate`)
       const response = await api.post(`/qr-codes/products/${productId}/generate`, options);
-      return response.data;
+      
+      console.log('🔧 [SERVICE DEBUG] Raw API response:', response)
+      console.log('🔧 [SERVICE DEBUG] Response type:', typeof response)
+      console.log('🔧 [SERVICE DEBUG] Response keys:', Object.keys(response || {}))
+      
+      // The API interceptor already extracts response.data, so 'response' is the actual data
+      console.log('🔧 [SERVICE DEBUG] Returning response directly:', response)
+      return response.data as QrCodeGenerationResponse;
     } catch (error: any) {
+      console.error('🔧 [SERVICE DEBUG] API call failed:')
+      console.error('🔧 [SERVICE DEBUG] Error:', error)
+      console.error('🔧 [SERVICE DEBUG] Error response:', error.response)
+      console.error('🔧 [SERVICE DEBUG] Error response status:', error.response?.status)
+      console.error('🔧 [SERVICE DEBUG] Error response data:', error.response?.data)
+      
       if (error.response?.status === 403) {
+        console.log('🔧 [SERVICE DEBUG] 403 error, returning structured error response')
         return {
           success: false,
           message: error.response.data.message || 'QR code generation requires a premium membership',
           upgrade_required: true
         };
       }
+      console.log('🔧 [SERVICE DEBUG] Re-throwing error for other status codes')
       throw error;
     }
   }
@@ -125,6 +207,21 @@ class QrCodeService {
   async getAnalytics(): Promise<{ success: boolean; data: QrCodeAnalytics }> {
     const response = await api.get('/qr-codes/analytics');
     return response.data;
+  }
+
+  /**
+   * Get detailed analytics for a specific QR code (premium feature)
+   */
+  async getQrCodeAnalytics(qrCodeId: number): Promise<{ success: boolean; data: QrCodeDetailedAnalytics }> {
+    try {
+      const response = await api.get(`/qr-codes/${qrCodeId}/analytics`);
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        throw new Error(error.response.data.message || 'Detailed analytics requires a premium membership');
+      }
+      throw error;
+    }
   }
 
   /**

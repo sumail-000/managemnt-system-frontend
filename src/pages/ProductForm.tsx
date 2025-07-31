@@ -16,8 +16,17 @@ import {
   Settings,
   Tags,
   GripVertical,
-  FileText,
-  Copy
+  Copy,
+  Search,
+  Clock,
+  Users,
+  ExternalLink,
+  Star,
+  ChevronUp,
+  ChevronDown,
+  StickyNote,
+  Activity,
+  ChefHat
 } from "lucide-react"
 import {
   DndContext,
@@ -64,13 +73,19 @@ import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 
 import { useToast } from "@/hooks/use-toast"
-import { productsAPI } from "@/services/api"
+import { productsAPI, edamamAPI } from "@/services/api"
 import { CategoryModal } from "@/components/common"
 import { useCategories } from "@/hooks/useCategories"
 import { ImageUrlExtractionResponse } from "@/types/api"
 import { getStorageUrl } from "@/utils/storage"
+import { Recipe, EdamamRecipe, transformRecipeFromAPI } from "@/types/recipe"
+import { NutritionData } from "@/types/nutrition"
+import { NutritionDisplay } from "@/components/nutrition/NutritionDisplay"
+
+import { servingUtils, formatWeight } from "@/utils/serving"
 
 // Import product images
 import organicYogurtImage from "@/assets/organic-greek-yogurt.jpg"
@@ -83,9 +98,12 @@ const productSchema = z.object({
   name: z.string().min(1, "Product name is required").max(255, "Name too long"),
   description: z.string().optional(),
   category_id: z.string().min(1, "Category is required"),
-  serving_size: z.number().min(0, "Serving size must be positive"),
-  serving_unit: z.string().min(1, "Serving unit is required"),
-  servings_per_container: z.number().min(1, "Must have at least 1 serving"),
+  calories_per_serving: z.number().min(0, "Calories per serving must be positive"),
+  portion_size: z.enum(["small", "medium", "large"]),
+  serving_type: z.enum(["main", "side"]),
+  total_servings: z.number().min(1, "Must have at least 1 serving"),
+  serving_unit: z.string().optional(),
+  servings_per_container: z.number().min(1, "Must have at least 1 serving per container").optional(),
   status: z.enum(["draft", "published"]),
   is_public: z.boolean(),
   is_pinned: z.boolean()
@@ -142,9 +160,7 @@ function SortableIngredientItem({ ingredient, onRemove }: { ingredient: {id: str
 
 // Categories are now loaded dynamically from the API
 
-const servingUnits = [
-  "g", "kg", "ml", "l", "cups", "tbsp", "tsp", "pieces", "slices", "oz", "lb"
-]
+// Serving units array removed - no longer needed with new serving fields
 
 // Mock tags removed - users can add custom tags
 
@@ -166,13 +182,26 @@ export default function ProductForm() {
   const [currentTab, setCurrentTab] = useState("basic")
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false)
   
+  // Recipe search state
+  const [recipeSearchQuery, setRecipeSearchQuery] = useState("")
+  const [recipeSearchResults, setRecipeSearchResults] = useState<Recipe[]>([])
+  const [originalRecipeData, setOriginalRecipeData] = useState<EdamamRecipe[]>([])
+  const [isSearchingRecipes, setIsSearchingRecipes] = useState(false)
+  const [searchErrorMessage, setSearchErrorMessage] = useState<string | null>(null)
+  const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null)
+  
+  // Image error tracking state
+  const [imageErrors, setImageErrors] = useState<Set<string>>(new Set())
+  
   // Ingredients state
-  const [manualIngredients, setManualIngredients] = useState<{id: string, text: string}[]>([])
-  const [newIngredient, setNewIngredient] = useState("")
+  const [recipeIngredients, setRecipeIngredients] = useState<{id: string, text: string, image?: string, foodCategory?: string, isMainIngredient?: boolean, quantity?: number, measure?: string, weight?: number}[]>([])
   const [ingredientNotes, setIngredientNotes] = useState("")
-  const [bulkIngredients, setBulkIngredients] = useState("")
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isNotesModalOpen, setIsNotesModalOpen] = useState(false)
+  const [isAnalyzingNutrition, setIsAnalyzingNutrition] = useState(false)
+  const [nutritionAnalysisComplete, setNutritionAnalysisComplete] = useState(false)
+  
 
+  const [nutritionData, setNutritionData] = useState<NutritionData | null>(null)
   
   // Drag and drop sensors
   const sensors = useSensors(
@@ -193,131 +222,244 @@ export default function ProductForm() {
 
 
   // Ingredient management functions
-  const addManualIngredient = () => {
-    if (newIngredient.trim() && !manualIngredients.some(item => item.text === newIngredient.trim())) {
-      const newIngredientItem = {
-        id: `ingredient-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        text: newIngredient.trim()
-      }
-      setManualIngredients([...manualIngredients, newIngredientItem])
-      setNewIngredient("")
-      toast({
-        title: "Ingredient added",
-        description: `"${newIngredient.trim()}" has been added to the ingredients list.`
+
+  // Recipe search function
+  const searchRecipes = async (query: string) => {
+    if (!query.trim()) {
+      setRecipeSearchResults([])
+      setOriginalRecipeData([])
+      setSearchErrorMessage(null)
+      return
+    }
+
+    setIsSearchingRecipes(true)
+    setSearchErrorMessage(null)
+    try {
+      const response = await edamamAPI.recipe.search(query.trim(), {
+        limit: 10
       })
+      console.log('API Response:', response)
+      console.log('Response data:', response.data)
+      console.log('Recipe data path:', response.data?.data)
+      
+      // Store original EdamamRecipe data and transform to Recipe objects
+      const recipeData = response.data?.data || []
+      console.log('Recipe data array:', recipeData)
+      const transformedRecipes = recipeData.map(transformRecipeFromAPI)
+      console.log('Transformed recipes:', transformedRecipes)
+      
+      // Store both original and transformed data
+      setOriginalRecipeData(recipeData)
+      
+      if (transformedRecipes.length === 0) {
+        // No results found - show user-friendly message
+        const errorMessages = [
+          "No recipes found. Check your spelling and try again.",
+          "Recipe not found. Try using different keywords.",
+          "No matches found. Consider using more common recipe names.",
+          "Nothing found for that search. Try a different recipe name."
+        ]
+        setSearchErrorMessage(errorMessages[Math.floor(Math.random() * errorMessages.length)])
+      }
+      
+      setRecipeSearchResults(transformedRecipes)
+    } catch (error) {
+      console.error('Recipe search error:', error)
+      // Set user-friendly error message
+      const networkErrorMessages = [
+        "Connection error. Please check your internet and try again.",
+        "Search service temporarily unavailable. Please try again later.",
+        "Unable to search recipes right now. Please try again."
+      ]
+      setSearchErrorMessage(networkErrorMessages[Math.floor(Math.random() * networkErrorMessages.length)])
+      setRecipeSearchResults([])
+      setOriginalRecipeData([])
+    } finally {
+      setIsSearchingRecipes(false)
     }
   }
 
-  const removeManualIngredient = (ingredientId: string) => {
-    const ingredient = manualIngredients.find(item => item.id === ingredientId)
-    setManualIngredients(manualIngredients.filter(item => item.id !== ingredientId))
-    if (ingredient) {
-      toast({
-        title: "Ingredient removed",
-        description: `"${ingredient.text}" has been removed from the ingredients list.`
+  // Automatic nutrition analysis function
+  const triggerNutritionAnalysis = async (ingredients: typeof recipeIngredients, productName: string) => {
+    console.log('🔬 [DEBUG] Starting nutrition analysis...')
+    console.log('🔬 [DEBUG] Product name:', productName)
+    console.log('🔬 [DEBUG] Raw ingredients:', ingredients)
+    
+    if (ingredients.length === 0 || !productName.trim()) {
+      console.log('🔬 [DEBUG] Skipping analysis - no ingredients or product name')
+      return
+    }
+
+    setIsAnalyzingNutrition(true)
+    setNutritionAnalysisComplete(false)
+    setNutritionData(null)
+
+    try {
+      // Prepare ingredients for nutrition analysis - use only text to avoid "low_quality" error
+      const ingredientLines = ingredients.map(ingredient => {
+        // Extract only the text property to avoid sending rich data that causes API errors
+        return ingredient.text || ingredient.toString()
       })
+
+      console.log('🔬 [DEBUG] Processed ingredient lines:', ingredientLines)
+      console.log('🔬 [DEBUG] Available edamamAPI methods:', Object.keys(edamamAPI))
+      console.log('🔬 [DEBUG] Available nutrition methods:', Object.keys(edamamAPI.nutrition))
+
+      // Call nutrition analysis API (using correct method name)
+       console.log('🔬 [DEBUG] Calling edamamAPI.nutrition.analyze...')
+       const apiResponse = await edamamAPI.nutrition.analyze(ingredientLines)
+       
+       console.log('🔬 [DEBUG] Raw API response:', apiResponse)
+       console.log('🔬 [DEBUG] Response type:', typeof apiResponse)
+       console.log('🔬 [DEBUG] Response keys:', apiResponse ? Object.keys(apiResponse) : 'No keys')
+       console.log('🔬 [DEBUG] Response data:', apiResponse?.data)
+       console.log('🔬 [DEBUG] Response data type:', typeof apiResponse?.data)
+       
+       // Extract the actual data from the AxiosResponse
+       const responseData = apiResponse?.data
+       
+       if (responseData) {
+         console.log('🔬 [DEBUG] Response data keys:', Object.keys(responseData))
+         
+         // Check if we have a success response with data
+         if (responseData.success && responseData.data) {
+           console.log('🔬 [DEBUG] Using response.data.data (transformed nutrition data)')
+           setNutritionData(responseData.data)
+         } else if (responseData.data) {
+           console.log('🔬 [DEBUG] Using response.data (raw nutrition data)')
+           // If we have raw Edamam data, we might need to transform it
+           setNutritionData(responseData.data)
+         } else {
+           console.log('🔬 [DEBUG] Using entire response data')
+           setNutritionData(responseData)
+         }
+         
+         setNutritionAnalysisComplete(true)
+         toast({
+           title: "Nutrition Analysis Complete",
+           description: `Nutritional data has been automatically analyzed for "${productName}" with ${ingredientLines.length} ingredients.`,
+           duration: 5000
+         })
+         
+         console.log('✅ [DEBUG] Nutrition analysis completed successfully')
+       } else {
+         console.log('⚠️ [DEBUG] No data returned from API')
+         throw new Error('No data returned from nutrition analysis API')
+       }
+    } catch (error) {
+      console.error('❌ [DEBUG] Nutrition analysis failed:', error)
+      console.error('❌ [DEBUG] Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+        response: error.response?.data,
+        status: error.response?.status
+      })
+      toast({
+        title: "Nutrition Analysis Failed",
+        description: `Error: ${error.message || 'Unable to analyze nutrition data automatically. You can try again later.'}`,
+        variant: "destructive",
+        duration: 5000
+      })
+    } finally {
+      setIsAnalyzingNutrition(false)
+      console.log('🔬 [DEBUG] Nutrition analysis process completed')
     }
   }
-  
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event
+
+  // Handle recipe search on Enter key
+  const handleRecipeSearchKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      searchRecipes(recipeSearchQuery)
+    }
+  }
+
+  // Handle recipe selection
+  const handleRecipeSelect = (recipe: Recipe) => {
+    setSelectedRecipe(recipe)
     
-    if (over && active.id !== over.id) {
-      setManualIngredients((items) => {
-        const oldIndex = items.findIndex(item => item.id === active.id)
-        const newIndex = items.findIndex(item => item.id === over.id)
+    // Reset nutrition analysis state when selecting a new recipe
+    setNutritionAnalysisComplete(false)
+    setNutritionData(null)
+    
+    // Auto-populate form fields
+    form.setValue('name', recipe.name)
+    if (recipe.description) {
+      form.setValue('description', recipe.description)
+    }
+    
+    // Auto-populate serving information from recipe
+    if (recipe.servingInfo) {
+      // Set calories per serving
+      if (recipe.servingInfo.caloriesPerServing) {
+        form.setValue('calories_per_serving', recipe.servingInfo.caloriesPerServing)
+      }
+      
+      // Set portion size
+      if (recipe.servingInfo.portionSize) {
+        form.setValue('portion_size', recipe.servingInfo.portionSize as "small" | "medium" | "large")
+      }
+      
+      // Set serving type
+      if (recipe.servingInfo.servingType) {
+        form.setValue('serving_type', recipe.servingInfo.servingType as "main" | "side")
+      }
+      
+      // Set total servings
+      if (recipe.servingInfo.servings) {
+        form.setValue('total_servings', recipe.servingInfo.servings)
+      }
+    }
+    
+    // Auto-populate ingredients from recipe
+    // Find the original EdamamRecipe data to get detailed ingredient information
+    const recipeIndex = recipeSearchResults.findIndex(r => r.id === recipe.id)
+    const originalRecipe = originalRecipeData[recipeIndex]
+    
+    if (originalRecipe && originalRecipe.ingredients && originalRecipe.ingredients.length > 0) {
+      // Debug: Log the original recipe data
+      console.log('Original EdamamRecipe ingredients:', originalRecipe.ingredients)
+      
+      // Transform detailed ingredients from API response
+      const transformedIngredients = originalRecipe.ingredients.map((ingredient, index) => {
+        const transformed = {
+          id: `recipe-ingredient-${Date.now()}-${index}`,
+          text: typeof ingredient === 'string' ? ingredient : ingredient.text,
+          image: typeof ingredient === 'object' ? ingredient.image : undefined,
+          foodCategory: typeof ingredient === 'object' ? ingredient.foodCategory : undefined,
+          isMainIngredient: typeof ingredient === 'object' ? (ingredient.weight && ingredient.weight > 100) : false,
+          quantity: typeof ingredient === 'object' ? ingredient.quantity : undefined,
+          measure: typeof ingredient === 'object' ? ingredient.measure : undefined,
+          weight: typeof ingredient === 'object' ? ingredient.weight : undefined
+        }
         
-        const newOrder = arrayMove(items, oldIndex, newIndex)
-        toast({
-          title: "Ingredients reordered",
-          description: "The ingredient order has been updated."
+        // Debug: Log each transformed ingredient
+        console.log(`Ingredient ${index}:`, {
+          original: ingredient,
+          transformed: transformed,
+          hasImage: !!transformed.image
         })
-        return newOrder
+        
+        return transformed
       })
-    }
-  }
-
-  // Bulk ingredient functions
-  const parseBulkIngredients = () => {
-    if (!bulkIngredients.trim()) return
-    
-    const lines = bulkIngredients.split('\n').filter(line => line.trim())
-    const newIngredients: {id: string, text: string}[] = []
-    
-    lines.forEach(line => {
-      const trimmedLine = line.trim()
-      if (trimmedLine && !manualIngredients.some(item => item.text === trimmedLine)) {
-        newIngredients.push({
-          id: `ingredient-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          text: trimmedLine
-        })
-      }
-    })
-    
-    if (newIngredients.length > 0) {
-      setManualIngredients([...manualIngredients, ...newIngredients])
-      setBulkIngredients('')
+      
+      setRecipeIngredients(transformedIngredients)
+      
       toast({
-        title: "Ingredients added",
-        description: `${newIngredients.length} ingredient(s) have been added to the list.`
+        title: "Recipe Selected",
+        description: `"${recipe.name}" has been selected. ${transformedIngredients.length} ingredients have been auto-loaded.`
       })
     } else {
       toast({
-        title: "No new ingredients",
-        description: "All ingredients are already in the list or input is empty.",
-        variant: "destructive"
+        title: "Recipe Selected",
+        description: `"${recipe.name}" has been selected. Form fields have been auto-populated.`
       })
     }
-  }
-
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
     
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        const content = e.target?.result as string
-        
-        if (file.type === 'application/json') {
-          const jsonData = JSON.parse(content)
-          if (Array.isArray(jsonData)) {
-            setBulkIngredients(jsonData.join('\n'))
-          } else if (jsonData.ingredients && Array.isArray(jsonData.ingredients)) {
-            setBulkIngredients(jsonData.ingredients.join('\n'))
-          } else {
-            throw new Error('Invalid JSON format')
-          }
-        } else {
-          setBulkIngredients(content)
-        }
-        
-        toast({
-          title: "File loaded",
-          description: "Ingredients have been loaded from the file."
-        })
-      } catch (error) {
-        toast({
-          title: "Error",
-          description: "Failed to parse the file. Please check the format.",
-          variant: "destructive"
-        })
-      }
-    }
-    
-    reader.readAsText(file)
-    event.target.value = ''
+    // Don't auto-set image from recipe due to Edamam URL expiration issues
+    // Users can upload their own image using the file upload functionality
   }
-
-  const clearAllIngredients = () => {
-    setManualIngredients([])
-    toast({
-      title: "All ingredients cleared",
-      description: "The ingredient list has been cleared."
-    })
-  }
-
-
 
   const form = useForm<ProductFormData>({
     resolver: zodResolver(productSchema),
@@ -325,8 +467,12 @@ export default function ProductForm() {
       name: "",
       description: "",
       category_id: "",
+      calories_per_serving: 0,
+      portion_size: "medium",
+      serving_type: "main",
+      total_servings: 1,
       serving_size: 0,
-      serving_unit: "g",
+      serving_unit: "",
       servings_per_container: 1,
       status: "draft",
       is_public: false,
@@ -334,6 +480,29 @@ export default function ProductForm() {
       // tags removed - will be auto-generated
     }
   })
+
+  // Auto-trigger nutrition analysis when ingredients are populated
+  useEffect(() => {
+    const productName = form.watch("name")
+    // Only trigger if we have ingredients from a recipe and a product name
+    if (recipeIngredients.length > 0 && productName?.trim() && !isAnalyzingNutrition && !nutritionAnalysisComplete) {
+      // Add a small delay to ensure ingredients are fully populated
+      const timer = setTimeout(() => {
+        triggerNutritionAnalysis(recipeIngredients, productName)
+      }, 1000)
+
+      return () => clearTimeout(timer)
+    }
+  }, [recipeIngredients, form.watch("name"), isAnalyzingNutrition, nutritionAnalysisComplete])
+
+  // Reset nutrition analysis when ingredients change (new recipe selected)
+  useEffect(() => {
+    // Reset nutrition state when ingredients change to allow re-analysis
+    if (recipeIngredients.length > 0) {
+      setNutritionAnalysisComplete(false)
+      setNutritionData(null)
+    }
+  }, [recipeIngredients.length, recipeIngredients.map(ing => ing.id).join(',')])
 
   // Load product data if editing
   useEffect(() => {
@@ -372,8 +541,12 @@ export default function ProductForm() {
             name: product.name || '',
             description: product.description || "",
             category_id: product.category_id ? product.category_id.toString() : '',
+            calories_per_serving: parseFloat(product.calories_per_serving) || parseFloat(product.serving_size) || 0,
+            portion_size: (product.portion_size as "small" | "medium" | "large") || "medium",
+            serving_type: (product.serving_type as "main" | "side") || "main",
+            total_servings: parseInt(product.total_servings) || parseInt(product.servings_per_container) || 1,
             serving_size: parseFloat(product.serving_size) || 0,
-            serving_unit: product.serving_unit || 'g',
+            serving_unit: product.serving_unit || "",
             servings_per_container: parseInt(product.servings_per_container) || 1,
             status: (product.status as "draft" | "published") || 'draft',
             is_public: Boolean(product.is_public),
@@ -403,23 +576,7 @@ export default function ProductForm() {
             }
           }
           
-          // Load existing ingredients if available
-          if (product.ingredients && Array.isArray(product.ingredients)) {
-            const existingIngredients = product.ingredients.map((ingredient: any, index: number) => {
-              // Convert structured ingredient to free text format
-              let text = ingredient.name || ''
-              if (ingredient.quantity && ingredient.unit) {
-                text += ` ${ingredient.quantity} ${ingredient.unit}`
-              } else if (ingredient.quantity) {
-                text += ` ${ingredient.quantity}`
-              }
-              return {
-                id: ingredient.id ? ingredient.id.toString() : `ingredient-${Date.now()}-${index}`,
-                text: text.trim()
-              }
-            })
-            setManualIngredients(existingIngredients)
-          }
+          // Note: Existing ingredients will be loaded through recipe search functionality
           
           // Load existing ingredient notes if available
           if (product.ingredient_notes) {
@@ -447,16 +604,16 @@ export default function ProductForm() {
     loadProduct()
   }, [isEdit, id, form, navigate, toast])
 
-  // Use only manual ingredients
-  const ingredients = manualIngredients
+  // Use recipe ingredients
+  const ingredients = recipeIngredients
 
   const onSubmit = async (data: ProductFormData) => {
     console.log('Form data received:', data)
-    console.log('Selected tags:', selectedTags)
+    console.log('Selected recipe:', selectedRecipe)
+    console.log('Recipe ingredients:', recipeIngredients)
+    console.log('Nutrition data:', nutritionData)
     console.log('Upload method:', uploadMethod)
     console.log('Selected file:', selectedFile)
-    console.log('Selected file type:', typeof selectedFile)
-    console.log('Selected file instanceof File:', selectedFile instanceof File)
     
     setIsLoading(true)
     
@@ -464,11 +621,70 @@ export default function ProductForm() {
       // Determine if we need to use FormData for file upload
       const hasFile = selectedFile && uploadMethod === "upload"
       console.log('hasFile condition result:', hasFile)
-      console.log('selectedFile truthy:', !!selectedFile)
-      console.log('uploadMethod === "upload":', uploadMethod === "upload")
       
       let productData: any
       let headers: any = {}
+      
+      // Prepare rich ingredients data
+      const richIngredientsData = recipeIngredients.map((ingredient, index) => ({
+        text: ingredient.text,
+        quantity: ingredient.quantity || null,
+        measure: ingredient.measure || null,
+        weight: ingredient.weight || null,
+        foodCategory: ingredient.foodCategory || null,
+        foodId: ingredient.id || null,
+        image: ingredient.image || null,
+        isMainIngredient: ingredient.isMainIngredient || false,
+        order: index + 1
+      }))
+      
+      // Prepare recipe metadata from selectedRecipe
+      const recipeMetadata = selectedRecipe ? {
+        recipe_uri: selectedRecipe.uri || null,
+        recipe_source: selectedRecipe.source || null,
+        recipe_url: selectedRecipe.url || null,
+        prep_time: selectedRecipe.estimatedPrepTime || null,
+        cook_time: selectedRecipe.estimatedCookTime || null,
+        total_time: selectedRecipe.totalTime || null,
+        skill_level: selectedRecipe.skillLevel || null,
+        time_category: selectedRecipe.timeCategory || null,
+        cuisine_type: selectedRecipe.cuisineType?.[0] || null,
+        difficulty: selectedRecipe.difficulty || null,
+        total_co2_emissions: selectedRecipe.totalCO2Emissions || null,
+        co2_emissions_class: selectedRecipe.co2EmissionsClass || null,
+        recipe_yield: selectedRecipe.servings || null,
+        total_weight: nutritionData?.totalWeight || null,
+        weight_per_serving: nutritionData?.weightPerServing || null,
+        // Key nutritional information per serving
+        calories_per_serving_recipe: selectedRecipe.totalNutrients?.ENERC_KCAL ? Math.round(selectedRecipe.totalNutrients.ENERC_KCAL.quantity / selectedRecipe.servings) : null,
+        fat_per_serving: selectedRecipe.totalNutrients?.FAT ? Math.round(selectedRecipe.totalNutrients.FAT.quantity / selectedRecipe.servings) : null,
+        carbs_per_serving: selectedRecipe.totalNutrients?.CHOCDF ? Math.round(selectedRecipe.totalNutrients.CHOCDF.quantity / selectedRecipe.servings) : null,
+        protein_per_serving: selectedRecipe.totalNutrients?.PROCNT ? Math.round(selectedRecipe.totalNutrients.PROCNT.quantity / selectedRecipe.servings) : null,
+        // Total recipe information
+        total_recipe_calories: selectedRecipe.totalNutrients?.ENERC_KCAL ? Math.round(selectedRecipe.totalNutrients.ENERC_KCAL.quantity) : null,
+        total_recipe_weight: nutritionData?.totalWeight || null,
+        // Per serving breakdown
+        serving_weight: nutritionData?.weightPerServing || null,
+        serving_calories: nutritionData?.caloriesPerServing || null,
+        total_servings_count: selectedRecipe.servings || null
+      } : {}
+      
+      // Prepare labels and tags from selectedRecipe
+      const labelsAndTags = selectedRecipe ? {
+        diet_labels: JSON.stringify(selectedRecipe.dietLabels || []),
+        health_labels: JSON.stringify(selectedRecipe.healthLabels || []),
+        caution_labels: JSON.stringify(selectedRecipe.cautions || []),
+        meal_types: JSON.stringify(selectedRecipe.mealType || []),
+        dish_types: JSON.stringify(selectedRecipe.dishType || []),
+        recipe_tags: JSON.stringify(selectedRecipe.tags || [])
+      } : {
+        diet_labels: JSON.stringify([]),
+        health_labels: JSON.stringify([]),
+        caution_labels: JSON.stringify([]),
+        meal_types: JSON.stringify([]),
+        dish_types: JSON.stringify([]),
+        recipe_tags: JSON.stringify([])
+      }
       
       if (hasFile) {
         // Use FormData for file upload
@@ -476,14 +692,46 @@ export default function ProductForm() {
         productData.append('name', data.name)
         productData.append('description', data.description || '')
         productData.append('category_id', parseInt(data.category_id).toString())
-        productData.append('serving_size', data.serving_size.toString())
-        productData.append('serving_unit', data.serving_unit)
-        productData.append('servings_per_container', data.servings_per_container.toString())
+        productData.append('calories_per_serving', data.calories_per_serving.toString())
+        productData.append('portion_size', data.portion_size)
+        productData.append('serving_type', data.serving_type)
+        productData.append('total_servings', data.total_servings.toString())
+        
+        // Add additional serving fields
+        if (data.serving_size !== undefined && data.serving_size > 0) {
+          productData.append('serving_size', data.serving_size.toString())
+        }
+        if (data.serving_unit) {
+          productData.append('serving_unit', data.serving_unit)
+        }
+        if (data.servings_per_container !== undefined && data.servings_per_container > 0) {
+          productData.append('servings_per_container', data.servings_per_container.toString())
+        }
         productData.append('status', data.status)
         productData.append('is_public', data.is_public ? '1' : '0')
         productData.append('is_pinned', data.is_pinned ? '1' : '0')
         
-        // Add ingredients to FormData as array
+        // Add recipe metadata
+        Object.entries(recipeMetadata).forEach(([key, value]) => {
+          if (value !== null && value !== undefined) {
+            productData.append(key, value.toString())
+          }
+        })
+        
+        // Add labels and tags
+        Object.entries(labelsAndTags).forEach(([key, value]) => {
+          productData.append(key, value)
+        })
+        
+        // Add rich ingredients data
+        productData.append('rich_ingredients', JSON.stringify(richIngredientsData))
+        
+        // Add nutrition data
+        if (nutritionData) {
+          productData.append('nutrition_data', JSON.stringify(nutritionData))
+        }
+        
+        // Add basic ingredients for backward compatibility
         if (ingredients.length > 0) {
           ingredients.forEach((ingredient, index) => {
             productData.append(`ingredients[${index}][id]`, ingredient.id.toString())
@@ -491,46 +739,48 @@ export default function ProductForm() {
             productData.append(`ingredients[${index}][order]`, (index + 1).toString())
           })
         } else {
-          // Send empty array indicator
           productData.append('ingredients', '[]')
         }
         
         // Add ingredient notes
         productData.append('ingredient_notes', ingredientNotes)
         
-        // Tags will be auto-generated on backend, no need to send them
-        // Append the image file - we know it exists because hasFile is true
-        console.log('Appending file to FormData:', selectedFile)
-        console.log('File details:', {
-          name: selectedFile.name,
-          size: selectedFile.size,
-          type: selectedFile.type,
-          lastModified: selectedFile.lastModified
-        })
+        // Append the image file
         productData.append('image_file', selectedFile)
         
-        // Log FormData contents
-        console.log('FormData contents:')
-        for (let [key, value] of productData.entries()) {
-          console.log(`${key}:`, value)
-        }
-        
-        // Don't set Content-Type for FormData - let browser set it with boundary
+        console.log('FormData with rich data prepared')
       } else {
         // Use regular JSON for URL or no image
         productData = {
           name: data.name,
           description: data.description,
           category_id: parseInt(data.category_id),
-          serving_size: data.serving_size,
-          serving_unit: data.serving_unit,
-          servings_per_container: data.servings_per_container,
+          calories_per_serving: data.calories_per_serving,
+          portion_size: data.portion_size,
+          serving_type: data.serving_type,
+          total_servings: data.total_servings,
+          
+          // Add additional serving fields
+          ...(data.serving_size !== undefined && data.serving_size > 0 && { serving_size: data.serving_size }),
+          ...(data.serving_unit && { serving_unit: data.serving_unit }),
+          ...(data.servings_per_container !== undefined && data.servings_per_container > 0 && { servings_per_container: data.servings_per_container }),
           status: data.status,
           is_public: data.is_public,
           is_pinned: data.is_pinned,
-          // tags removed - will be auto-generated on backend
           
-          // Add ingredients to JSON data
+          // Add recipe metadata
+          ...recipeMetadata,
+          
+          // Add labels and tags
+          ...labelsAndTags,
+          
+          // Add rich ingredients data
+          rich_ingredients: JSON.stringify(richIngredientsData),
+          
+          // Add nutrition data
+          nutrition_data: nutritionData ? JSON.stringify(nutritionData) : null,
+          
+          // Add basic ingredients for backward compatibility
           ingredients: ingredients.length > 0 ? ingredients.map((ingredient, index) => ({
             id: ingredient.id,
             text: ingredient.text,
@@ -541,12 +791,13 @@ export default function ProductForm() {
           ingredient_notes: ingredientNotes
         }
         
-        // Add image URL if provided - use extracted URL if available, otherwise use original URL
+        // Add image URL if provided
         if (imageUrl && uploadMethod === "url") {
           productData.image_url = extractedUrl || imageUrl
         }
         
         headers['Content-Type'] = 'application/json'
+        console.log('JSON data with rich recipe information prepared:', productData)
       }
       
       let response
@@ -673,84 +924,287 @@ export default function ProductForm() {
   }
 
   return (
-    <div className="flex-1 space-y-6 p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" asChild>
-            <Link to="/products">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Products
-            </Link>
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">
-              {isEdit ? "Edit Product" : "Add New Product"}
-            </h1>
-            <p className="text-muted-foreground">
-              {isEdit ? "Update product information" : "Fill in the product details below"}
-            </p>
+    <div className="flex-1 space-y-8 p-6 bg-gradient-subtle min-h-screen">
+      {/* Enhanced Header with Glass Effect */}
+      <div className="relative">
+        <div className="absolute inset-0 bg-gradient-primary/10 rounded-3xl -z-10" />
+        <div className="backdrop-blur-sm bg-card/90 border border-border/50 rounded-3xl p-8 shadow-elegant">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-6">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                asChild
+                className="group hover:bg-primary/10 hover:text-primary transition-all duration-300 hover:scale-105"
+              >
+                <Link to="/products">
+                  <ArrowLeft className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform duration-300" />
+                  Back to Products
+                </Link>
+              </Button>
+              <div className="space-y-2">
+                <h1 className="text-4xl font-bold bg-gradient-text bg-clip-text text-transparent">
+                  {isEdit ? "Edit Product" : "Add New Product"}
+                </h1>
+                <p className="text-muted-foreground text-lg">
+                  {isEdit ? "Update product information" : "Fill in the product details below"}
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-4">
+              <Button 
+                type="submit" 
+                form="product-form"
+                disabled={isLoading}
+                className="bg-gradient-primary hover:shadow-glow hover:scale-105 transition-all duration-300 text-white px-8 py-3 text-lg"
+              >
+                <Save className="w-5 h-5 mr-3" />
+                {isLoading ? "Saving..." : isEdit ? "Update Product" : "Create Product"}
+              </Button>
+            </div>
           </div>
-        </div>
-        
-        <div className="flex items-center gap-3">
-          <Button 
-            type="submit" 
-            form="product-form"
-            disabled={isLoading}
-            className="bg-gradient-primary"
-          >
-            <Save className="w-4 h-4 mr-2" />
-            {isLoading ? "Saving..." : isEdit ? "Update Product" : "Create Product"}
-          </Button>
         </div>
       </div>
 
       <Form {...form}>
         <form id="product-form" onSubmit={form.handleSubmit(onSubmit)}>
           <Tabs value={currentTab} onValueChange={setCurrentTab} className="space-y-6">
-            <TabsList className="grid w-full grid-cols-5">
-              <TabsTrigger value="basic" className="flex items-center gap-2">
+            <TabsList className="grid w-full grid-cols-5 bg-card/50 backdrop-blur-sm border border-border/50 p-2 rounded-2xl shadow-lg">
+              <TabsTrigger 
+                value="basic" 
+                className="flex items-center gap-2 data-[state=active]:bg-gradient-primary data-[state=active]:text-white data-[state=active]:shadow-glow transition-all duration-300 hover:scale-105 rounded-xl"
+              >
                 <Info className="h-4 w-4" />
                 Basic Info
               </TabsTrigger>
-              <TabsTrigger value="serving" className="flex items-center gap-2">
+              <TabsTrigger 
+                value="ingredients" 
+                className="flex items-center gap-2 data-[state=active]:bg-gradient-primary data-[state=active]:text-white data-[state=active]:shadow-glow transition-all duration-300 hover:scale-105 rounded-xl"
+              >
+                <Package className="h-4 w-4" />
+                Ingredients
+              </TabsTrigger>
+              <TabsTrigger 
+                value="serving" 
+                className="flex items-center gap-2 data-[state=active]:bg-gradient-primary data-[state=active]:text-white data-[state=active]:shadow-glow transition-all duration-300 hover:scale-105 rounded-xl"
+              >
                 <Package className="h-4 w-4" />
                 Serving Info
               </TabsTrigger>
-              <TabsTrigger value="ingredients" className="flex items-center gap-2">
-                <Info className="h-4 w-4" />
-                Ingredients
-              </TabsTrigger>
-              <TabsTrigger value="categorization" className="flex items-center gap-2">
+              <TabsTrigger 
+                value="categorization" 
+                className="flex items-center gap-2 data-[state=active]:bg-gradient-primary data-[state=active]:text-white data-[state=active]:shadow-glow transition-all duration-300 hover:scale-105 rounded-xl"
+              >
                 <Tags className="h-4 w-4" />
                 Categorization
               </TabsTrigger>
-              <TabsTrigger value="settings" className="flex items-center gap-2">
+              <TabsTrigger 
+                value="settings" 
+                className="flex items-center gap-2 data-[state=active]:bg-gradient-primary data-[state=active]:text-white data-[state=active]:shadow-glow transition-all duration-300 hover:scale-105 rounded-xl"
+              >
                 <Settings className="h-4 w-4" />
                 Settings
               </TabsTrigger>
+
             </TabsList>
 
             {/* Basic Information */}
             <TabsContent value="basic" className="space-y-6">
-              <div className="grid gap-6 md:grid-cols-2 items-stretch">
-                {/* Left Column */}
+              {/* Enhanced Recipe Search Section */}
+              <Card className="bg-card/80 backdrop-blur-sm border border-border/50 shadow-elegant hover:shadow-glow transition-all duration-500 group">
+                <CardHeader className="bg-gradient-primary/5 rounded-t-lg">
+                  <CardTitle className="flex items-center gap-3 text-xl">
+                    <div className="p-2 bg-gradient-primary rounded-lg group-hover:scale-110 transition-transform duration-300">
+                      <Search className="h-5 w-5 text-white" />
+                    </div>
+                    Recipe Search
+                  </CardTitle>
+                  <p className="text-muted-foreground">
+                    Search for recipes to auto-populate product details. Type a recipe name and press Enter.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-6 p-6">
+                  <div className="flex gap-3">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5" />
+                      <Input
+                        placeholder="e.g., Chicken Alfredo, Chocolate Cake..."
+                        value={recipeSearchQuery}
+                        onChange={(e) => {
+                          setRecipeSearchQuery(e.target.value)
+                          if (searchErrorMessage) {
+                            setSearchErrorMessage(null)
+                          }
+                        }}
+                        onKeyPress={handleRecipeSearchKeyPress}
+                        className="pl-11 h-12 text-lg border-2 focus:border-primary/50 rounded-xl bg-background/50 backdrop-blur-sm"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={() => searchRecipes(recipeSearchQuery)}
+                      disabled={isSearchingRecipes || !recipeSearchQuery.trim()}
+                      className="bg-gradient-primary hover:shadow-glow transition-all duration-300 hover:scale-105 px-8 h-12 rounded-xl"
+                    >
+                      {isSearchingRecipes ? (
+                        <>
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3" />
+                          Searching...
+                        </>
+                      ) : (
+                        <>
+                          <Search className="h-5 w-5 mr-3" />
+                          Search
+                        </>
+                      )}
+                    </Button>
+                  </div>
+
+                  {/* Search Results */}
+                  {recipeSearchResults.length > 0 && !selectedRecipe && (
+                    <div className="space-y-2">
+                      <h4 className="font-medium text-sm">Search Results:</h4>
+                      <div className="grid gap-2 max-h-64 overflow-y-auto">
+                        {recipeSearchResults.map((recipe, index) => (
+                          <div
+                            key={index}
+                            className="p-3 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                            onClick={() => handleRecipeSelect(recipe)}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-12 h-12 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+                                {recipe.image && recipe.image !== 'null' && !imageErrors.has(recipe.image) ? (
+                                  <img 
+                                    src={recipe.image} 
+                                    alt={recipe.name}
+                                    className="w-full h-full object-cover"
+                                    onError={() => {
+                                      console.log('Image failed to load:', recipe.image)
+                                      setImageErrors(prev => new Set([...prev, recipe.image!]))
+                                    }}
+                                  />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center">
+                                    <ChefHat className="w-6 h-6 text-muted-foreground" />
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <span className="font-medium text-sm truncate">{recipe.name}</span>
+                                <div className="flex items-center gap-4 text-xs text-gray-500 mt-1">
+                                  {recipe.cookTime && (
+                                    <span className="flex items-center gap-1">
+                                      <Clock className="h-3 w-3" />
+                                      {recipe.cookTime}m
+                                    </span>
+                                  )}
+                                  {recipe.cuisine && (
+                                    <span>
+                                      {recipe.cuisine}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Error Message Display */}
+                  {searchErrorMessage && (
+                    <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 bg-orange-400 rounded-full flex-shrink-0"></div>
+                        <p className="text-sm text-orange-800">{searchErrorMessage}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Selected Recipe Display */}
+                  {selectedRecipe && (
+                    <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+                            {selectedRecipe.image && selectedRecipe.image !== 'null' && !imageErrors.has(selectedRecipe.image) ? (
+                              <img 
+                                src={selectedRecipe.image} 
+                                alt={selectedRecipe.name}
+                                className="w-full h-full object-cover"
+                                onError={() => {
+                                  console.log('Selected recipe image failed to load:', selectedRecipe.image)
+                                  setImageErrors(prev => new Set([...prev, selectedRecipe.image!]))
+                                }}
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <ChefHat className="w-6 h-6 text-muted-foreground" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-medium text-green-900">{selectedRecipe.name}</h4>
+                            <div className="flex items-center gap-4 text-sm text-green-700 mt-1">
+                              {selectedRecipe.cookTime && (
+                                <span className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />
+                                  {selectedRecipe.cookTime}m
+                                </span>
+                              )}
+                              {selectedRecipe.source && (
+                                <span className="flex items-center gap-1">
+                                  <ExternalLink className="h-3 w-3" />
+                                  {selectedRecipe.source}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedRecipe(null)
+                            setRecipeIngredients([])
+                          }}
+                          className="text-green-700 hover:text-green-900 hover:bg-green-100"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Enhanced Product Details Section */}
+              <div className="grid gap-8 md:grid-cols-2 items-stretch">
+                {/* Left Column - Product Details */}
                 <div className="space-y-6">
-                  <Card className="h-full flex flex-col">
-                    <CardHeader>
-                      <CardTitle>Product Details</CardTitle>
+                  <Card className="h-full flex flex-col bg-card/80 backdrop-blur-sm border border-border/50 shadow-elegant hover:shadow-glow transition-all duration-500 group">
+                    <CardHeader className="bg-gradient-primary/5 rounded-t-lg">
+                      <CardTitle className="flex items-center gap-3 text-xl">
+                        <div className="p-2 bg-gradient-primary rounded-lg group-hover:scale-110 transition-transform duration-300">
+                          <Package className="h-5 w-5 text-white" />
+                        </div>
+                        Product Details
+                      </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-4 flex-1">
+                    <CardContent className="space-y-6 flex-1 p-6">
                       <FormField
                         control={form.control}
                         name="name"
                         render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Product Name *</FormLabel>
+                          <FormItem className="space-y-3">
+                            <FormLabel className="text-lg font-semibold text-foreground">Product Name *</FormLabel>
                             <FormControl>
                               <Input 
                                 placeholder="e.g., Organic Greek Yogurt" 
+                                className="h-12 text-lg border-2 focus:border-primary/50 rounded-xl bg-background/50 backdrop-blur-sm transition-all duration-300 hover:shadow-md"
                                 {...field}
                               />
                             </FormControl>
@@ -759,22 +1213,20 @@ export default function ProductForm() {
                         )}
                       />
 
-
-
                       <FormField
                         control={form.control}
                         name="description"
                         render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Description *</FormLabel>
+                          <FormItem className="space-y-3">
+                            <FormLabel className="text-lg font-semibold text-foreground">Description *</FormLabel>
                             <FormControl>
                               <Textarea 
                                 placeholder="Describe your product..."
-                                className="min-h-[100px]"
+                                className="min-h-[120px] text-lg border-2 focus:border-primary/50 rounded-xl bg-background/50 backdrop-blur-sm transition-all duration-300 hover:shadow-md resize-none"
                                 {...field} 
                               />
                             </FormControl>
-                            <FormDescription>
+                            <FormDescription className="text-sm text-muted-foreground bg-muted/30 px-3 py-1 rounded-lg">
                               {field.value?.length || 0}/500 characters
                             </FormDescription>
                             <FormMessage />
@@ -785,13 +1237,23 @@ export default function ProductForm() {
                   </Card>
                 </div>
 
-                {/* Right Column */}
-                <div className="space-y-6">
-                  <Card className="h-full flex flex-col">
-                    <CardHeader>
-                      <CardTitle>Product Image</CardTitle>
-                    </CardHeader>
-                    <CardContent className="flex-1">
+                  {/* Enhanced Right Column - Product Image */}
+                  <div className="space-y-6">
+                    <Card className="h-full flex flex-col bg-card/80 backdrop-blur-sm border border-border/50 shadow-elegant hover:shadow-glow transition-all duration-500 group">
+                      <CardHeader className="bg-gradient-primary/5 rounded-t-lg">
+                        <CardTitle className="flex items-center gap-3 text-xl">
+                          <div className="p-2 bg-gradient-primary rounded-lg group-hover:scale-110 transition-transform duration-300">
+                            <Upload className="h-5 w-5 text-white" />
+                          </div>
+                          Product Image
+                          {imageUrl && (
+                            <Badge variant="secondary" className="ml-auto bg-gradient-primary/20 text-primary border-primary/30">
+                              Added
+                            </Badge>
+                          )}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="flex-1">
                       <div className="space-y-4">
                         {/* Upload Method Selection */}
                         <div className="flex gap-2">
@@ -951,24 +1413,496 @@ export default function ProductForm() {
                   </Card>
                 </div>
               </div>
+
+              {/* Comprehensive Recipe Details Section */}
+              {selectedRecipe && (
+                <Card className="mt-6">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Info className="h-5 w-5" />
+                      Recipe Information
+                    </CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      Detailed nutritional and preparation information.
+                    </p>
+                  </CardHeader>
+                  <CardContent className="space-y-8">
+                    {/* Basic Recipe Metrics */}
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                      {selectedRecipe.calories && (
+                        <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-xl border border-orange-200">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
+                            <span className="text-sm font-semibold text-orange-900">Total Calories</span>
+                          </div>
+                          <p className="text-3xl font-bold text-orange-800">
+                            {Math.round(selectedRecipe.calories)}
+                          </p>
+                          <p className="text-xs text-orange-600 mt-1">kcal total recipe</p>
+                        </div>
+                      )}
+                      
+                      {selectedRecipe.totalTime !== undefined && selectedRecipe.totalTime !== null && (
+                        <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-xl border border-blue-200">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Clock className="h-4 w-4 text-blue-600" />
+                            <span className="text-sm font-semibold text-blue-900">Total Time</span>
+                          </div>
+                          <p className="text-3xl font-bold text-blue-800">
+                            {selectedRecipe.totalTime}
+                          </p>
+                          <p className="text-xs text-blue-600 mt-1">minutes</p>
+                        </div>
+                      )}
+                      
+
+                      
+                      {selectedRecipe.rating && (
+                         <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 p-4 rounded-xl border border-yellow-200">
+                           <div className="flex items-center gap-2 mb-2">
+                             <Star className="h-4 w-4 text-yellow-600 fill-current" />
+                             <span className="text-sm font-semibold text-yellow-900">Rating</span>
+                           </div>
+                           <div className="flex items-center gap-2">
+                             <p className="text-3xl font-bold text-yellow-800">
+                               {Math.round(selectedRecipe.rating * 10) / 10}
+                             </p>
+                             <div className="flex">
+                               {[...Array(5)].map((_, i) => (
+                                 <Star 
+                                   key={i} 
+                                   className={`h-3 w-3 ${
+                                     i < Math.round(selectedRecipe.rating!) ? 'text-yellow-500 fill-current' : 'text-yellow-300'
+                                   }`} 
+                                 />
+                               ))}
+                             </div>
+                           </div>
+                           <p className="text-xs text-yellow-600 mt-1">out of 5</p>
+                         </div>
+                       )}
+                       
+                       {/* Nutrition Score Card */}
+                        <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-xl border border-green-200">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                            <span className="text-sm font-semibold text-green-900">Nutrition Score</span>
+                          </div>
+                          <div className="space-y-2">
+                            <p className="text-2xl font-bold text-green-800">
+                              {selectedRecipe.diversityScore || 50}/100
+                            </p>
+                            <p className="text-xs text-green-600 mt-1">diversity score</p>
+                          </div>
+                        </div>
+                    </div>
+
+                    {/* Recipe Classification & Details */}
+                    <div className="grid gap-6 md:grid-cols-2">
+                      {/* Left Column */}
+                      <div className="space-y-6">
+                        {/* Preparation Section */}
+                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                          <h4 className="font-semibold text-blue-900 mb-3">Preparation</h4>
+                          <div className="space-y-3">
+                            {selectedRecipe.estimatedPrepTime && (
+                              <div>
+                                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Prep Time</Label>
+                                <div className="mt-1">
+                                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 font-medium">
+                                    {selectedRecipe.estimatedPrepTime} min
+                                  </Badge>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {selectedRecipe.estimatedCookTime !== undefined && (
+                              <div>
+                                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Cook Time</Label>
+                                <div className="mt-1">
+                                  <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 font-medium">
+                                    {selectedRecipe.estimatedCookTime === 0 || selectedRecipe.estimatedCookTime === null ? 'Not found' : `${selectedRecipe.estimatedCookTime} min`}
+                                  </Badge>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {selectedRecipe.totalTime && (
+                              <div>
+                                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Total Time</Label>
+                                <div className="mt-1">
+                                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 font-medium">
+                                    {selectedRecipe.totalTime} min
+                                  </Badge>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {selectedRecipe.skillLevel && (
+                              <div>
+                                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Skill Level</Label>
+                                <div className="mt-1">
+                                  <Badge 
+                                    variant="outline" 
+                                    className={`font-medium ${
+                                      selectedRecipe.skillLevel === 'easy' ? 'bg-green-50 text-green-700 border-green-200' :
+                                      selectedRecipe.skillLevel === 'medium' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                                      'bg-red-50 text-red-700 border-red-200'
+                                    }`}
+                                  >
+                                    {selectedRecipe.skillLevel.charAt(0).toUpperCase() + selectedRecipe.skillLevel.slice(1)}
+                                  </Badge>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {selectedRecipe.timeCategory && (
+                              <div>
+                                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Time Category</Label>
+                                <div className="mt-1">
+                                  <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 font-medium">
+                                    {selectedRecipe.timeCategory.charAt(0).toUpperCase() + selectedRecipe.timeCategory.slice(1)}
+                                  </Badge>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* Recipe Classification */}
+                        <div className="bg-gray-50 p-4 rounded-lg border">
+                          <h4 className="font-semibold text-gray-900 mb-3">Recipe Classification</h4>
+                          <div className="space-y-3">
+                            {selectedRecipe.cuisine && (
+                              <div>
+                                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Cuisine Type</Label>
+                                <div className="mt-1">
+                                  <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 font-medium">
+                                    {selectedRecipe.cuisine}
+                                  </Badge>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {selectedRecipe.difficulty && (
+                              <div>
+                                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Difficulty Level</Label>
+                                <div className="mt-1">
+                                  <Badge 
+                                    variant="outline" 
+                                    className={`font-medium ${
+                                      selectedRecipe.difficulty.toLowerCase() === 'easy' ? 'bg-green-50 text-green-700 border-green-200' :
+                                      selectedRecipe.difficulty.toLowerCase() === 'medium' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                                      'bg-red-50 text-red-700 border-red-200'
+                                    }`}
+                                  >
+                                    {selectedRecipe.difficulty}
+                                  </Badge>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {selectedRecipe.mealType && selectedRecipe.mealType.length > 0 && (
+                              <div>
+                                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Meal Type</Label>
+                                <div className="mt-1 flex flex-wrap gap-2">
+                                  {selectedRecipe.mealType.map((meal, index) => (
+                                    <Badge key={index} variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 text-xs">
+                                      {meal}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {selectedRecipe.dishType && selectedRecipe.dishType.length > 0 && (
+                              <div>
+                                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Dish Type</Label>
+                                <div className="mt-1 flex flex-wrap gap-2">
+                                  {selectedRecipe.dishType.map((dish, index) => (
+                                    <Badge key={index} variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs">
+                                      {dish}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+
+                      </div>
+
+                      {/* Right Column */}
+                      <div className="space-y-6">
+                        {/* Tags */}
+                        {selectedRecipe.apiTags && selectedRecipe.apiTags.length > 0 && (
+                          <div className="bg-gray-50 p-4 rounded-lg border">
+                            <h4 className="font-semibold text-gray-900 mb-3">Tags</h4>
+                            <div className="flex flex-wrap gap-2">
+                              {selectedRecipe.apiTags.map((tag, index) => (
+                                <Badge key={index} variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs">
+                                  {tag}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+
+
+                        {/* Health Labels */}
+                        {selectedRecipe.healthLabels && selectedRecipe.healthLabels.length > 0 && (
+                          <div className="bg-gray-50 p-4 rounded-lg border">
+                            <h4 className="font-semibold text-gray-900 mb-3">Health Labels</h4>
+                            <div className="flex flex-wrap gap-2">
+                              {selectedRecipe.healthLabels.slice(0, 8).map((label, index) => (
+                                <Badge key={index} variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs">
+                                  {label}
+                                </Badge>
+                              ))}
+                              {selectedRecipe.healthLabels.length > 8 && (
+                                <Badge variant="outline" className="bg-gray-100 text-gray-600 border-gray-300 text-xs">
+                                  +{selectedRecipe.healthLabels.length - 8} more
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+
+                        {/* Nutritional Highlights */}
+                        {selectedRecipe.totalNutrients && Object.keys(selectedRecipe.totalNutrients).length > 0 && (
+                          <div className="bg-gray-50 p-4 rounded-lg border">
+                            <h4 className="font-semibold text-gray-900 mb-3">Key Nutritional Information</h4>
+                            <p className="text-xs text-gray-500 mb-3">Major nutrients per serving</p>
+                            <div className="grid grid-cols-2 gap-3">
+                              {selectedRecipe.totalNutrients.ENERC_KCAL && (
+                                <div className="text-center p-2 bg-white rounded border">
+                                  <p className="text-lg font-bold text-gray-800">{Math.round(selectedRecipe.totalNutrients.ENERC_KCAL.quantity / selectedRecipe.servings)}</p>
+                                  <p className="text-xs text-gray-600">Calories</p>
+                                </div>
+                              )}
+                              {selectedRecipe.totalNutrients.PROCNT && (
+                                <div className="text-center p-2 bg-white rounded border">
+                                  <p className="text-lg font-bold text-blue-600">{Math.round(selectedRecipe.totalNutrients.PROCNT.quantity / selectedRecipe.servings)}g</p>
+                                  <p className="text-xs text-gray-600">Protein</p>
+                                </div>
+                              )}
+                              {selectedRecipe.totalNutrients.CHOCDF && (
+                                <div className="text-center p-2 bg-white rounded border">
+                                  <p className="text-lg font-bold text-green-600">{Math.round(selectedRecipe.totalNutrients.CHOCDF.quantity / selectedRecipe.servings)}g</p>
+                                  <p className="text-xs text-gray-600">Carbs</p>
+                                </div>
+                              )}
+                              {selectedRecipe.totalNutrients.FAT && (
+                                <div className="text-center p-2 bg-white rounded border">
+                                  <p className="text-lg font-bold text-yellow-600">{Math.round(selectedRecipe.totalNutrients.FAT.quantity / selectedRecipe.servings)}g</p>
+                                  <p className="text-xs text-gray-600">Fat</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Environmental Impact */}
+                        {selectedRecipe.totalCO2Emissions > 0 && (
+                          <div className="bg-gray-50 p-4 rounded-lg border">
+                            <h4 className="font-semibold text-gray-900 mb-3">Environmental Impact</h4>
+                            <p className="text-xs text-gray-500 mb-2">Carbon footprint information</p>
+                            <div className="flex items-center gap-3">
+                              <div className="text-center">
+                                <p className="text-lg font-bold text-green-700">{Math.round(selectedRecipe.totalCO2Emissions)}g</p>
+                                <p className="text-xs text-gray-600">CO₂ Emissions</p>
+                              </div>
+                              {selectedRecipe.co2EmissionsClass && (
+                                <Badge 
+                                  variant="outline" 
+                                  className={`text-xs ${
+                                    selectedRecipe.co2EmissionsClass.toLowerCase() === 'a+' ? 'bg-green-50 text-green-700 border-green-200' :
+                                    selectedRecipe.co2EmissionsClass.toLowerCase() === 'a' ? 'bg-green-50 text-green-700 border-green-200' :
+                                    selectedRecipe.co2EmissionsClass.toLowerCase() === 'b' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                                    selectedRecipe.co2EmissionsClass.toLowerCase() === 'c' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                                    'bg-red-50 text-red-700 border-red-200'
+                                  }`}
+                                >
+                                  Class {selectedRecipe.co2EmissionsClass}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Cautions & Allergens */}
+                        {selectedRecipe.cautions && selectedRecipe.cautions.length > 0 && (
+                          <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                            <h4 className="font-semibold text-red-900 mb-3">⚠️ Cautions & Allergens</h4>
+                            <p className="text-xs text-red-600 mb-2">Important dietary considerations</p>
+                            <div className="flex flex-wrap gap-2">
+                              {selectedRecipe.cautions.map((caution, index) => (
+                                <Badge key={index} variant="outline" className="bg-red-100 text-red-800 border-red-300 text-xs">
+                                  {caution}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
 
             {/* Serving Information */}
             <TabsContent value="serving" className="space-y-6">
+              {/* Per-Serving Display Section */}
+              {(selectedRecipe?.servingInfo || nutritionData) && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <ChefHat className="h-5 w-5" />
+                      Per-Serving Information
+                    </CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      Calculated serving information from recipe and nutrition analysis
+                    </p>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {/* Servings Per Container */}
+                      <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                        <div className="text-center">
+                          <p className="text-sm font-medium text-green-700 mb-1">Servings Per Container</p>
+                          <p className="text-lg font-bold text-green-900">
+                            {form.watch('total_servings') || selectedRecipe?.servingInfo?.servings || nutritionData?.servings || 1}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Calories per Serving */}
+                      <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                        <div className="text-center">
+                          <p className="text-sm font-medium text-orange-700 mb-1">Calories per Serving</p>
+                          <p className="text-lg font-bold text-orange-900">
+                            {(() => {
+                              const formCalories = form.watch('calories_per_serving')
+                              const recipeCalories = selectedRecipe?.servingInfo?.caloriesPerServing
+                              const nutritionCalories = nutritionData?.calories && nutritionData?.servings 
+                                ? Math.round(nutritionData.calories / nutritionData.servings)
+                                : null
+                              
+                              const calories = formCalories || recipeCalories || nutritionCalories || 0
+                              return `${calories} kcal`
+                            })()} 
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Additional Information */}
+                    {nutritionData && (() => {
+                      const servingInfo = servingUtils.calculateServingInfo(
+                        {
+                          calories_per_serving: form.watch('calories_per_serving'),
+                          total_servings: form.watch('total_servings'),
+                          portion_size: form.watch('portion_size'),
+                          serving_type: form.watch('serving_type')
+                        },
+                        selectedRecipe,
+                        nutritionData
+                      );
+                      
+                      return (
+                        <div className="mt-4 space-y-3">
+                          {/* Total Recipe Information */}
+                          <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                            <h4 className="text-sm font-medium text-gray-700 mb-2">Total Recipe Information</h4>
+                            <div className="space-y-1">
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-gray-600">Total Recipe Calories:</span>
+                                <span className="font-medium text-gray-900">{nutritionData.calories} kcal</span>
+                              </div>
+                              {nutritionData.totalWeight && (
+                                <div className="flex items-center justify-between text-sm">
+                                  <span className="text-gray-600">Total Weight:</span>
+                                  <span className="font-medium text-gray-900">{formatWeight(nutritionData.totalWeight)}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* Per Serving Breakdown */}
+                          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <h4 className="text-sm font-medium text-blue-700 mb-2">Per Serving Breakdown</h4>
+                            <div className="space-y-1">
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-blue-600">Weight per Serving:</span>
+                                <span className="font-medium text-blue-900">{formatWeight(servingInfo.weightPerServing)}</span>
+                              </div>
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-blue-600">Calories per Serving:</span>
+                                <span className="font-medium text-blue-900">{servingInfo.caloriesPerServing} kcal</span>
+                              </div>
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-blue-600">Total Servings:</span>
+                                <span className="font-medium text-blue-900">{servingInfo.servingsCount}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    
+                    {/* Show basic breakdown even without nutrition data */}
+                    {!nutritionData && (selectedRecipe?.servingInfo || form.watch('total_servings')) && (
+                      <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <h4 className="text-sm font-medium text-blue-700 mb-2">Serving Information</h4>
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-blue-600">Total Servings:</span>
+                            <span className="font-medium text-blue-900">
+                              {form.watch('total_servings') || selectedRecipe?.servingInfo?.servings || 1}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-blue-600">Portion Size:</span>
+                            <span className="font-medium text-blue-900 capitalize">
+                              {form.watch('portion_size') || selectedRecipe?.servingInfo?.portionSize || 'medium'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-blue-600">Serving Type:</span>
+                            <span className="font-medium text-blue-900 capitalize">
+                              {form.watch('serving_type') || selectedRecipe?.servingInfo?.servingType || 'main'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Form Fields */}
               <Card>
                 <CardHeader>
                   <CardTitle>Serving Information</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Enter serving information for your product
+                  </p>
                 </CardHeader>
-                <CardContent className="grid gap-4 md:grid-cols-3">
+                <CardContent className="grid gap-4 md:grid-cols-2">
                   <FormField
                     control={form.control}
-                    name="serving_size"
+                    name="calories_per_serving"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Serving Size *</FormLabel>
+                        <FormLabel>Calories per Serving *</FormLabel>
                         <FormControl>
                           <Input 
-                            placeholder="150" 
+                            placeholder="250" 
                             type="number"
                             {...field}
                             value={field.value === 0 ? '' : field.value}
@@ -987,28 +1921,69 @@ export default function ProductForm() {
 
                   <FormField
                     control={form.control}
-                    name="serving_unit"
+                    name="portion_size"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Unit *</FormLabel>
+                        <FormLabel>Portion Size *</FormLabel>
                         <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl>
                             <SelectTrigger>
-                              <SelectValue placeholder="Select unit" />
+                              <SelectValue placeholder="Select portion size" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {servingUnits.map(unit => (
-                              <SelectItem key={unit} value={unit}>
-                                {unit}
-                              </SelectItem>
-                            ))}
+                            <SelectItem value="small">Small</SelectItem>
+                            <SelectItem value="medium">Medium</SelectItem>
+                            <SelectItem value="large">Large</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
+
+                  <FormField
+                    control={form.control}
+                    name="serving_type"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Serving Type *</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select serving type" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="main">Main</SelectItem>
+                            <SelectItem value="side">Side</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="total_servings"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Total Servings</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            placeholder="4" 
+                            {...field} 
+                            onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+
 
                   <FormField
                     control={form.control}
@@ -1019,8 +1994,9 @@ export default function ProductForm() {
                         <FormControl>
                           <Input 
                             type="number" 
-                            placeholder="4" 
-                            {...field} 
+                            placeholder="1" 
+                            {...field}
+                            value={field.value === 0 ? '' : field.value}
                             onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
                           />
                         </FormControl>
@@ -1034,180 +2010,217 @@ export default function ProductForm() {
 
             {/* Ingredients */}
             <TabsContent value="ingredients" className="space-y-6">
-              <div className="grid gap-6 md:grid-cols-2">
-                {/* Manual Ingredients Section */}
-                <Card>
-                  <CardHeader>
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
                     <CardTitle className="flex items-center gap-2">
                       <Package className="h-5 w-5" />
-                      Add Ingredients
+                      Ingredients
+                      {recipeIngredients.length > 0 && (
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary">
+                            {recipeIngredients.length} items
+                          </Badge>
+                          {recipeIngredients.filter(ing => ing.image).length > 0 && (
+                            <Badge variant="outline" className="text-xs bg-green-50 border-green-200 text-green-700">
+                              {recipeIngredients.filter(ing => ing.image).length} with images
+                            </Badge>
+                          )}
+                          {isAnalyzingNutrition && (
+                            <Badge variant="outline" className="text-xs bg-blue-50 border-blue-200 text-blue-700 animate-pulse">
+                              <div className="animate-spin rounded-full h-3 w-3 border-b border-blue-600 mr-1"></div>
+                              Analyzing nutrition...
+                            </Badge>
+                          )}
+                          {nutritionAnalysisComplete && (
+                            <Badge variant="outline" className="text-xs bg-green-50 border-green-200 text-green-700">
+                              <svg className="h-3 w-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              Nutrition analyzed
+                            </Badge>
+                          )}
+                        </div>
+                      )}
                     </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-3">
-                      <div className="flex gap-2">
-                        <Input
-                          placeholder="Enter ingredient (e.g., Chopped Chicken 1 cup)..."
-                          value={newIngredient}
-                          onChange={(e) => setNewIngredient(e.target.value)}
-                          onKeyPress={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault()
-                              addManualIngredient()
-                            }
-                          }}
-                          className="flex-1"
-                        />
-                        <Button
-                          type="button"
-                          onClick={addManualIngredient}
-                          disabled={!newIngredient.trim()}
-                        >
-                          <Plus className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                    
-                    {/* Bulk Import Section */}
-                    <Card className="bg-muted/30">
-                      <CardContent className="pt-4">
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <Label className="text-sm font-medium">Bulk Import</Label>
-                            <div className="flex gap-2">
-                              <Button
-                                type="button"
-                                onClick={() => fileInputRef.current?.click()}
-                                size="sm"
-                                variant="outline"
-                              >
-                                <Upload className="w-4 h-4 mr-1" />
-                                Upload File
-                              </Button>
-                              <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept=".json,.txt"
-                                onChange={handleFileUpload}
-                                className="hidden"
-                              />
-                              {manualIngredients.length > 0 && (
-                                <Button
-                                  type="button"
-                                  onClick={clearAllIngredients}
-                                  size="sm"
-                                  variant="outline"
-                                >
-                                  <X className="w-4 h-4 mr-1" />
-                                  Clear All
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                          
-                          <Textarea
-                            placeholder={`Paste ingredients here, one per line:\n\n2 cups flour\n1 tsp salt\n3 tbsp olive oil\n500g chicken breast\n\nOr upload a JSON/text file`}
-                            value={bulkIngredients}
-                            onChange={(e) => setBulkIngredients(e.target.value)}
-                            rows={4}
-                            className="resize-none text-sm"
-                          />
-                          
-                          <div className="flex justify-between items-center">
-                            <p className="text-xs text-muted-foreground">
-                              Supports: "2 cups flour", "1 tsp salt", or just "chicken breast"
-                            </p>
-                            <Button
-                              type="button"
-                              onClick={parseBulkIngredients}
-                              size="sm"
-                              disabled={!bulkIngredients.trim()}
-                            >
-                              <FileText className="w-4 h-4 mr-1" />
-                              Parse & Add
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                    
-                    {/* Manual Ingredients List */}
-                    {manualIngredients.length > 0 && (
+                    <Button
+                      type="button"
+                      onClick={() => setIsNotesModalOpen(true)}
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                    >
+                      <StickyNote className="h-4 w-4" />
+                      Add Note
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {/* All Ingredients List */}
+                  <div className="space-y-4">
+                    {/* Main Ingredients from Recipe */}
+                    {recipeIngredients.filter(ing => ing.isMainIngredient).length > 0 && (
                       <div className="space-y-3">
-                        <Label className="text-sm font-medium">Added Ingredients:</Label>
-                        <DndContext
-                          sensors={sensors}
-                          collisionDetection={closestCenter}
-                          onDragEnd={handleDragEnd}
-                        >
-                          <SortableContext
-                            items={manualIngredients.map(item => item.id)}
-                            strategy={verticalListSortingStrategy}
-                          >
-                            <div className={`space-y-2 ${manualIngredients.length > 5 ? 'max-h-80 overflow-y-auto pr-2' : ''}`}>
-                              {manualIngredients.map((ingredient) => (
-                                <SortableIngredientItem
-                                  key={ingredient.id}
-                                  ingredient={ingredient}
-                                  onRemove={removeManualIngredient}
-                                />
-                              ))}
-                            </div>
-                          </SortableContext>
-                        </DndContext>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-medium text-muted-foreground">Main Ingredients</h3>
+                          <Badge variant="outline" className="text-xs border-orange-200 text-orange-700">
+                            {recipeIngredients.filter(ing => ing.isMainIngredient).length} items
+                          </Badge>
+                          <div className="flex-1 h-px bg-border"></div>
+                        </div>
                         <div className="space-y-2">
-                          <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <span>{manualIngredients.length} ingredient(s) added</span>
-                            <span className="flex items-center gap-1">
-                              <GripVertical className="h-3 w-3" />
-                              Drag to reorder
-                            </span>
-                          </div>
+                          {recipeIngredients.filter(ing => ing.isMainIngredient).map((ingredient) => (
+                            <div key={ingredient.id} className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/30 transition-colors border-orange-200 bg-orange-50/30">
+                              {ingredient.image ? (
+                                <div className="relative flex-shrink-0">
+                                  <img
+                                    src={ingredient.image}
+                                    alt={ingredient.text}
+                                    className="w-14 h-14 rounded-lg object-cover border border-gray-200 shadow-sm"
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = 'none'
+                                      const fallback = e.currentTarget.nextElementSibling as HTMLElement
+                                      if (fallback) fallback.classList.remove('hidden')
+                                    }}
+                                  />
+                                  <div className="hidden w-14 h-14 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 border border-gray-200">
+                                    <div className="flex items-center justify-center w-full h-full">
+                                      <Package className="h-6 w-6 text-gray-400" />
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex-shrink-0 w-14 h-14 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center border border-gray-200">
+                                  <Package className="h-6 w-6 text-gray-400" />
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium leading-tight">{ingredient.text}</p>
+                                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                  {ingredient.quantity && ingredient.measure && (
+                                    <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-medium">
+                                      {ingredient.quantity} {ingredient.measure}
+                                    </span>
+                                  )}
+                                  {ingredient.weight && (
+                                    <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded">
+                                      {Math.round(ingredient.weight)}g
+                                    </span>
+                                  )}
+                                  {ingredient.foodCategory && (
+                                    <span className="text-xs text-muted-foreground capitalize bg-muted/50 px-2 py-0.5 rounded">
+                                      {ingredient.foodCategory}
+                                    </span>
+                                  )}
+                                  <Badge variant="outline" className="text-xs h-5 border-orange-200 text-orange-700">
+                                    Main
+                                  </Badge>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}
-                    
-                    {manualIngredients.length === 0 && (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <Package className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                        <p className="text-sm">No ingredients added yet</p>
-                        <p className="text-xs">Use bulk import or add ingredients individually</p>
+
+                    {/* Side Ingredients from Recipe */}
+                    {recipeIngredients.filter(ing => !ing.isMainIngredient).length > 0 && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-medium text-muted-foreground">Side Ingredients</h3>
+                          <Badge variant="outline" className="text-xs border-blue-200 text-blue-700">
+                            {recipeIngredients.filter(ing => !ing.isMainIngredient).length} items
+                          </Badge>
+                          <div className="flex-1 h-px bg-border"></div>
+                        </div>
+                        <div className="space-y-2">
+                          {recipeIngredients.filter(ing => !ing.isMainIngredient).map((ingredient) => (
+                            <div key={ingredient.id} className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/30 transition-colors border-blue-200 bg-blue-50/30">
+                              {ingredient.image ? (
+                                <div className="relative flex-shrink-0">
+                                  <img
+                                    src={ingredient.image}
+                                    alt={ingredient.text}
+                                    className="w-14 h-14 rounded-lg object-cover border border-gray-200 shadow-sm"
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = 'none'
+                                      const fallback = e.currentTarget.nextElementSibling as HTMLElement
+                                      if (fallback) fallback.classList.remove('hidden')
+                                    }}
+                                  />
+                                  <div className="hidden w-14 h-14 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 border border-gray-200">
+                                    <div className="flex items-center justify-center w-full h-full">
+                                      <Package className="h-6 w-6 text-gray-400" />
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex-shrink-0 w-14 h-14 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center border border-gray-200">
+                                  <Package className="h-6 w-6 text-gray-400" />
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium leading-tight">{ingredient.text}</p>
+                                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                  {ingredient.quantity && ingredient.measure && (
+                                    <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-medium">
+                                      {ingredient.quantity} {ingredient.measure}
+                                    </span>
+                                  )}
+                                  {ingredient.weight && (
+                                    <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded">
+                                      {Math.round(ingredient.weight)}g
+                                    </span>
+                                  )}
+                                  {ingredient.foodCategory && (
+                                    <span className="text-xs text-muted-foreground capitalize bg-muted/50 px-2 py-0.5 rounded">
+                                      {ingredient.foodCategory}
+                                    </span>
+                                  )}
+                                  <Badge variant="outline" className="text-xs h-5 border-blue-200 text-blue-700">
+                                    Side
+                                  </Badge>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
-                  </CardContent>
-                </Card>
 
-                {/* Notes Section */}
+
+
+
+
+                    {/* Empty State */}
+                    {recipeIngredients.length === 0 && (
+                      <div className="text-center py-12 text-muted-foreground">
+                        <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p className="text-sm font-medium mb-1">No ingredients added yet</p>
+                        <p className="text-xs">Select a recipe to add ingredients</p>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Nutrition Analysis Section */}
+              {recipeIngredients.length > 0 && nutritionData && (
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                      <FileText className="h-5 w-5" />
-                      Ingredient Notes
+                      <Activity className="h-5 w-5 text-green-600" />
+                      Nutritional Analysis
                     </CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      Complete nutritional breakdown based on selected ingredients
+                    </p>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium">Additional Notes</Label>
-                      <Textarea
-                        placeholder="Add any notes about ingredients, preparation, special instructions, allergen information, or cooking tips..."
-                        value={ingredientNotes}
-                        onChange={(e) => setIngredientNotes(e.target.value)}
-                        className="min-h-[120px] resize-none"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        These notes will be included with your product information and can help with preparation or allergen warnings.
-                      </p>
-                    </div>
-                    
-                    {ingredientNotes && (
-                      <div className="bg-muted/50 rounded-lg p-3">
-                        <Label className="text-xs font-medium text-muted-foreground">Preview:</Label>
-                        <p className="text-sm mt-1 whitespace-pre-wrap">{ingredientNotes}</p>
-                      </div>
-                    )}
+                  <CardContent>
+                    <NutritionDisplay nutritionData={nutritionData} />
                   </CardContent>
                 </Card>
-              </div>
+              )}
             </TabsContent>
 
             {/* Categorization */}
@@ -1401,6 +2414,8 @@ export default function ProductForm() {
                 </CardContent>
               </Card>
             </TabsContent>
+
+
           </Tabs>
           
           {/* Category Modal */}
@@ -1424,7 +2439,7 @@ export default function ProductForm() {
               type="button" 
               variant="outline"
               onClick={() => {
-                const tabs = ["basic", "serving", "ingredients", "categorization", "settings"]
+                const tabs = ["basic", "ingredients", "serving", "categorization", "settings"]
                 const currentIndex = tabs.indexOf(currentTab)
                 if (currentIndex > 0) {
                   setCurrentTab(tabs[currentIndex - 1])
@@ -1441,7 +2456,7 @@ export default function ProductForm() {
               type="button" 
               variant="outline"
               onClick={() => {
-                const tabs = ["basic", "serving", "ingredients", "categorization", "settings"]
+                const tabs = ["basic", "ingredients", "serving", "categorization", "settings"]
                 const currentIndex = tabs.indexOf(currentTab)
                 if (currentIndex < tabs.length - 1) {
                   setCurrentTab(tabs[currentIndex + 1])
@@ -1460,7 +2475,7 @@ export default function ProductForm() {
                 ? (isEdit ? "Back to Products" : "Create Another")
                 : "Next"
               }
-              {currentTab === "settings" 
+              {currentTab === "label" 
                 ? <Plus className="w-4 h-4 ml-2" />
                 : <ArrowRight className="w-4 h-4 ml-2" />
               }
@@ -1468,6 +2483,50 @@ export default function ProductForm() {
           </div>
         </form>
       </Form>
+
+      {/* Notes Modal */}
+      <Dialog open={isNotesModalOpen} onOpenChange={setIsNotesModalOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <StickyNote className="h-5 w-5" />
+              Ingredient Notes
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label htmlFor="notes-textarea">Notes</Label>
+              <Textarea
+                id="notes-textarea"
+                placeholder="Add any notes about ingredients, preparation, special instructions, allergen information, or cooking tips..."
+                value={ingredientNotes}
+                onChange={(e) => setIngredientNotes(e.target.value)}
+                className="min-h-[120px] resize-none"
+              />
+              <p className="text-xs text-muted-foreground">
+                These notes will be included with your product information and can help with preparation or allergen warnings.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsNotesModalOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  setIsNotesModalOpen(false)
+                }}
+              >
+                Save Note
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

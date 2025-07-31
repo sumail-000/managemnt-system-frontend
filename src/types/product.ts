@@ -27,6 +27,7 @@ export interface NutritionalData {
   health_labels?: string[];
   diet_labels?: string[];
   allergens?: string[];
+  cautions?: string[];
   warnings?: Array<{
     type: 'warning' | 'error' | 'info';
     message: string;

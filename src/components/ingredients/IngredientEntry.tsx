@@ -3,18 +3,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Sparkles, ChefHat, Lightbulb, BarChart3, Upload, Search } from 'lucide-react';
+import { Sparkles, ChefHat, Lightbulb, BarChart3, Search } from 'lucide-react';
 import { useIngredients } from '@/hooks/useIngredients';
 import { IngredientForm } from './IngredientForm';
 import { IngredientList } from './IngredientList';
 import { NotesModal } from './NotesModal';
-import { BulkActions } from './BulkActions';
 import { SearchFilter } from './SearchFilter';
 import { Ingredient } from '@/types/ingredient';
 
 export const IngredientEntry = () => {
   const [filteredIngredients, setFilteredIngredients] = useState<Ingredient[]>([]);
-  const [currentView, setCurrentView] = useState<'list' | 'search' | 'bulk'>('list');
+  const [currentView, setCurrentView] = useState<'list' | 'search'>('list');
   
   const {
     ingredients,
@@ -30,7 +29,7 @@ export const IngredientEntry = () => {
     closeNotesModal,
     startEditing,
     stopEditing,
-    addBulkIngredients,
+
   } = useIngredients();
 
   // Ensure ingredients is always an array to prevent filter errors
@@ -45,9 +44,7 @@ export const IngredientEntry = () => {
     await addIngredient(data);
   };
 
-  const handleBulkImport = (newIngredients: Ingredient[]) => {
-    addBulkIngredients(newIngredients);
-  };
+
   
   const displayIngredients = currentView === 'search' && safeFilteredIngredients.length >= 0 
     ? safeFilteredIngredients 
@@ -147,7 +144,7 @@ export const IngredientEntry = () => {
 
       {/* Management Tabs */}
       <Tabs value={currentView} onValueChange={(value) => setCurrentView(value as any)} className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="list" className="flex items-center gap-2">
             <ChefHat className="h-4 w-4" />
             Ingredient List
@@ -155,10 +152,6 @@ export const IngredientEntry = () => {
           <TabsTrigger value="search" className="flex items-center gap-2">
             <Search className="h-4 w-4" />
             Search & Filter
-          </TabsTrigger>
-          <TabsTrigger value="bulk" className="flex items-center gap-2">
-            <Upload className="h-4 w-4" />
-            Bulk Actions
           </TabsTrigger>
         </TabsList>
 
@@ -220,46 +213,7 @@ export const IngredientEntry = () => {
           </div>
         </TabsContent>
 
-        {/* Bulk Actions Tab */}
-        <TabsContent value="bulk" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <BulkActions
-              onImportComplete={handleBulkImport}
-              totalIngredients={safeIngredients.length}
-            />
-            
-            {/* Recent Imports Summary */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Import Guidelines</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-3">
-                  <div>
-                    <h4 className="font-medium mb-2">CSV Format Requirements:</h4>
-                    <ul className="text-sm text-muted-foreground space-y-1">
-                      <li>• Header row: name, quantity, unit, notes</li>
-                      <li>• Name: Required text field</li>
-                      <li>• Quantity: Required number (decimal allowed)</li>
-                      <li>• Unit: Must match supported units (g, kg, oz, etc.)</li>
-                      <li>• Notes: Optional text field</li>
-                    </ul>
-                  </div>
-                  
-                  <div>
-                    <h4 className="font-medium mb-2">Auto-Processing Features:</h4>
-                    <ul className="text-sm text-muted-foreground space-y-1">
-                      <li>• Automatic allergen detection</li>
-                      <li>• Dietary tag assignment</li>
-                      <li>• Nutritional analysis (when available)</li>
-                      <li>• Duplicate detection and merging</li>
-                    </ul>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
+
       </Tabs>
 
       {/* Notes Modal */}

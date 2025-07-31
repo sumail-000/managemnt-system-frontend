@@ -55,6 +55,24 @@ api.interceptors.response.use(
       data: response.config.responseType === 'blob' ? 'Blob data' : response.data
     });
     
+    // Enhanced debugging for QR code generation
+    if (response.config.url?.includes('/qr-codes/') && response.config.url?.includes('/generate')) {
+      console.log('[API] QR Code Generation Response Details:', {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+        data: response.data,
+        dataType: typeof response.data,
+        dataKeys: response.data ? Object.keys(response.data) : 'No data',
+        success: response.data?.success,
+        qrCode: response.data?.qr_code,
+        imageUrl: response.data?.image_url,
+        publicUrl: response.data?.public_url,
+        downloadUrl: response.data?.download_url,
+        message: response.data?.message
+      });
+    }
+    
     // Check for token refresh headers
     const newToken = response.headers['x-new-token'];
     const tokenRefreshed = response.headers['x-token-refreshed'];

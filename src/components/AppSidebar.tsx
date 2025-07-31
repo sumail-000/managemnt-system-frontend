@@ -6,7 +6,6 @@ import {
   Settings, 
   QrCode,
   FileText,
-  BarChart3,
   Shield,
   Heart,
   Search,
@@ -39,7 +38,6 @@ const mainItems = [
 const managementItems = [
   { title: "Recipe Search", url: "/recipe-search", icon: ChefHat },
   { title: "Category Management", url: "/categories", icon: Tag },
-  { title: "Nutrition Analysis", url: "/nutrition", icon: BarChart3 },
   { title: "Label Generator", url: "/labels", icon: FileText },
   { title: "QR Codes", url: "/qr-codes", icon: QrCode },
   { title: "Favorites", url: "/favorites", icon: Heart },
@@ -48,7 +46,8 @@ const managementItems = [
 const systemItems = [
   { title: "Billing", url: "/billing", icon: CreditCard },
   { title: "Settings", url: "/settings", icon: Settings },
-  { title: "Admin Panel", url: "/admin", icon: Shield },
+  { title: "Enterprise Admin", url: "/enterprise", icon: Shield },
+  { title: "System Admin", url: "/admin", icon: Settings },
 ]
 
 export function AppSidebar() {

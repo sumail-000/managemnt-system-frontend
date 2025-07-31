@@ -66,6 +66,21 @@ export default function ProductDetail() {
   
   // Transform nutritional data to match NutritionData interface for components
   const transformedNutritionData = nutritionalData ? {
+    // Required properties for NutritionData interface
+    calories: nutritionalData.basic_nutrition?.total_calories || 0,
+    totalWeight: nutritionalData.basic_nutrition?.total_weight || 100,
+    totalNutrients: nutritionalData.nutrients || {},
+    ingredients: nutritionalData.ingredients || [],
+    totalNutrientsKCal: nutritionalData.nutrients_kcal || [],
+    co2EmissionsClass: nutritionalData.co2_emissions_class || null,
+    totalCO2Emissions: nutritionalData.total_co2_emissions || null,
+    analysisMetadata: {
+      analyzedAt: new Date().toISOString(),
+      source: 'edamam',
+      version: '2.0'
+    },
+    
+    // Existing properties
     totalCalories: nutritionalData.basic_nutrition?.total_calories || 0,
     macros: {
       protein: nutritionalData.macronutrients?.protein || 0,
@@ -74,7 +89,7 @@ export default function ProductDetail() {
       fiber: nutritionalData.macronutrients?.fiber || 0
     },
     micros: nutritionalData.micronutrients || {},
-    allergens: nutritionalData.allergens || [],
+    cautions: nutritionalData.cautions || [],
     warnings: nutritionalData.warnings || [],
     servings: nutritionalData.basic_nutrition?.servings || 1,
     weightPerServing: nutritionalData.basic_nutrition?.weight_per_serving || 100,
@@ -810,7 +825,8 @@ export default function ProductDetail() {
       </div>
 
       {/* Safety & Compliance Information - Moved to end */}
-      {nutritionalData && nutritionalData.allergens?.length > 0 && (
+      {nutritionalData && ((nutritionalData.cautions && nutritionalData.cautions.length > 0) || 
+        (nutritionalData.health_labels && nutritionalData.health_labels.filter(label => label.endsWith('_FREE')).length > 0)) && (
         <div className="mt-8">
           <Card>
             <CardHeader>
@@ -820,20 +836,45 @@ export default function ProductDetail() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {/* Allergen Warnings */}
-              {nutritionalData.allergens && nutritionalData.allergens.length > 0 && (
-                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <h4 className="font-medium text-yellow-900 mb-2 flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4" />
-                    Allergen Warnings
-                  </h4>
-                  <div className="flex flex-wrap gap-2">
-                    {nutritionalData.allergens.map((allergen: string) => (
-                      <Badge key={allergen} variant="destructive">
-                        {allergen}
-                      </Badge>
-                    ))}
-                  </div>
+              {/* Allergen Information */}
+              {((nutritionalData.cautions && nutritionalData.cautions.length > 0) || 
+                (nutritionalData.health_labels && nutritionalData.health_labels.filter(label => label.endsWith('_FREE')).length > 0)) && (
+                <div className="space-y-3">
+                  {/* Contains Allergens (Cautions) */}
+                  {nutritionalData.cautions && nutritionalData.cautions.length > 0 && (
+                    <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <h4 className="font-medium text-yellow-900 mb-2 flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4" />
+                        Contains Allergens (Cautions)
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        {nutritionalData.cautions.map((caution: string) => (
+                          <Badge key={caution} variant="destructive">
+                            {caution}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Allergen-Free Status */}
+                  {nutritionalData.health_labels && nutritionalData.health_labels.filter(label => label.endsWith('_FREE')).length > 0 && (
+                    <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <h4 className="font-medium text-green-900 mb-2 flex items-center gap-2">
+                        <Shield className="h-4 w-4" />
+                        Allergen-Free Status
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        {nutritionalData.health_labels
+                          .filter(label => label.endsWith('_FREE'))
+                          .map((label: string) => (
+                            <Badge key={label} variant="secondary" className="bg-green-100 text-green-800">
+                              {label.replace('_FREE', '').toLowerCase().replace('_', ' ')}-free
+                            </Badge>
+                          ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>

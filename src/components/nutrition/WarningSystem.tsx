@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
+import { NutritionData } from "../../types/nutrition"
 
 import { 
   AlertTriangle, 
@@ -25,37 +26,13 @@ interface Warning {
   severity: 'low' | 'medium' | 'high'
 }
 
-interface NutritionData {
-  totalCalories: number
-  macros: {
-    protein: number
-    carbs: number
-    fat: number
-    fiber: number
-  }
-  micros: Record<string, {
-    label: string
-    quantity: number
-    unit: string
-    percentage: number
-  }>
-  servings: number
-  totalDaily?: Record<string, {
-    label: string
-    quantity: number
-    unit: string
-  }>
-  dietLabels?: string[]
-  nutritionSummary?: {
-    macronutrients?: {
-      protein?: { grams: number }
-      carbs?: { grams: number }
-      fat?: { grams: number }
-    }
-    fiber?: number
-    [key: string]: any
-  }
-  healthLabels?: string[]
+// Helper functions for nutrient lookup
+const findNutrientByKey = (nutrients: any[], key: string) => {
+  return nutrients?.find(n => n.key === key)
+}
+
+const findNutrientByName = (nutrients: any[], name: string) => {
+  return nutrients?.find(n => n.name?.toLowerCase().includes(name.toLowerCase()))
 }
 
 interface WarningSystemProps {
@@ -86,11 +63,16 @@ export function WarningSystem({ warnings, nutritionData }: WarningSystemProps) {
     return 0
   }
 
+  // Extract nutrients from dynamic arrays
+  const fat = findNutrientByKey(nutritionData.macronutrients || [], 'FAT') || findNutrientByName(nutritionData.macronutrients || [], 'fat');
+  const carbs = findNutrientByKey(nutritionData.macronutrients || [], 'CHOCDF') || findNutrientByName(nutritionData.macronutrients || [], 'carb');
+  const fiber = findNutrientByKey(nutritionData.macronutrients || [], 'FIBTG') || findNutrientByName(nutritionData.macronutrients || [], 'fiber');
+
   const perServing = {
     calories: Math.round(nutritionData.totalCalories / nutritionData.servings),
     sodium: Math.round(getSodiumValue() / nutritionData.servings),
-    fat: Math.round(nutritionData.macros.fat / nutritionData.servings),
-    carbs: Math.round(nutritionData.macros.carbs / nutritionData.servings)
+    fat: Math.round((fat?.amount || 0) / nutritionData.servings),
+    carbs: Math.round((carbs?.amount || 0) / nutritionData.servings)
   }
 
   // Generate threshold-based warnings
@@ -128,17 +110,18 @@ export function WarningSystem({ warnings, nutritionData }: WarningSystemProps) {
     }
 
     // Enhanced fiber assessment (per serving)
-    const fiberPerServing = Math.round(nutritionData.macros.fiber / nutritionData.servings)
+    const fiberAmount = fiber?.amount || 0;
+    const fiberPerServing = Math.round(fiberAmount / nutritionData.servings)
     if (fiberPerServing >= 3) {
       thresholdWarnings.push({
         type: 'info',
-        message: `Good fiber content: ${fiberPerServing}g per serving (${nutritionData.macros.fiber}g total)`,
+        message: `Good fiber content: ${fiberPerServing}g per serving (${fiberAmount}g total)`,
         severity: 'low'
       })
-    } else if (nutritionData.macros.fiber >= 5) {
+    } else if (fiberAmount >= 5) {
       thresholdWarnings.push({
         type: 'info',
-        message: `Excellent total fiber: ${nutritionData.macros.fiber}g per recipe`,
+        message: `Excellent total fiber: ${fiberAmount}g per recipe`,
         severity: 'low'
       })
     }

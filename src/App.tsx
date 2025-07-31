@@ -12,7 +12,6 @@ import ProductTrash from "./pages/ProductTrash";
 import PublicProductView from "./pages/PublicProductView";
 
 import CategoryManagement from "./pages/CategoryManagement";
-import NutritionAnalysis from "./pages/NutritionAnalysis";
 import LabelGeneratorPage from "./pages/LabelGenerator";
 import Billing from "./pages/Billing";
 import Login from "./pages/Login";
@@ -38,6 +37,19 @@ import AdminProfile from "./pages/admin/AdminProfile";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminNotifications from "./pages/admin/AdminNotifications";
 import AdminMaintenance from "./pages/admin/AdminMaintenance";
+import { AdminAuthGuard } from "./components/admin/AdminAuthGuard";
+
+// Enterprise Components
+import { EnterpriseLayout } from "./components/enterprise/EnterpriseLayout";
+import { EnterpriseDashboard } from "./pages/enterprise/EnterpriseDashboard";
+import { TeamManagement } from "./pages/enterprise/TeamManagement";
+import { BulkOperations } from "./pages/enterprise/BulkOperations";
+import { ComplianceCenter } from "./pages/enterprise/ComplianceCenter";
+import { BrandCenter } from "./pages/enterprise/BrandCenter";
+import { APIManagement } from "./pages/enterprise/APIManagement";
+import { EnterpriseAnalytics } from "./pages/enterprise/EnterpriseAnalytics";
+import { EnterpriseSettings } from "./pages/enterprise/EnterpriseSettings";
+import { Navigate } from 'react-router-dom';
 
 const App = () => {
   console.log('[App] Application initialized');
@@ -115,13 +127,7 @@ const App = () => {
         </ProtectedRoute>
       } />
       
-      <Route path="/nutrition" element={
-        <ProtectedRoute>
-          <DashboardLayout>
-            <NutritionAnalysis />
-          </DashboardLayout>
-        </ProtectedRoute>
-      } />
+
       
       <Route path="/labels" element={
         <ProtectedRoute>
@@ -138,6 +144,7 @@ const App = () => {
           </DashboardLayout>
         </ProtectedRoute>
       } />
+      
       
       <Route path="/recipe-search" element={
         <ProtectedRoute>
@@ -172,7 +179,11 @@ const App = () => {
       } />
       
       {/* Admin Panel Routes */}
-      <Route path="/admin-panel" element={<AdminPanel />}>
+      <Route path="/admin-panel" element={
+        <AdminAuthGuard>
+          <AdminPanel />
+        </AdminAuthGuard>
+      }>
         <Route index element={<AdminDashboard />} />
         <Route path="users" element={<AdminUsers />} />
         <Route path="products" element={<AdminProducts />} />
@@ -183,6 +194,23 @@ const App = () => {
         <Route path="settings" element={<AdminSettings />} />
         <Route path="notifications" element={<AdminNotifications />} />
         <Route path="maintenance" element={<AdminMaintenance />} />
+      </Route>
+
+      {/* Enterprise Routes */}
+      <Route path="/enterprise/*" element={
+        <ProtectedRoute requiredPlan="enterprise">
+          <EnterpriseLayout />
+        </ProtectedRoute>
+      }>
+        <Route index element={<Navigate to="/enterprise/dashboard" replace />} />
+        <Route path="dashboard" element={<EnterpriseDashboard />} />
+        <Route path="team" element={<TeamManagement />} />
+        <Route path="products" element={<BulkOperations />} />
+        <Route path="compliance" element={<ComplianceCenter />} />
+        <Route path="brand" element={<BrandCenter />} />
+        <Route path="api" element={<APIManagement />} />
+        <Route path="analytics" element={<EnterpriseAnalytics />} />
+        <Route path="settings" element={<EnterpriseSettings />} />
       </Route>
       
       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

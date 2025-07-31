@@ -35,6 +35,15 @@ export interface RecipeImages {
   LARGE?: { url: string; width: number; height: number };
 }
 
+// Preparation Info interface from API
+export interface PreparationInfo {
+  totalTime: number;
+  estimatedPrepTime: number;
+  estimatedCookTime: number;
+  timeCategory: string;
+  skillLevel: string;
+}
+
 // Main Recipe interface matching backend formatRecipe response
 export interface EdamamRecipe {
   uri: string | null;
@@ -60,6 +69,7 @@ export interface EdamamRecipe {
   totalNutrients: Record<string, RecipeNutrient>;
   totalDaily: Record<string, RecipeNutrient>;
   digest: RecipeDigestItem[];
+  preparationInfo?: PreparationInfo;
 }
 
 // Recipe search API response
@@ -143,6 +153,36 @@ export interface Recipe {
   source: string;
   url: string;
   uri: string;
+  // Additional fields from Edamam API
+  mealType: string[]; // separate mealType array
+  dishType: string[]; // separate dishType array
+  healthLabels: string[]; // health labels
+  dietLabels: string[]; // diet labels
+  cautions: string[]; // cautions/allergens
+  totalCO2Emissions: number; // carbon footprint
+  co2EmissionsClass: string | null; // emission classification
+  cuisineType: string[]; // all cuisine types
+  totalNutrients: Record<string, RecipeNutrient>; // nutritional data
+  totalDaily: Record<string, RecipeNutrient>; // daily values
+  // Preparation information
+  estimatedCookTime?: number | null; // cooking time in minutes, null means "Not found"
+  estimatedPrepTime?: number; // preparation time in minutes
+  skillLevel?: string; // skill level (easy, medium, hard)
+  timeCategory?: string; // time category (quick, moderate, long)
+  totalTime?: number; // total time in minutes
+  // Nutrition scoring
+  diversityScore?: number;
+  
+  // Serving information
+  servingInfo?: {
+    caloriesPerServing?: number;
+    portionSize?: string;
+    servingType?: string;
+    servings?: number;
+  };
+  
+  // Additional tags from API
+  apiTags?: string[];
 }
 
 // Recipe search parameters
@@ -188,12 +228,18 @@ export const transformRecipeFromAPI = (edamamRecipe: EdamamRecipe): Recipe => {
   // Combine diet and health labels
   const diet = [...edamamRecipe.dietLabels, ...edamamRecipe.healthLabels.slice(0, 3)];
 
-  // Get best available image
+  // Get best available image with debugging
+  console.log('Recipe image data:', {
+    name: edamamRecipe.label,
+    image: edamamRecipe.image,
+    images: edamamRecipe.images
+  });
+  
   const image = edamamRecipe.image || 
     edamamRecipe.images?.REGULAR?.url ||
     edamamRecipe.images?.SMALL?.url ||
     edamamRecipe.images?.THUMBNAIL?.url ||
-    '/api/placeholder/400/300';
+    null; // Use null instead of placeholder URL
 
   // Create description from source
   const description = `Delicious ${edamamRecipe.cuisineType[0] || 'international'} recipe from ${edamamRecipe.source}.`;
@@ -206,7 +252,7 @@ export const transformRecipeFromAPI = (edamamRecipe: EdamamRecipe): Recipe => {
     name: edamamRecipe.label,
     image,
     calories: Math.round(edamamRecipe.calories),
-    cookTime: edamamRecipe.totalTime || 30,
+    cookTime: edamamRecipe.totalTime || 0,
     servings: edamamRecipe.yield || 1,
     difficulty,
     diet,
@@ -217,7 +263,35 @@ export const transformRecipeFromAPI = (edamamRecipe: EdamamRecipe): Recipe => {
     tags,
     source: edamamRecipe.source,
     url: edamamRecipe.url,
-    uri: edamamRecipe.uri || ''
+    uri: edamamRecipe.uri || '',
+    // Additional fields from Edamam API
+    mealType: edamamRecipe.mealType || [],
+    dishType: edamamRecipe.dishType || [],
+    healthLabels: edamamRecipe.healthLabels || [],
+    dietLabels: edamamRecipe.dietLabels || [],
+    cautions: edamamRecipe.cautions || [],
+    totalCO2Emissions: edamamRecipe.totalCO2Emissions || 0,
+    co2EmissionsClass: edamamRecipe.co2EmissionsClass,
+    cuisineType: edamamRecipe.cuisineType || [],
+    totalNutrients: edamamRecipe.totalNutrients || {},
+    totalDaily: edamamRecipe.totalDaily || {},
+    // Preparation information from API
+    estimatedCookTime: edamamRecipe.preparationInfo?.estimatedCookTime === 0 ? null : edamamRecipe.preparationInfo?.estimatedCookTime || (edamamRecipe.totalTime ? Math.round(edamamRecipe.totalTime * 0.7) : undefined),
+    estimatedPrepTime: edamamRecipe.preparationInfo?.estimatedPrepTime || (edamamRecipe.totalTime ? Math.round(edamamRecipe.totalTime * 0.3) : undefined),
+    skillLevel: edamamRecipe.preparationInfo?.skillLevel || difficulty.toLowerCase(),
+    timeCategory: edamamRecipe.preparationInfo?.timeCategory || (edamamRecipe.totalTime <= 30 ? 'quick' : edamamRecipe.totalTime <= 60 ? 'moderate' : 'long'),
+    totalTime: edamamRecipe.totalTime,
+    // Nutrition scoring (from aggregated.diversityScore in API)
+    diversityScore: (edamamRecipe as any).aggregated?.diversityScore || 50,
+    // Serving information from API
+    servingInfo: {
+      caloriesPerServing: (edamamRecipe as any).servingInfo?.caloriesPerServing || Math.round(edamamRecipe.calories / (edamamRecipe.yield || 1)),
+      portionSize: (edamamRecipe as any).servingInfo?.portionSize || 'medium',
+      servingType: (edamamRecipe as any).servingInfo?.servingType || 'main',
+      servings: (edamamRecipe as any).servingInfo?.servings || edamamRecipe.yield || 1
+    },
+    // Additional tags from API (if available)
+    apiTags: (edamamRecipe as any).tags || []
   };
 };
 

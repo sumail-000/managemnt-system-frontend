@@ -40,7 +40,7 @@ export default function PublicProductView() {
   const [nutritionalData, setNutritionalData] = useState<NutritionalData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [language, setLanguage] = useState<'en' | 'ar'>('en')
+
   const [isPrintMode, setIsPrintMode] = useState(false)
 
   // Sharing functions
@@ -89,46 +89,7 @@ export default function PublicProductView() {
     })
   }
 
-  const toggleLanguage = () => {
-    setLanguage(prev => prev === 'en' ? 'ar' : 'en')
-  }
 
-  // Translation helper (basic implementation)
-  const t = (key: string) => {
-    const translations: Record<string, Record<string, string>> = {
-      en: {
-        'recipe': 'Recipe',
-        'ingredients': 'Ingredients',
-        'nutrition': 'Nutrition Information',
-        'about': 'About This Recipe',
-        'servings': 'servings',
-        'created_by': 'By',
-        'share_recipe': 'Share Recipe',
-        'download_label': 'Download Label',
-        'allergen_warning': 'ALLERGEN WARNING',
-        'print_view': 'Print View',
-        'export_pdf': 'Export PDF',
-        'public_recipe': 'Public Recipe',
-        'nutrition_info': 'Nutrition Information'
-      },
-      ar: {
-        'recipe': 'وصفة',
-        'ingredients': 'المكونات',
-        'nutrition': 'معلومات التغذية',
-        'about': 'حول هذه الوصفة',
-        'servings': 'حصص',
-        'created_by': 'بواسطة',
-        'share_recipe': 'مشاركة الوصفة',
-        'download_label': 'تحميل الملصق',
-        'allergen_warning': 'تحذير من المواد المسببة للحساسية',
-        'print_view': 'عرض الطباعة',
-        'export_pdf': 'تصدير PDF',
-        'public_recipe': 'وصفة عامة',
-        'nutrition_info': 'معلومات التغذية'
-      }
-    }
-    return translations[language][key] || key
-  }
 
   useEffect(() => {
     const loadProduct = async () => {
@@ -252,16 +213,7 @@ export default function PublicProductView() {
             </Button>
             
             <div className="flex items-center gap-3">
-              {/* Language Toggle */}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={toggleLanguage}
-                className="text-gray-600 hover:text-gray-900"
-              >
-                <Languages className="h-4 w-4 mr-2" />
-                {language === 'en' ? 'العربية' : 'English'}
-              </Button>
+
               
               {/* Print Button */}
               <Button
@@ -271,7 +223,7 @@ export default function PublicProductView() {
                 className="text-gray-600 hover:text-gray-900"
               >
                 <Printer className="h-4 w-4 mr-2" />
-                {t('print_view')}
+                Print View
               </Button>
               
               {/* Export PDF Button */}
@@ -282,12 +234,12 @@ export default function PublicProductView() {
                 className="text-gray-600 hover:text-gray-900"
               >
                 <FileDown className="h-4 w-4 mr-2" />
-                {t('export_pdf')}
+                Export PDF
               </Button>
               
               <Badge variant="outline" className="text-gray-600 border-gray-300">
                 <Eye className="h-3 w-3 mr-1" />
-                Public {t('recipe')}
+                Public Recipe
               </Badge>
             </div>
           </div>
@@ -295,7 +247,7 @@ export default function PublicProductView() {
       </header>
 
       {/* Main Content */}
-      <main className={`max-w-4xl mx-auto px-6 py-8 ${language === 'ar' ? 'rtl' : 'ltr'}`}>
+      <main className="max-w-4xl mx-auto px-6 py-8">
         <article className="space-y-8">
           {/* Recipe Header */}
           <header className="text-center space-y-4">
@@ -305,7 +257,7 @@ export default function PublicProductView() {
             <div className="flex items-center justify-center gap-6 text-sm text-gray-600">
               <div className="flex items-center gap-2">
                 <User className="h-4 w-4" />
-                <span>{t('created_by')} {product.user?.name || 'Unknown'}</span>
+                <span>By {product.user?.name || 'Unknown'}</span>
               </div>
               <div className="flex items-center gap-2">
                 <Calendar className="h-4 w-4" />
@@ -313,7 +265,7 @@ export default function PublicProductView() {
               </div>
               <div className="flex items-center gap-2">
                 <Users className="h-4 w-4" />
-                <span>{product.servings_per_container} {t('servings')}</span>
+                <span>{product.servings_per_container} ('servings')</span>
               </div>
             </div>
           </header>
@@ -829,23 +781,45 @@ export default function PublicProductView() {
                   <p className="text-sm text-red-700 mt-1">FDA-compliant allergen disclosure and safety warnings</p>
                 </div>
                 <div className="p-6 space-y-6">
-                  {/* Primary Allergens */}
-                  {nutritionalData.allergens && nutritionalData.allergens.length > 0 && (
-                    <div>
-                      <h4 className="text-lg font-semibold text-red-900 mb-3">Contains:</h4>
-                      <div className="flex flex-wrap gap-3 mb-4">
-                        {nutritionalData.allergens.map((allergen) => (
-                          <Badge key={allergen} className="bg-red-200 text-red-900 border-2 border-red-400 px-4 py-2 text-sm font-bold">
-                            ⚠️ {allergen.toUpperCase()}
-                          </Badge>
-                        ))}
-                      </div>
-                      <div className="bg-red-100 border border-red-300 rounded-lg p-4">
-                        <p className="text-red-800 font-medium text-sm">
-                          <strong>ALLERGEN WARNING:</strong> This product contains {nutritionalData.allergens.join(', ')}. 
-                          Individuals with allergies to these ingredients should avoid consumption.
-                        </p>
-                      </div>
+                  {/* Allergen Information */}
+                  {((nutritionalData.cautions && nutritionalData.cautions.length > 0) || 
+                    (nutritionalData.health_labels && nutritionalData.health_labels.filter(label => label.endsWith('_FREE')).length > 0)) && (
+                    <div className="space-y-4">
+                      {/* Contains Allergens (Cautions) */}
+                      {nutritionalData.cautions && nutritionalData.cautions.length > 0 && (
+                        <div>
+                          <h4 className="text-lg font-semibold text-red-900 mb-3">Contains Allergens (Cautions):</h4>
+                          <div className="flex flex-wrap gap-3 mb-4">
+                            {nutritionalData.cautions.map((caution) => (
+                              <Badge key={caution} className="bg-red-200 text-red-900 border-2 border-red-400 px-4 py-2 text-sm font-bold">
+                                ⚠️ {caution.toUpperCase()}
+                              </Badge>
+                            ))}
+                          </div>
+                          <div className="bg-red-100 border border-red-300 rounded-lg p-4">
+                            <p className="text-red-800 font-medium text-sm">
+                              <strong>ALLERGEN WARNING:</strong> This product contains {nutritionalData.cautions.join(', ')}. 
+                              Individuals with allergies to these ingredients should avoid consumption.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Allergen-Free Status */}
+                      {nutritionalData.health_labels && nutritionalData.health_labels.filter(label => label.endsWith('_FREE')).length > 0 && (
+                        <div>
+                          <h4 className="text-lg font-semibold text-green-900 mb-3">Allergen-Free Status:</h4>
+                          <div className="flex flex-wrap gap-3">
+                            {nutritionalData.health_labels
+                              .filter(label => label.endsWith('_FREE'))
+                              .map((label) => (
+                                <Badge key={label} className="bg-green-200 text-green-900 border-2 border-green-400 px-4 py-2 text-sm font-bold">
+                                  ✓ {label.replace('_FREE', '').toLowerCase().replace('_', ' ')}-FREE
+                                </Badge>
+                              ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                   

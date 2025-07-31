@@ -70,8 +70,8 @@ const getNutritionDataFromProduct = (product: Product) => {
     sugar,
     vitaminC,
     dietLabels,
+    cautions: nutritionalData.cautions || [],
     healthLabels: nutritionalData.health_labels || [],
-    allergens: nutritionalData.allergens || [],
     highNutrients: nutritionalData.high_nutrients || [],
     warnings,
     servings

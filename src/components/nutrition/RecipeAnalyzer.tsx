@@ -385,7 +385,9 @@ export function RecipeAnalyzer({
           'VITD': 'Vitamin D',
           'TOCPHA': 'Vitamin E',
           'VITK1': 'Vitamin K',
-          'FOLDFE': 'Folate',
+          'FOLDFE': 'Folate (DFE)',
+          'FOLFD': 'Folate (Food)',
+          'FOLAC': 'Folic Acid',
           'NIA': 'Niacin',
           'RIBF': 'Riboflavin',
           'THIA': 'Thiamin'

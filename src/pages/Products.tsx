@@ -49,7 +49,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { FilterSidebar } from "@/components/products/FilterSidebar"
 import { ProductCard } from "@/components/products/ProductCard"
 import { ProductTable } from "@/components/products/ProductTable"
-import { BulkActions } from "@/components/products/BulkActions"
+
 import { productsAPI } from "@/services/api"
 import { useToast } from "@/hooks/use-toast"
 import { usePaginatedProducts } from "@/hooks/usePaginatedProducts"
@@ -398,87 +398,7 @@ export default function Products() {
         </Card>
       )}
 
-      {/* Bulk Actions */}
-      {selectedProducts.length > 0 && (
-        <BulkActions
-          selectedCount={selectedProducts.length}
-          onClearSelection={() => setSelectedProducts([])}
-          onBulkDelete={async () => {
-            try {
-              await Promise.all(selectedProducts.map(id => productsAPI.delete(id)))
-              refresh() // Refresh the products list
-              setSelectedProducts([])
-              toast({
-                title: "Success",
-                description: `${selectedProducts.length} products deleted successfully.`
-              })
-            } catch (error) {
-              console.error('Bulk delete failed:', error)
-              toast({
-                title: "Error",
-                description: "Failed to delete some products. Please try again.",
-                variant: "destructive"
-              })
-            }
-          }}
-          onBulkPin={async () => {
-            try {
-              await Promise.all(selectedProducts.map(id => productsAPI.togglePin(id)))
-              refresh() // Refresh the products list
-              setSelectedProducts([])
-              toast({
-                title: "Success",
-                description: `${selectedProducts.length} products pinned successfully.`
-              })
-            } catch (error) {
-              console.error('Bulk pin failed:', error)
-              toast({
-                title: "Error",
-                description: "Failed to pin some products. Please try again.",
-                variant: "destructive"
-              })
-            }
-          }}
-          onBulkUnpin={async () => {
-            try {
-              await Promise.all(selectedProducts.map(id => productsAPI.togglePin(id)))
-              refresh() // Refresh the products list
-              setSelectedProducts([])
-              toast({
-                title: "Success",
-                description: `${selectedProducts.length} products unpinned successfully.`
-              })
-            } catch (error) {
-              console.error('Bulk unpin failed:', error)
-              toast({
-                title: "Error",
-                description: "Failed to unpin some products. Please try again.",
-                variant: "destructive"
-              })
-            }
-          }}
-          onBulkStatusChange={async (status) => {
-            try {
-              await Promise.all(selectedProducts.map(id => 
-                productsAPI.update(id, { status })
-              ))
-              refresh() // Refresh the products list
-              setSelectedProducts([])
-              toast({
-                title: "Success",
-                description: `${selectedProducts.length} products updated to ${status} successfully.`
-              })
-            } catch (error) {
-              console.error('Bulk status change failed:', error)
-              toast({
-                title: "Error",
-                description: "Failed to update some products. Please try again.",
-                variant: "destructive"
-              })
-            }
-          }}
-        />
-      )}
+
 
 
 

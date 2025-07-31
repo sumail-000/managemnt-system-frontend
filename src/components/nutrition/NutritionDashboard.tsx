@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { NutritionData } from "../../types/nutrition"
 import { 
   BarChart3, 
   PieChart, 
@@ -20,53 +21,13 @@ import {
   Scale
 } from "lucide-react"
 
-interface NutritionData {
-  totalCalories: number
-  macros: {
-    protein: number
-    carbs: number
-    fat: number
-    fiber: number
-    // Dynamic macronutrients support - can be extended with additional nutrients
-    [key: string]: number
-  }
-  micros: Record<string, {
-    label: string
-    quantity: number
-    unit: string
-    percentage: number
-  }>
-  allergens: string[]
-  warnings: Array<{
-    type: 'warning' | 'error' | 'info'
-    message: string
-    severity: 'low' | 'medium' | 'high'
-  }>
-  servings: number
-  weightPerServing: number
-  healthLabels?: string[]
-  // Enhanced data fields
-  dietLabels?: string[]
-  highNutrients?: Array<{
-    nutrient: string
-    label: string
-    percentage: number
-    level: 'very_high' | 'high' | 'moderate'
-  }>
-  nutritionSummary?: {
-    macronutrients?: {
-      protein?: { grams: number }
-      carbs?: { grams: number }
-      fat?: { grams: number }
-    }
-    fiber?: number
-    [key: string]: any
-  }
-  totalDaily?: Record<string, {
-    label: string
-    quantity: number
-    unit: string
-  }>
+// Helper functions for nutrient lookup
+const findNutrientByKey = (nutrients: any[], key: string) => {
+  return nutrients?.find(n => n.key === key)
+}
+
+const findNutrientByName = (nutrients: any[], name: string) => {
+  return nutrients?.find(n => n.name?.toLowerCase().includes(name.toLowerCase()))
 }
 
 interface NutritionDashboardProps {
@@ -219,25 +180,33 @@ const VirtualizedGrid = memo(({ items, renderItem, itemsPerPage = 12 }: {
 
 export const NutritionDashboard = memo(({ data }: NutritionDashboardProps) => {
   // Memoized data validation and fallbacks for performance
-  const safeData = useMemo(() => ({
-    totalCalories: Math.max(0, data.totalCalories || 0),
-    servings: Math.max(1, data.servings || 1),
-    weightPerServing: Math.max(0, data.weightPerServing || 0),
-    macros: {
-      protein: Math.max(0, data.macros?.protein || 0),
-      carbs: Math.max(0, data.macros?.carbs || 0),
-      fat: Math.max(0, data.macros?.fat || 0),
-      fiber: Math.max(0, data.macros?.fiber || 0)
-    },
-    micros: data.micros || {},
-    allergens: data.allergens || [],
-    warnings: data.warnings || [],
-    healthLabels: data.healthLabels || [],
-    dietLabels: data.dietLabels || [],
-    highNutrients: data.highNutrients || [],
-    nutritionSummary: data.nutritionSummary || {},
-    totalDaily: data.totalDaily || {}
-  }), [data]);
+  const safeData = useMemo(() => {
+    // Extract nutrients from dynamic arrays
+    const protein = findNutrientByKey(data.macronutrients || [], 'PROCNT') || findNutrientByName(data.macronutrients || [], 'protein');
+    const carbs = findNutrientByKey(data.macronutrients || [], 'CHOCDF') || findNutrientByName(data.macronutrients || [], 'carb');
+    const fat = findNutrientByKey(data.macronutrients || [], 'FAT') || findNutrientByName(data.macronutrients || [], 'fat');
+    const fiber = findNutrientByKey(data.macronutrients || [], 'FIBTG') || findNutrientByName(data.macronutrients || [], 'fiber');
+    
+    return {
+      totalCalories: Math.max(0, data.totalCalories || 0),
+      servings: Math.max(1, data.servings || 1),
+      weightPerServing: Math.max(0, data.weightPerServing || 0),
+      macros: {
+        protein: Math.max(0, protein?.amount || 0),
+        carbs: Math.max(0, carbs?.amount || 0),
+        fat: Math.max(0, fat?.amount || 0),
+        fiber: Math.max(0, fiber?.amount || 0)
+      },
+      micros: data.dailyValues || {},
+      allergens: data.allergens || [],
+      warnings: data.warnings || [],
+      healthLabels: data.healthLabels || [],
+      dietLabels: data.dietLabels || [],
+      highNutrients: data.highNutrients || [],
+      nutritionSummary: data.nutritionSummary || {},
+      totalDaily: data.dailyValues || {}
+    };
+  }, [data]);
 
   // Helper function to extract quantity from micronutrient data
   const getValueFromMicros = useCallback((micros: Record<string, any>, key: string): number => {

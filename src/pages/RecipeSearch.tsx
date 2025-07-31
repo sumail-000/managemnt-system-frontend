@@ -102,7 +102,8 @@ export default function RecipeSearch() {
           page: page
         })
 
-        const response = await edamamAPI.recipe.search(query, searchParams) as RecipeSearchResponse
+        const axiosResponse = await edamamAPI.recipe.search(query, searchParams)
+        const response = axiosResponse.data as RecipeSearchResponse
        
        // Handle the nested response structure from backend
        const recipes = response.data?.data || response.recipes || []
@@ -265,11 +266,22 @@ export default function RecipeSearch() {
     return (
       <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] cursor-pointer">
         <div className="relative overflow-hidden rounded-t-lg">
-          <img 
-            src={recipe.image} 
-            alt={recipe.name}
-            className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
-          />
+          {recipe.image ? (
+            <img 
+              src={recipe.image} 
+              alt={recipe.name}
+              className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                target.style.display = 'none';
+                const fallback = target.nextElementSibling as HTMLElement;
+                if (fallback) fallback.classList.remove('hidden');
+              }}
+            />
+          ) : null}
+          <div className={`w-full h-48 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center ${recipe.image ? 'hidden' : ''}`}>
+            <ChefHat className="w-12 h-12 text-gray-400" />
+          </div>
           <div className="absolute top-2 right-2 flex gap-1">
             <Badge className={getDifficultyColor(recipe.difficulty)}>
               {recipe.difficulty}
@@ -366,11 +378,24 @@ export default function RecipeSearch() {
       <Card className="hover:shadow-md transition-shadow cursor-pointer">
         <CardContent className="p-4">
           <div className="flex gap-4">
-            <img 
-              src={recipe.image} 
-              alt={recipe.name}
-              className="w-24 h-24 object-cover rounded-lg flex-shrink-0"
-            />
+            <div className="w-24 h-24 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+              {recipe.image ? (
+                <img 
+                  src={recipe.image} 
+                  alt={recipe.name}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.style.display = 'none';
+                    const fallback = target.nextElementSibling as HTMLElement;
+                    if (fallback) fallback.classList.remove('hidden');
+                  }}
+                />
+              ) : null}
+              <div className={`w-full h-full flex items-center justify-center ${recipe.image ? 'hidden' : ''}`}>
+                <ChefHat className="w-6 h-6 text-muted-foreground" />
+              </div>
+            </div>
             <div className="flex-1 space-y-2">
               <div className="flex items-start justify-between">
                 <div>

@@ -157,9 +157,7 @@ export const useIngredients = () => {
     setEditingItem(null);
   }, []);
 
-  const addBulkIngredients = useCallback((newIngredients: Ingredient[]) => {
-    setIngredients(prev => [...prev, ...newIngredients]);
-  }, []);
+
 
   return {
     ingredients,
@@ -176,7 +174,7 @@ export const useIngredients = () => {
     closeNotesModal,
     startEditing,
     stopEditing,
-    addBulkIngredients,
+
     setDraggedItem,
   };
 };
