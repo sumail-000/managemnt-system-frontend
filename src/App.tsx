@@ -22,7 +22,7 @@ import NotFound from "./pages/NotFound";
 import QRCodes from "./pages/QRCodes";
 import Favorites from "./pages/Favorites";
 import Settings from "./pages/Settings";
-import RecipeSearch from "./pages/RecipeSearch";
+
 import { PaymentForm } from "./components/payment/PaymentForm";
 
 // Admin Panel Components
@@ -146,13 +146,7 @@ const App = () => {
       } />
       
       
-      <Route path="/recipe-search" element={
-        <ProtectedRoute>
-          <DashboardLayout>
-            <RecipeSearch />
-          </DashboardLayout>
-        </ProtectedRoute>
-      } />
+
       
       <Route path="/favorites" element={
         <ProtectedRoute>

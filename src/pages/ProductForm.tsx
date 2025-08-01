@@ -82,7 +82,7 @@ import { useCategories } from "@/hooks/useCategories"
 import { ImageUrlExtractionResponse } from "@/types/api"
 import { getStorageUrl } from "@/utils/storage"
 import { Recipe, EdamamRecipe, transformRecipeFromAPI } from "@/types/recipe"
-import { NutritionData } from "@/types/nutrition"
+import { NutritionData, nutritionUtils } from "@/types/nutrition"
 import { NutritionDisplay } from "@/components/nutrition/NutritionDisplay"
 
 import { servingUtils, formatWeight } from "@/utils/serving"
@@ -102,11 +102,18 @@ const productSchema = z.object({
   portion_size: z.enum(["small", "medium", "large"]),
   serving_type: z.enum(["main", "side"]),
   total_servings: z.number().min(1, "Must have at least 1 serving"),
-  serving_unit: z.string().optional(),
+  serving_size: z.number().min(0, "Serving size must be positive").optional(),
   servings_per_container: z.number().min(1, "Must have at least 1 serving per container").optional(),
   status: z.enum(["draft", "published"]),
   is_public: z.boolean(),
-  is_pinned: z.boolean()
+  is_pinned: z.boolean(),
+  // Recipe rating and nutrition score fields
+  datametrics_rating: z.number().min(0, "Rating must be positive").max(5, "Rating cannot exceed 5").optional(),
+  nutrition_score: z.number().min(0, "Nutrition score must be positive").max(100, "Nutrition score cannot exceed 100").optional(),
+  // Individual macronutrient fields per serving
+  protein_per_serving: z.number().min(0, "Protein per serving must be positive").optional(),
+  carbs_per_serving: z.number().min(0, "Carbs per serving must be positive").optional(),
+  fat_per_serving: z.number().min(0, "Fat per serving must be positive").optional()
   // tags removed - will be auto-generated on backend
 })
 
@@ -198,10 +205,15 @@ export default function ProductForm() {
   const [ingredientNotes, setIngredientNotes] = useState("")
   const [isNotesModalOpen, setIsNotesModalOpen] = useState(false)
   const [isAnalyzingNutrition, setIsAnalyzingNutrition] = useState(false)
+  
+  // Refs
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const [nutritionAnalysisComplete, setNutritionAnalysisComplete] = useState(false)
+  const [nutritionDataSource, setNutritionDataSource] = useState<'api' | 'loaded' | null>(null)
   
 
   const [nutritionData, setNutritionData] = useState<NutritionData | null>(null)
+  const [isLoadingExistingData, setIsLoadingExistingData] = useState(false)
   
   // Drag and drop sensors
   const sensors = useSensors(
@@ -335,6 +347,7 @@ export default function ProductForm() {
          }
          
          setNutritionAnalysisComplete(true)
+         setNutritionDataSource('api')
          toast({
            title: "Nutrition Analysis Complete",
            description: `Nutritional data has been automatically analyzed for "${productName}" with ${ingredientLines.length} ingredients.`,
@@ -409,6 +422,8 @@ export default function ProductForm() {
       // Set total servings
       if (recipe.servingInfo.servings) {
         form.setValue('total_servings', recipe.servingInfo.servings)
+        // Set servings per container to match recipe yield
+        form.setValue('servings_per_container', recipe.servingInfo.servings)
       }
     }
     
@@ -472,7 +487,6 @@ export default function ProductForm() {
       serving_type: "main",
       total_servings: 1,
       serving_size: 0,
-      serving_unit: "",
       servings_per_container: 1,
       status: "draft",
       is_public: false,
@@ -484,8 +498,9 @@ export default function ProductForm() {
   // Auto-trigger nutrition analysis when ingredients are populated
   useEffect(() => {
     const productName = form.watch("name")
-    // Only trigger if we have ingredients from a recipe and a product name
-    if (recipeIngredients.length > 0 && productName?.trim() && !isAnalyzingNutrition && !nutritionAnalysisComplete) {
+    // Only trigger if we have a selected recipe, ingredients from a recipe and a product name
+    // AND we're not loading existing data (to prevent API calls when editing existing products)
+    if (selectedRecipe && recipeIngredients.length > 0 && productName?.trim() && !isAnalyzingNutrition && !nutritionAnalysisComplete && !isLoadingExistingData) {
       // Add a small delay to ensure ingredients are fully populated
       const timer = setTimeout(() => {
         triggerNutritionAnalysis(recipeIngredients, productName)
@@ -493,22 +508,64 @@ export default function ProductForm() {
 
       return () => clearTimeout(timer)
     }
-  }, [recipeIngredients, form.watch("name"), isAnalyzingNutrition, nutritionAnalysisComplete])
+  }, [selectedRecipe, recipeIngredients, form.watch("name"), isAnalyzingNutrition, nutritionAnalysisComplete, isLoadingExistingData])
 
   // Reset nutrition analysis when ingredients change (new recipe selected)
   useEffect(() => {
     // Reset nutrition state when ingredients change to allow re-analysis
-    if (recipeIngredients.length > 0) {
+    // BUT NOT when loading existing data (to preserve saved nutrition data)
+    if (recipeIngredients.length > 0 && !isLoadingExistingData) {
       setNutritionAnalysisComplete(false)
       setNutritionData(null)
+      setNutritionDataSource(null)
     }
-  }, [recipeIngredients.length, recipeIngredients.map(ing => ing.id).join(',')])
+  }, [recipeIngredients.length, recipeIngredients.map(ing => ing.id).join(','), isLoadingExistingData])
+
+  // Auto-focus search input when basic tab is active
+  useEffect(() => {
+    if (currentTab === "basic" && searchInputRef.current) {
+      searchInputRef.current.focus()
+    }
+  }, [currentTab])
+
+  // Auto-populate serving_size when nutritionData becomes available
+  useEffect(() => {
+    if (nutritionData && nutritionAnalysisComplete && !isLoadingExistingData) {
+      const currentServingSize = form.getValues('serving_size')
+      
+      // Only auto-populate if serving_size is 0 or not set
+      if (!currentServingSize || currentServingSize === 0) {
+        // Calculate serving info to get weightPerServing
+        const formData = form.getValues()
+        const servingInfo = selectedRecipe && nutritionData ? servingUtils.calculateServingInfo(
+          {
+            calories_per_serving: formData.calories_per_serving,
+            total_servings: formData.total_servings,
+            serving_size: formData.serving_size,
+            servings_per_container: formData.servings_per_container,
+            portion_size: formData.portion_size,
+            serving_type: formData.serving_type
+          },
+          selectedRecipe,
+          nutritionData
+        ) : null
+        
+        // Use weightPerServing from servingInfo if available
+        const weightPerServing = servingInfo?.weightPerServing || nutritionData?.weightPerServing
+        if (weightPerServing && weightPerServing > 0) {
+          form.setValue('serving_size', Math.round(weightPerServing))
+          console.log('🔬 [DEBUG] Auto-populated serving_size:', Math.round(weightPerServing), 'g from weightPerServing')
+        }
+      }
+    }
+  }, [nutritionData, nutritionAnalysisComplete, isLoadingExistingData, form, selectedRecipe])
 
   // Load product data if editing
   useEffect(() => {
     const loadProduct = async () => {
       if (isEdit && id) {
         setIsLoading(true)
+        setIsLoadingExistingData(true)
         try {
           const response = await productsAPI.getById(id)
           console.log('[ProductForm] API Response:', response)
@@ -541,12 +598,11 @@ export default function ProductForm() {
             name: product.name || '',
             description: product.description || "",
             category_id: product.category_id ? product.category_id.toString() : '',
-            calories_per_serving: parseFloat(product.calories_per_serving) || parseFloat(product.serving_size) || 0,
+            calories_per_serving: parseFloat(product.calories_per_serving) || 0,
             portion_size: (product.portion_size as "small" | "medium" | "large") || "medium",
             serving_type: (product.serving_type as "main" | "side") || "main",
             total_servings: parseInt(product.total_servings) || parseInt(product.servings_per_container) || 1,
-            serving_size: parseFloat(product.serving_size) || 0,
-            serving_unit: product.serving_unit || "",
+            serving_size: parseFloat(product.weight_per_serving) || 0,
             servings_per_container: parseInt(product.servings_per_container) || 1,
             status: (product.status as "draft" | "published") || 'draft',
             is_public: Boolean(product.is_public),
@@ -576,10 +632,123 @@ export default function ProductForm() {
             }
           }
           
-          // Note: Existing ingredients will be loaded through recipe search functionality
+          // Load existing ingredients and nutrition data from database
+          if (product.ingredients_data) {
+            console.log('[ProductForm] Processing saved ingredients data:', product.ingredients_data)
+            
+            // Use nutrition utility to process saved data
+            const { ingredients, nutritionData } = nutritionUtils.processIngredientsData(product.ingredients_data)
+            
+            if (ingredients && ingredients.length > 0) {
+              console.log('[ProductForm] Loading saved ingredients:', ingredients)
+              setRecipeIngredients(ingredients)
+              
+              // Show success message for loaded ingredients
+              toast({
+                title: "Ingredients Loaded",
+                description: `${ingredients.length} saved ingredients have been loaded from the database.`,
+                duration: 3000
+              })
+            }
+            
+            if (nutritionData) {
+              console.log('[ProductForm] Loading saved nutrition data:', nutritionData)
+              setNutritionData(nutritionData)
+              setNutritionAnalysisComplete(true)
+              setNutritionDataSource('loaded')
+              
+              // Show success message for loaded nutrition data
+              toast({
+                title: "Nutrition Data Loaded",
+                description: "Pre-analyzed nutrition data has been loaded from the database.",
+                duration: 3000
+              })
+            }
+          }
           
-          // Load existing ingredient notes if available
-          if (product.ingredient_notes) {
+          // Reconstruct recipe data from saved product metadata
+          if (product.recipe_uri || product.recipe_source) {
+            console.log('[ProductForm] Reconstructing recipe data from saved metadata')
+            
+            const reconstructedRecipe: Recipe = {
+              id: product.recipe_uri || `saved-recipe-${product.id}`,
+              name: product.name,
+              description: product.description || '',
+              uri: product.recipe_uri || '',
+              url: product.source_url || '',
+              source: product.recipe_source || '',
+              servings: product.recipe_yield || product.total_servings || 1,
+              estimatedPrepTime: product.prep_time || 0,
+              estimatedCookTime: product.cook_time || 0,
+              totalTime: product.total_time || 0,
+              skillLevel: product.skill_level || null,
+              timeCategory: product.time_category as 'quick' | 'moderate' | 'long' || null,
+              cuisineType: product.cuisine_type ? [product.cuisine_type] : [],
+              difficulty: product.difficulty || null,
+              totalCO2Emissions: product.total_co2_emissions || null,
+              co2EmissionsClass: product.co2_emissions_class || null,
+              dietLabels: product.diet_labels || [],
+              healthLabels: product.health_labels || [],
+              cautions: product.caution_labels || [],
+              mealType: product.meal_types || [],
+              dishType: product.dish_types || [],
+              apiTags: product.recipe_tags || [],
+              rating: product.datametrics_rating || 0,
+              diversityScore: product.nutrition_score || 0,
+              calories: product.total_recipe_calories || 0,
+              totalNutrients: {
+                // Reconstruct per-serving nutrition data from database
+                ...(product.protein_per_serving && {
+                  PROCNT: {
+                    label: "Protein",
+                    quantity: product.protein_per_serving * (product.recipe_yield || product.total_servings || 1),
+                    unit: "g"
+                  }
+                }),
+                ...(product.carbs_per_serving && {
+                  CHOCDF: {
+                    label: "Carbs",
+                    quantity: product.carbs_per_serving * (product.recipe_yield || product.total_servings || 1),
+                    unit: "g"
+                  }
+                }),
+                ...(product.fat_per_serving && {
+                  FAT: {
+                    label: "Fat",
+                    quantity: product.fat_per_serving * (product.recipe_yield || product.total_servings || 1),
+                    unit: "g"
+                  }
+                }),
+                ...(product.total_recipe_calories && {
+                  ENERC_KCAL: {
+                    label: "Energy",
+                    quantity: product.total_recipe_calories,
+                    unit: "kcal"
+                  }
+                })
+              },
+              servingInfo: {
+                caloriesPerServing: product.calories_per_serving || product.calories_per_serving_recipe || 0,
+                servings: product.recipe_yield || product.total_servings || 1,
+                portionSize: product.portion_size as 'small' | 'medium' | 'large' || 'medium',
+                servingType: product.serving_type as 'main' | 'side' || 'main',
+                totalWeight: product.total_weight || null,
+                weightPerServing: product.weight_per_serving || null
+              }
+            }
+            
+            console.log('[ProductForm] Reconstructed recipe:', reconstructedRecipe)
+            setSelectedRecipe(reconstructedRecipe)
+            
+            toast({
+              title: "Recipe Data Loaded",
+              description: "Saved recipe metadata has been loaded from the database.",
+              duration: 3000
+            })
+          }
+          
+          // Load existing ingredient notes if available (fallback)
+          if (product.ingredient_notes && !product.nutritional_data) {
             setIngredientNotes(product.ingredient_notes)
           }
           
@@ -597,6 +766,7 @@ export default function ProductForm() {
           navigate("/products")
         } finally {
           setIsLoading(false)
+          setIsLoadingExistingData(false)
         }
       }
     }
@@ -638,23 +808,40 @@ export default function ProductForm() {
         order: index + 1
       }))
       
+      // Calculate serving information using servingUtils
+      const servingInfo = selectedRecipe && nutritionData ? servingUtils.calculateServingInfo(
+        {
+          calories_per_serving: data.calories_per_serving,
+          total_servings: data.total_servings,
+          serving_size: data.serving_size,
+          servings_per_container: data.servings_per_container,
+          portion_size: data.portion_size,
+          serving_type: data.serving_type
+        },
+        selectedRecipe,
+        nutritionData
+      ) : null;
+
       // Prepare recipe metadata from selectedRecipe
       const recipeMetadata = selectedRecipe ? {
         recipe_uri: selectedRecipe.uri || null,
         recipe_source: selectedRecipe.source || null,
-        recipe_url: selectedRecipe.url || null,
-        prep_time: selectedRecipe.estimatedPrepTime || null,
-        cook_time: selectedRecipe.estimatedCookTime || null,
-        total_time: selectedRecipe.totalTime || null,
+        source_url: selectedRecipe.url || null,
+        prep_time: selectedRecipe.estimatedPrepTime === 0 ? 0 : (selectedRecipe.estimatedPrepTime || null),
+        cook_time: selectedRecipe.estimatedCookTime === 0 ? 0 : (selectedRecipe.estimatedCookTime || null),
+        total_time: selectedRecipe.totalTime === 0 ? 0 : (selectedRecipe.totalTime || null),
         skill_level: selectedRecipe.skillLevel || null,
-        time_category: selectedRecipe.timeCategory || null,
+        time_category: selectedRecipe.timeCategory && ['quick', 'moderate', 'long'].includes(selectedRecipe.timeCategory) ? selectedRecipe.timeCategory : null,
         cuisine_type: selectedRecipe.cuisineType?.[0] || null,
         difficulty: selectedRecipe.difficulty || null,
         total_co2_emissions: selectedRecipe.totalCO2Emissions || null,
         co2_emissions_class: selectedRecipe.co2EmissionsClass || null,
         recipe_yield: selectedRecipe.servings || null,
         total_weight: nutritionData?.totalWeight || null,
-        weight_per_serving: nutritionData?.weightPerServing || null,
+        weight_per_serving: servingInfo?.weightPerServing || nutritionData?.weightPerServing || null,
+        // Rating and nutrition score
+        datametrics_rating: selectedRecipe.rating || null,
+        nutrition_score: selectedRecipe.diversityScore || null,
         // Key nutritional information per serving
         calories_per_serving_recipe: selectedRecipe.totalNutrients?.ENERC_KCAL ? Math.round(selectedRecipe.totalNutrients.ENERC_KCAL.quantity / selectedRecipe.servings) : null,
         fat_per_serving: selectedRecipe.totalNutrients?.FAT ? Math.round(selectedRecipe.totalNutrients.FAT.quantity / selectedRecipe.servings) : null,
@@ -664,8 +851,8 @@ export default function ProductForm() {
         total_recipe_calories: selectedRecipe.totalNutrients?.ENERC_KCAL ? Math.round(selectedRecipe.totalNutrients.ENERC_KCAL.quantity) : null,
         total_recipe_weight: nutritionData?.totalWeight || null,
         // Per serving breakdown
-        serving_weight: nutritionData?.weightPerServing || null,
-        serving_calories: nutritionData?.caloriesPerServing || null,
+        serving_weight: servingInfo?.weightPerServing || nutritionData?.weightPerServing || null,
+        serving_calories: servingInfo?.caloriesPerServing || null,
         total_servings_count: selectedRecipe.servings || null
       } : {}
       
@@ -676,7 +863,7 @@ export default function ProductForm() {
         caution_labels: JSON.stringify(selectedRecipe.cautions || []),
         meal_types: JSON.stringify(selectedRecipe.mealType || []),
         dish_types: JSON.stringify(selectedRecipe.dishType || []),
-        recipe_tags: JSON.stringify(selectedRecipe.tags || [])
+        recipe_tags: JSON.stringify(selectedRecipe.apiTags || [])
       } : {
         diet_labels: JSON.stringify([]),
         health_labels: JSON.stringify([]),
@@ -700,9 +887,6 @@ export default function ProductForm() {
         // Add additional serving fields
         if (data.serving_size !== undefined && data.serving_size > 0) {
           productData.append('serving_size', data.serving_size.toString())
-        }
-        if (data.serving_unit) {
-          productData.append('serving_unit', data.serving_unit)
         }
         if (data.servings_per_container !== undefined && data.servings_per_container > 0) {
           productData.append('servings_per_container', data.servings_per_container.toString())
@@ -731,16 +915,7 @@ export default function ProductForm() {
           productData.append('nutrition_data', JSON.stringify(nutritionData))
         }
         
-        // Add basic ingredients for backward compatibility
-        if (ingredients.length > 0) {
-          ingredients.forEach((ingredient, index) => {
-            productData.append(`ingredients[${index}][id]`, ingredient.id.toString())
-            productData.append(`ingredients[${index}][text]`, ingredient.text)
-            productData.append(`ingredients[${index}][order]`, (index + 1).toString())
-          })
-        } else {
-          productData.append('ingredients', '[]')
-        }
+        // Ingredients are now handled via rich_ingredients only
         
         // Add ingredient notes
         productData.append('ingredient_notes', ingredientNotes)
@@ -762,7 +937,6 @@ export default function ProductForm() {
           
           // Add additional serving fields
           ...(data.serving_size !== undefined && data.serving_size > 0 && { serving_size: data.serving_size }),
-          ...(data.serving_unit && { serving_unit: data.serving_unit }),
           ...(data.servings_per_container !== undefined && data.servings_per_container > 0 && { servings_per_container: data.servings_per_container }),
           status: data.status,
           is_public: data.is_public,
@@ -780,12 +954,7 @@ export default function ProductForm() {
           // Add nutrition data
           nutrition_data: nutritionData ? JSON.stringify(nutritionData) : null,
           
-          // Add basic ingredients for backward compatibility
-          ingredients: ingredients.length > 0 ? ingredients.map((ingredient, index) => ({
-            id: ingredient.id,
-            text: ingredient.text,
-            order: index + 1
-          })) : [],
+          // Ingredients are now handled via rich_ingredients only
           
           // Add ingredient notes
           ingredient_notes: ingredientNotes
@@ -816,16 +985,7 @@ export default function ProductForm() {
           : "Your product has been created successfully."
       })
       
-      // Show additional info popup for new products
-      if (!isEdit) {
-        setTimeout(() => {
-          toast({
-            title: "Next Step: Complete Recipe Details",
-            description: "Head over to the Nutritional Analysis tab to complete your recipe details and nutritional information.",
-            duration: 8000, // Show for 8 seconds
-          })
-        }, 1500) // Show after 1.5 seconds
-      }
+      // Additional info popup removed - no longer needed
       
       // Navigate back to products list
       navigate("/products")
@@ -1029,6 +1189,7 @@ export default function ProductForm() {
                     <div className="relative flex-1">
                       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5" />
                       <Input
+                        ref={searchInputRef}
                         placeholder="e.g., Chicken Alfredo, Chocolate Cake..."
                         value={recipeSearchQuery}
                         onChange={(e) => {
@@ -1170,6 +1331,15 @@ export default function ProductForm() {
                           onClick={() => {
                             setSelectedRecipe(null)
                             setRecipeIngredients([])
+                            // Reset serving info fields when recipe is deselected
+                            form.setValue('calories_per_serving', 0)
+                            form.setValue('portion_size', 'medium')
+                            form.setValue('serving_type', 'main')
+                            form.setValue('total_servings', 1)
+                            form.setValue('servings_per_container', 1)
+                            // Reset nutrition data
+                            setNutritionData(null)
+                            setNutritionAnalysisComplete(false)
                           }}
                           className="text-green-700 hover:text-green-900 hover:bg-green-100"
                         >
@@ -1203,11 +1373,17 @@ export default function ProductForm() {
                             <FormLabel className="text-lg font-semibold text-foreground">Product Name *</FormLabel>
                             <FormControl>
                               <Input 
-                                placeholder="e.g., Organic Greek Yogurt" 
+                                placeholder={!selectedRecipe ? "Please search and select a recipe first" : "e.g., Organic Greek Yogurt"}
                                 className="h-12 text-lg border-2 focus:border-primary/50 rounded-xl bg-background/50 backdrop-blur-sm transition-all duration-300 hover:shadow-md"
+                                disabled={!selectedRecipe && !isEdit}
                                 {...field}
                               />
                             </FormControl>
+                            {!selectedRecipe && !isEdit && (
+                              <FormDescription className="text-sm text-amber-600 bg-amber-50 px-3 py-1 rounded-lg">
+                                Search and select a recipe above to enable product details
+                              </FormDescription>
+                            )}
                             <FormMessage />
                           </FormItem>
                         )}
@@ -1221,8 +1397,9 @@ export default function ProductForm() {
                             <FormLabel className="text-lg font-semibold text-foreground">Description *</FormLabel>
                             <FormControl>
                               <Textarea 
-                                placeholder="Describe your product..."
+                                placeholder={!selectedRecipe ? "Please search and select a recipe first" : "Describe your product..."}
                                 className="min-h-[120px] text-lg border-2 focus:border-primary/50 rounded-xl bg-background/50 backdrop-blur-sm transition-all duration-300 hover:shadow-md resize-none"
+                                disabled={!selectedRecipe && !isEdit}
                                 {...field} 
                               />
                             </FormControl>
@@ -1255,25 +1432,36 @@ export default function ProductForm() {
                       </CardHeader>
                       <CardContent className="flex-1">
                       <div className="space-y-4">
-                        {/* Upload Method Selection */}
-                        <div className="flex gap-2">
-                          <Button
-                            type="button"
-                            variant={uploadMethod === "url" ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => setUploadMethod("url")}
-                          >
-                            Image URL
-                          </Button>
-                          <Button
-                            type="button"
-                            variant={uploadMethod === "upload" ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => setUploadMethod("upload")}
-                          >
-                            Upload File
-                          </Button>
-                        </div>
+                        {!selectedRecipe && !isEdit && (
+                          <div className="text-center py-8 text-muted-foreground">
+                            <Upload className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                            <p className="text-sm">Search and select a recipe to enable image upload</p>
+                          </div>
+                        )}
+                        
+                        {(selectedRecipe || isEdit) && (
+                          <>
+                            {/* Upload Method Selection */}
+                            <div className="flex gap-2">
+                              <Button
+                                type="button"
+                                variant={uploadMethod === "url" ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => setUploadMethod("url")}
+                              >
+                                Image URL
+                              </Button>
+                              <Button
+                                type="button"
+                                variant={uploadMethod === "upload" ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => setUploadMethod("upload")}
+                              >
+                                Upload File
+                              </Button>
+                            </div>
+                          </>
+                        )}
 
                         {/* Image Preview */}
                         {imagePreview && (
@@ -1384,7 +1572,7 @@ export default function ProductForm() {
                         )}
 
                         {/* File Upload */}
-                        {uploadMethod === "upload" && !imagePreview && (
+                        {uploadMethod === "upload" && !imagePreview && (selectedRecipe || isEdit) && (
                           <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
                             <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
                             <p className="text-sm text-muted-foreground mb-2">
@@ -1407,6 +1595,7 @@ export default function ProductForm() {
                           onChange={handleImageUpload}
                           className="hidden"
                           id="image-upload"
+                          disabled={!selectedRecipe && !isEdit}
                         />
                       </div>
                     </CardContent>
@@ -1770,13 +1959,23 @@ export default function ProductForm() {
                     </p>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid gap-4 md:grid-cols-2">
-                      {/* Servings Per Container */}
+                    <div className="grid gap-4 md:grid-cols-3">
+                      {/* Serving Size */}
+                      <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="text-center">
+                          <p className="text-sm font-medium text-blue-700 mb-1">Serving Size</p>
+                          <p className="text-lg font-bold text-blue-900">
+                            {form.watch('serving_size') || 0} g
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Total Servings */}
                       <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
                         <div className="text-center">
-                          <p className="text-sm font-medium text-green-700 mb-1">Servings Per Container</p>
+                          <p className="text-sm font-medium text-green-700 mb-1">Total Servings</p>
                           <p className="text-lg font-bold text-green-900">
-                            {form.watch('total_servings') || selectedRecipe?.servingInfo?.servings || nutritionData?.servings || 1}
+                            {form.watch('servings_per_container') || selectedRecipe?.servingInfo?.servings || nutritionData?.servings || 1}
                           </p>
                         </div>
                       </div>
@@ -1808,7 +2007,9 @@ export default function ProductForm() {
                           calories_per_serving: form.watch('calories_per_serving'),
                           total_servings: form.watch('total_servings'),
                           portion_size: form.watch('portion_size'),
-                          serving_type: form.watch('serving_type')
+                          serving_type: form.watch('serving_type'),
+                          serving_size: form.watch('serving_size'),
+                          servings_per_container: form.watch('servings_per_container')
                         },
                         selectedRecipe,
                         nutritionData
@@ -1983,7 +2184,28 @@ export default function ProductForm() {
                     )}
                   />
 
-
+                  <FormField
+                    control={form.control}
+                    name="serving_size"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Serving Size (grams)</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            placeholder="100" 
+                            {...field}
+                            value={field.value === 0 ? '' : field.value}
+                            onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Weight of one serving in grams
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
                   <FormField
                     control={form.control}
@@ -2006,6 +2228,8 @@ export default function ProductForm() {
                   />
                 </CardContent>
               </Card>
+
+
             </TabsContent>
 
             {/* Ingredients */}
@@ -2037,7 +2261,7 @@ export default function ProductForm() {
                               <svg className="h-3 w-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                               </svg>
-                              Nutrition analyzed
+                              {nutritionDataSource === 'api' ? 'Nutrition analyzed' : 'Data loaded'}
                             </Badge>
                           )}
                         </div>
@@ -2290,50 +2514,7 @@ export default function ProductForm() {
                   </CardContent>
                 </Card>
               </div>
-              
-              {/* Auto-generated Tags Info */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Product Tags</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                      <div className="flex items-start gap-3">
-                        <div className="bg-blue-100 dark:bg-blue-900/30 rounded-full p-1">
-                          <Tags className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-1">
-                            Auto-Generated Tags
-                          </h4>
-                          <p className="text-sm text-blue-700 dark:text-blue-300">
-                            Tags will be automatically generated based on your product's nutritional analysis, 
-                            ingredients, and category. This helps with product discovery and filtering.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* Show current tags if editing */}
-                    {selectedTags.length > 0 && (
-                      <div>
-                        <Label className="text-sm font-medium">Current Tags:</Label>
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {selectedTags.map(tag => (
-                            <Badge key={tag} variant="secondary">
-                              {tag}
-                            </Badge>
-                          ))}
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          These tags were auto-generated. New tags will be generated when you save the product.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+
             </TabsContent>
 
             {/* Settings */}
@@ -2453,30 +2634,28 @@ export default function ProductForm() {
             </Button>
             
             <Button 
-              type="button" 
-              variant="outline"
+              type="button"
+              variant={currentTab === "settings" ? "default" : "outline"}
               onClick={() => {
+                if (currentTab === "settings") {
+                  // Manually trigger form submission
+                  form.handleSubmit(onSubmit)()
+                  return
+                }
                 const tabs = ["basic", "ingredients", "serving", "categorization", "settings"]
                 const currentIndex = tabs.indexOf(currentTab)
                 if (currentIndex < tabs.length - 1) {
                   setCurrentTab(tabs[currentIndex + 1])
-                } else {
-                  // On last tab, navigate based on context
-                  if (isEdit) {
-                    navigate("/products")
-                  } else {
-                    navigate("/products/new")
-                  }
                 }
               }}
               className="min-w-[120px]"
             >
               {currentTab === "settings" 
-                ? (isEdit ? "Back to Products" : "Create Another")
+                ? "Create Product"
                 : "Next"
               }
-              {currentTab === "label" 
-                ? <Plus className="w-4 h-4 ml-2" />
+              {currentTab === "settings" 
+                ? <Save className="w-4 h-4 ml-2" />
                 : <ArrowRight className="w-4 h-4 ml-2" />
               }
             </Button>

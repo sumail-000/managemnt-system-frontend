@@ -75,6 +75,7 @@ export interface QrCode {
   product_id: string;
   url_slug: string;
   image_path?: string;
+  image_url?: string;
   scan_count: number;
   last_scanned_at?: string;
   created_at: string;
@@ -144,6 +145,13 @@ export interface ProductFormData {
   tags?: string[];
   image_url?: string;
   image_file?: File;
+  // Recipe rating and nutrition score fields
+  datametrics_rating?: number;
+  nutrition_score?: number;
+  // Individual macronutrient fields per serving
+  protein_per_serving?: number;
+  carbs_per_serving?: number;
+  fat_per_serving?: number;
 }
 
 // Helper function to transform API response to frontend Product type
@@ -165,7 +173,7 @@ export const transformProductFromAPI = (apiProduct: any): Product => {
     serving_size: apiProduct.serving_size,
     serving_unit: apiProduct.serving_unit,
     servings_per_container: apiProduct.servings_per_container,
-    tags: apiProduct.tags || [],
+    tags: apiProduct.recipe_tags || apiProduct.tags || [],
     image: apiProduct.image,
     image_url: apiProduct.image_url,
     image_path: apiProduct.image_path,

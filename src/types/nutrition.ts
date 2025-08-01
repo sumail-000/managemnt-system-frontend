@@ -291,5 +291,183 @@ export const nutritionUtils = {
     return NUTRIENT_CATEGORIES.find(category => 
       category.nutrients.includes(nutrientKey)
     ) || null;
+  },
+
+  // NEW: Transform saved nutrition data from database to NutritionData format
+  transformSavedNutritionData: (savedData: any): NutritionData | null => {
+    if (!savedData || typeof savedData !== 'object') {
+      console.warn('⚠️ Invalid saved nutrition data provided');
+      return null;
+    }
+
+    try {
+      console.log('🔄 Transforming saved nutrition data:', savedData);
+      
+      // Handle different possible data structures
+      const data = savedData.data || savedData;
+      
+      const transformedData: NutritionData = {
+        // Basic nutrition info
+        calories: data.calories || data.ENERC_KCAL?.quantity || 0,
+        totalWeight: data.totalWeight || data.weight || 0,
+        servings: data.servings || 1,
+        weightPerServing: data.weightPerServing || data.weight_per_serving || 0,
+        
+        // Labels
+        dietLabels: Array.isArray(data.dietLabels) ? data.dietLabels : 
+                   Array.isArray(data.diet_labels) ? data.diet_labels : [],
+        healthLabels: Array.isArray(data.healthLabels) ? data.healthLabels : 
+                     Array.isArray(data.health_labels) ? data.health_labels : [],
+        cautions: Array.isArray(data.cautions) ? data.cautions : 
+                 Array.isArray(data.caution_labels) ? data.caution_labels : [],
+        
+        // Nutrients - handle both API format and saved format
+        totalNutrients: data.totalNutrients || data.total_nutrients || 
+                       data.basic_nutrition || data.micronutrients || {},
+        totalDaily: data.totalDaily || data.total_daily || data.daily_values || {},
+        
+        // Additional data
+        ingredients: Array.isArray(data.ingredients) ? data.ingredients : [],
+        totalNutrientsKCal: Array.isArray(data.totalNutrientsKCal) ? data.totalNutrientsKCal : [],
+        co2EmissionsClass: data.co2EmissionsClass || data.co2_emissions_class || null,
+        totalCO2Emissions: data.totalCO2Emissions || data.total_co2_emissions || null,
+        
+        // High nutrients
+        highNutrients: Array.isArray(data.highNutrients) ? data.highNutrients : 
+                      Array.isArray(data.high_nutrients) ? data.high_nutrients : [],
+        
+        // Nutrition summary - handle macronutrients field
+        nutritionSummary: data.nutritionSummary || data.nutrition_summary || {
+          calories: data.calories || 0,
+          caloriesPerGram: data.caloriesPerGram || 0,
+          macronutrients: data.macronutrients || {},
+          fiber: data.fiber || 0,
+          sodium: data.sodium || 0,
+          sugar: data.sugar || 0
+        },
+        
+        // Analysis metadata
+        analysisMetadata: data.analysisMetadata || data.analysis_metadata || {
+          analyzedAt: data.analyzedAt || new Date().toISOString(),
+          source: data.source || 'database',
+          version: data.version || '1.0'
+        },
+        
+        // Optional warnings and allergens
+        warnings: Array.isArray(data.warnings) ? data.warnings : [],
+        allergens: Array.isArray(data.allergens) ? data.allergens : []
+      };
+
+      console.log('✅ Successfully transformed saved nutrition data:', transformedData);
+      return transformedData;
+    } catch (error) {
+      console.error('❌ Error transforming saved nutrition data:', error);
+      return null;
+    }
+  },
+
+  // NEW: Process ingredients data from database
+  processIngredientsData: (ingredientsData: any): { ingredients: any[], nutritionData: NutritionData | null } => {
+    if (!ingredientsData) {
+      return { ingredients: [], nutritionData: null };
+    }
+
+    try {
+      // Parse JSON if it's a string
+      const data = typeof ingredientsData === 'string' ? JSON.parse(ingredientsData) : ingredientsData;
+      
+      console.log('🔍 Processing ingredients data structure:', data);
+      
+      // Check if this is the ingredients_data array from database
+      if (Array.isArray(data)) {
+        // Extract ingredients from the ingredients_data array
+        const ingredients = data.map((item, index) => ({
+          id: `ingredient-${index}`,
+          text: item.name || item.text || '',
+          image: item.image_url,
+          foodCategory: item.food_category,
+          isMainIngredient: item.is_main_ingredient,
+          quantity: item.quantity,
+          measure: item.measure,
+          weight: item.weight
+        })).filter(ingredient => ingredient.text.trim() !== '');
+        
+        // Look for nutrition data in the first ingredient entry
+        let nutritionData = null;
+        const firstIngredient = data[0];
+        if (firstIngredient && firstIngredient.nutrition_data) {
+          nutritionData = nutritionUtils.transformSavedNutritionData(firstIngredient.nutrition_data);
+        }
+        
+        console.log('✅ Processed ingredients data:', { 
+          ingredientsCount: ingredients.length, 
+          hasNutritionData: !!nutritionData 
+        });
+        
+        return { ingredients, nutritionData };
+      } else {
+        // Fallback: treat as legacy nutrition data structure
+        const nutritionData = nutritionUtils.transformSavedNutritionData(data);
+        const ingredients = Array.isArray(data.ingredients) ? data.ingredients : [];
+        
+        console.log('✅ Processed legacy nutrition data:', { 
+          ingredientsCount: ingredients.length, 
+          hasNutritionData: !!nutritionData 
+        });
+        
+        return { ingredients, nutritionData };
+      }
+    } catch (error) {
+      console.error('❌ Error processing ingredients data:', error);
+      return { ingredients: [], nutritionData: null };
+    }
+  },
+
+  // NEW: Validate nutrition data structure
+  validateNutritionData: (data: any): boolean => {
+    if (!data || typeof data !== 'object') return false;
+    
+    // Check for essential fields
+    const hasEssentialFields = 
+      typeof data.calories === 'number' &&
+      data.totalNutrients &&
+      typeof data.totalNutrients === 'object';
+    
+    return hasEssentialFields;
+  },
+
+  // NEW: Create empty nutrition data structure
+  createEmptyNutritionData: (): NutritionData => {
+    return {
+      calories: 0,
+      totalWeight: 0,
+      servings: 1,
+      weightPerServing: 0,
+      dietLabels: [],
+      healthLabels: [],
+      cautions: [],
+      totalNutrients: {},
+      totalDaily: {},
+      ingredients: [],
+      totalNutrientsKCal: [],
+      co2EmissionsClass: null,
+      totalCO2Emissions: null,
+      highNutrients: [],
+      nutritionSummary: {
+        calories: 0,
+        caloriesPerGram: 0,
+        macronutrients: {},
+        fiber: 0,
+        sodium: 0,
+        sugar: 0
+      },
+      analysisMetadata: {
+        analyzedAt: new Date().toISOString(),
+        source: 'empty',
+        version: '1.0'
+      },
+      warnings: [],
+      allergens: []
+    };
   }
 };

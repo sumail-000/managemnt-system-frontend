@@ -28,6 +28,8 @@ import { BrandingUpload } from './BrandingUpload';
 import { QRCodeGenerator } from './QRCodeGenerator';
 import { LabelExport } from './LabelExport';
 import { LabelData, LabelTemplate, ValidationResult } from '@/types/label';
+import { useUsageValidation } from '@/hooks/useUsageValidation';
+import { UsageWarningDialog } from '@/components/dialogs/UsageWarningDialog';
 
 interface LabelGeneratorProps {
   productId?: string;

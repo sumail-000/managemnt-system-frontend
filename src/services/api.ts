@@ -323,6 +323,11 @@ export const productsAPI = {
     console.log('[PRODUCTS_API] Get tags request initiated');
     return api.get('/products/tags/list');
   },
+
+  getProductTags: (id: number | string) => {
+    console.log('[PRODUCTS_API] Get product tags request initiated', { id });
+    return api.get(`/products/${id}/tags`);
+  },
   
   // Trash management
   getTrashed: (params?: { search?: string; page?: number; per_page?: number }) => {

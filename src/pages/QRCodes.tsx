@@ -36,16 +36,18 @@ import {
   ExternalLink,
   X,
   Search,
-  Filter,
   ArrowUpDown,
   CheckSquare,
-  Square
+  Square,
+  RefreshCw
 } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
 import { useToast } from "@/hooks/use-toast"
 import { Link as RouterLink, useLocation } from "react-router-dom"
-import qrCodeService, { QrCodeData, QrCodeGenerationResponse, QrCodeAnalytics } from "@/services/qrCodeService"
+import qrCodeService, { QrCodeData, QrCodeGenerationResponse, QrCodeAnalytics, QrCodeUrlGenerationOptions } from "@/services/qrCodeService"
 import { getStorageUrl } from "@/utils/storage"
+import { productsAPI } from "@/services/api"
+import { Product } from "@/types/product"
 
 // QR Code Preview Component
 interface QRCodePreviewProps {
@@ -153,7 +155,13 @@ export default function QRCodes() {
   const [searchTerm, setSearchTerm] = useState('')
   const [sortBy, setSortBy] = useState<'created_at' | 'scan_count' | 'product_name'>('created_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
-  const [filterType, setFilterType] = useState<'all' | 'premium' | 'basic'>('all')
+
+  const [products, setProducts] = useState<Product[]>([])
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const [loadingProducts, setLoadingProducts] = useState(false)
+  const [imageLoadError, setImageLoadError] = useState(false)
+  const [imageReloadKey, setImageReloadKey] = useState(0)
+  const [isReloadingImage, setIsReloadingImage] = useState(false)
   
   // Handle preset data from navigation state
   useEffect(() => {
@@ -191,22 +199,80 @@ export default function QRCodes() {
   const currentQRUsage = usage?.qr_codes?.current_month || 0
   const qrUsagePercentage = membershipInfo.qr_limit > 0 ? (currentQRUsage / membershipInfo.qr_limit) * 100 : 0
 
-  // Load QR codes on component mount and when user changes
+  // Load QR codes and products on component mount and when user changes
   useEffect(() => {
+    console.log('🚀 [QR_MANAGEMENT] useEffect triggered with user dependency:', {
+      user: user?.id,
+      userEmail: user?.email,
+      isAuthenticated: !!user,
+      membershipInfo: {
+        name: membershipInfo.name,
+        can_generate_qr: membershipInfo.can_generate_qr,
+        has_analytics: membershipInfo.has_analytics
+      }
+    })
+    
+    if (!user) {
+      console.log('⚠️ [QR_MANAGEMENT] No user found, skipping data loading')
+      return
+    }
+    
+    console.log('📋 [QR_MANAGEMENT] User authenticated, starting data loading...')
     loadQRCodes()
+    loadProducts()
+    
     // Only load analytics for premium users to avoid 403 errors
     if (user && membershipInfo.has_analytics) {
+      console.log('📊 [QR_MANAGEMENT] Loading analytics for premium user')
       loadAnalytics()
+    } else {
+      console.log('📊 [QR_MANAGEMENT] Skipping analytics - not premium user')
     }
   }, [user]) // Add user as dependency so effect re-runs when user loads
 
   const loadQRCodes = async () => {
+    console.log('🔄 [QR_MANAGEMENT] Starting loadQRCodes function...')
+    console.log('🔍 [QR_MANAGEMENT] User state:', { user: user?.id, isAuthenticated: !!user })
+    
     try {
       setIsLoading(true)
+      console.log('⏳ [QR_MANAGEMENT] Set loading state to true')
+      
+      console.log('📡 [QR_MANAGEMENT] Calling qrCodeService.getUserQRCodes()...')
       const response = await qrCodeService.getUserQRCodes()
-      setQrCodes(response.data || [])
+      
+      console.log('📥 [QR_MANAGEMENT] API Response received:', {
+        success: response?.success,
+        dataLength: response?.data?.length || 0,
+        fullResponse: response
+      })
+      
+      const qrCodesData = response.data || []
+      console.log('💾 [QR_MANAGEMENT] Setting QR codes data:', {
+        count: qrCodesData.length,
+        qrCodes: qrCodesData.map(qr => ({
+          id: qr.id,
+          product_id: qr.product_id,
+          product_name: qr.product_name,
+          url_slug: qr.url_slug,
+          image_url: qr.image_url,
+          scan_count: qr.scan_count,
+          created_at: qr.created_at
+        }))
+      })
+      
+      setQrCodes(qrCodesData)
+      console.log('✅ [QR_MANAGEMENT] QR codes state updated successfully')
+      
     } catch (error) {
-      console.error('Failed to load QR codes:', error)
+      console.error('❌ [QR_MANAGEMENT] Failed to load QR codes:', {
+        error: error,
+        message: error?.message,
+        status: error?.response?.status,
+        statusText: error?.response?.statusText,
+        responseData: error?.response?.data
+      })
+      
       setQrCodes([])
       toast({
         title: "Error",
@@ -215,6 +281,37 @@ export default function QRCodes() {
       })
     } finally {
       setIsLoading(false)
+      console.log('🏁 [QR_MANAGEMENT] Loading completed, isLoading set to false')
+    }
+  }
+
+  const loadProducts = async () => {
+    try {
+      setLoadingProducts(true)
+      const response = await productsAPI.getAll({ 
+        per_page: 100, 
+        sort_by: 'updated_at', 
+        sort_order: 'desc' 
+      })
+      setProducts(response.data || [])
+      
+      // Auto-select product from navigation state if available
+      if (location.state?.productId && response.data) {
+        const product = response.data.find((p: Product) => p.id === location.state.productId)
+        if (product) {
+          setSelectedProduct(product)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load products:', error)
+      setProducts([])
+      toast({
+        title: "Error",
+        description: "Failed to load products",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingProducts(false)
     }
   }
 
@@ -270,17 +367,8 @@ export default function QRCodes() {
       return
     }
 
-    // Check if we have a product ID from navigation state
-    const productId = location.state?.productId
-    
-    if (!productId) {
-      toast({
-        title: "Missing Product",
-        description: "Please select a product to generate QR code for. Navigate from a product page or select a product from the list.",
-        variant: "destructive"
-      })
-      return
-    }
+    // Use selected product ID if available
+    const productId = selectedProduct?.id
 
     try {
       console.log('🚀 [DEBUG] Starting QR code generation...')
@@ -288,14 +376,16 @@ export default function QRCodes() {
       // Auto-reset previous QR code when generating new one
       setShowGeneratedPreview(false)
       setGeneratedQR(null)
-      console.log('🔄 [DEBUG] Reset previous QR code preview')
+      setImageLoadError(false)
+      setImageReloadKey(0)
+      console.log('🔄 [DEBUG] Reset previous QR code preview and image states')
       
       setIsGenerating(true)
       console.log('⏳ [DEBUG] Set isGenerating to true')
       
       const options = {
         size: qrSize * 10, // High resolution
-        format: 'svg' as const, // Use SVG to avoid Imagick dependency
+        format: 'png' as const, // Use PNG format for better compatibility
         margin: 2,
         color: qrForeground,
         background_color: qrBackground
@@ -304,7 +394,20 @@ export default function QRCodes() {
       console.log('📋 [DEBUG] Generation options:', options)
       console.log('🎯 [DEBUG] Product ID:', productId)
       
-      const response: QrCodeGenerationResponse = await qrCodeService.generateQrCode(productId, options)
+      let response: QrCodeGenerationResponse;
+      
+      if (productId && typeof productId === 'number') {
+        // Generate QR code for existing product
+        response = await qrCodeService.generateQrCode(productId, options)
+      } else {
+        // Generate QR code from URL content directly
+        const urlOptions = {
+          ...options,
+          content: qrContent,
+          type: 'url' as const
+        }
+        response = await qrCodeService.generateQrCodeFromUrl(urlOptions)
+      }
       
       console.log('📡 [DEBUG] Raw API response:', response)
       console.log('✅ [DEBUG] Response success status:', response.success)
@@ -330,18 +433,30 @@ export default function QRCodes() {
       // Store generated QR data for preview - response.qr_code contains the QR code data
       if (response.qr_code) {
         console.log('💾 [DEBUG] Setting generated QR data for preview:', response.qr_code)
-        console.log('🔍 [DEBUG] QR code data structure:', {
-          id: response.qr_code.id,
-          product_id: response.qr_code.product_id,
-          image_url: response.qr_code.image_url,
-          image_path: response.qr_code.image_path,
-          public_url: response.qr_code.public_url,
-          download_url: response.qr_code.download_url,
-          product: response.qr_code.product
+        console.log('🔍 [DEBUG] API response image_url:', response.image_url)
+        console.log('🔍 [DEBUG] API response public_url:', response.public_url)
+        console.log('🔍 [DEBUG] API response download_url:', response.download_url)
+        
+        // Merge the QR code data with the image_url from the root response
+        const qrCodeWithImage = {
+          ...response.qr_code,
+          image_url: response.image_url, // Use image_url from root response
+          public_url: response.public_url || response.qr_code.public_url,
+          download_url: response.download_url || response.qr_code.download_url
+        }
+        
+        console.log('🔍 [DEBUG] Final QR code data structure:', {
+          id: qrCodeWithImage.id,
+          product_id: qrCodeWithImage.product_id,
+          image_url: qrCodeWithImage.image_url,
+          image_path: qrCodeWithImage.image_path,
+          public_url: qrCodeWithImage.public_url,
+          download_url: qrCodeWithImage.download_url,
+          product: qrCodeWithImage.product
         })
         
-        setGeneratedQR(response.qr_code)
-        console.log('📊 [DEBUG] generatedQR state updated')
+        setGeneratedQR(qrCodeWithImage)
+        console.log('📊 [DEBUG] generatedQR state updated with image_url:', qrCodeWithImage.image_url)
         
         setShowGeneratedPreview(true)
         console.log('👁️ [DEBUG] showGeneratedPreview set to true')
@@ -404,6 +519,55 @@ export default function QRCodes() {
     }
   }
 
+  const handleReloadImage = async () => {
+    if (!generatedQR) {
+      console.error('[QR_RELOAD] No QR code data available to reload')
+      toast({
+        title: "Reload Failed",
+        description: "No QR code data available to reload.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    setIsReloadingImage(true)
+    setImageLoadError(false)
+    
+    try {
+      console.log('[QR_RELOAD] Starting preview reload process...', {
+        hasImageUrl: !!generatedQR.image_url,
+        imageUrl: generatedQR.image_url,
+        fullUrl: generatedQR.image_url ? (getStorageUrl(generatedQR.image_url) || generatedQR.image_url) : 'N/A',
+        timestamp: new Date().toISOString()
+      })
+      
+      // Force reload by incrementing the key
+      setImageReloadKey(prev => prev + 1)
+      
+      console.log('[QR_RELOAD] Preview reload key incremented:', imageReloadKey + 1)
+      
+      // Add a small delay to show the loading state
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      toast({
+        title: "Preview Reloaded",
+        description: "QR code preview has been refreshed successfully."
+      })
+      
+      console.log('[QR_RELOAD] Preview reload completed successfully')
+    } catch (error) {
+      console.error('[QR_RELOAD] Reload failed:', error)
+      setImageLoadError(true)
+      toast({
+        title: "Reload Failed",
+        description: "Failed to reload QR code preview. Please try again.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsReloadingImage(false)
+    }
+  }
+
   const handleDownloadQR = async (qrCodeId: number) => {
     try {
       const blob = await qrCodeService.downloadQrCode(qrCodeId)
@@ -454,6 +618,36 @@ export default function QRCodes() {
 
   const handleDownloadGenerated = async (qrData: any) => {
     try {
+      // Check if we already have a QR code ID, if so, use direct download
+      if (qrData.id) {
+        console.log('🔍 [DEBUG] Direct download for existing QR code ID:', qrData.id)
+        // Use the blob download method like handleDownloadQR
+        const blob = await qrCodeService.downloadQrCode(qrData.id)
+        const url = window.URL.createObjectURL(blob)
+        
+        // Get the actual file extension from the stored image path
+        const actualFormat = qrData?.image_path ? 
+          qrData.image_path.split('.').pop()?.toLowerCase() || downloadFormat : 
+          downloadFormat
+        
+        const filename = `qr-code-${qrData?.product_id || 'custom'}-${downloadSize}px.${actualFormat}`
+        
+        const link = document.createElement('a')
+        link.href = url
+        link.download = filename
+        link.click()
+        
+        window.URL.revokeObjectURL(url)
+        
+        toast({
+          title: "Download Started",
+          description: `QR code downloaded as ${actualFormat.toUpperCase()}`,
+        })
+        return
+      }
+
+      // If no ID, regenerate with custom options
+      console.log('🔍 [DEBUG] Regenerating QR code for download with custom options')
       const generationOptions = {
         size: downloadSize,
         format: downloadFormat,
@@ -461,11 +655,22 @@ export default function QRCodes() {
         background_color: qrBackground
       }
       
-      // Generate QR code with user's preferred format and size
-      const response: QrCodeGenerationResponse = await qrCodeService.generateQrCode(
-        qrData.product_id,
-        generationOptions
-      )
+      let response: QrCodeGenerationResponse;
+      
+      if (qrData.product_id && typeof qrData.product_id === 'number') {
+        // Generate QR code for existing product
+        console.log('🔍 [DEBUG] Regenerating product-based QR code')
+        response = await qrCodeService.generateQrCode(qrData.product_id, generationOptions)
+      } else {
+        // Generate QR code from URL content directly
+        console.log('🔍 [DEBUG] Regenerating URL-based QR code')
+        const urlOptions = {
+          ...generationOptions,
+          content: qrData.content || qrData.public_url, // Use stored content or public URL
+          type: 'url' as const
+        }
+        response = await qrCodeService.generateQrCodeFromUrl(urlOptions)
+      }
 
       // Check if the response indicates success
       if (response.success === false) {
@@ -486,7 +691,7 @@ export default function QRCodes() {
           qrCodeData.image_path.split('.').pop()?.toLowerCase() || downloadFormat : 
           downloadFormat
         
-        const filename = `qr-code-${qrCodeData?.product_id || qrData.product_id || 'generated'}-${downloadSize}px.${actualFormat}`
+        const filename = `qr-code-${qrCodeData?.product_id || 'custom'}-${downloadSize}px.${actualFormat}`
         
         const link = document.createElement('a')
         link.href = url
@@ -503,6 +708,7 @@ export default function QRCodes() {
         throw new Error('No QR code ID returned from generation')
       }
     } catch (error: any) {
+      console.error('🚨 [DEBUG] Download failed:', error)
       toast({
         title: "Download Failed",
         description: "Failed to download QR code. Please try again.",
@@ -550,37 +756,92 @@ export default function QRCodes() {
   }
 
   const handleBulkDelete = async () => {
+    const totalSelected = selectedQRs.length
+    const failedDeletes: number[] = []
+    
     try {
       for (const qrId of selectedQRs) {
-        await qrCodeService.deleteQrCode(qrId)
+        try {
+          await qrCodeService.deleteQrCode(qrId)
+        } catch (error) {
+          console.error(`Failed to delete QR code ${qrId}:`, error)
+          failedDeletes.push(qrId)
+        }
       }
+      
       await loadQRCodes()
-      toast({
-        title: "Bulk Delete Complete",
-        description: `Deleted ${selectedQRs.length} QR codes successfully.`
-      })
+      
+      const successCount = totalSelected - failedDeletes.length
+      
+      if (failedDeletes.length === 0) {
+        toast({
+          title: totalSelected === 1 ? "QR Code Deleted" : "QR Codes Deleted",
+          description: totalSelected === 1 
+            ? "QR code has been deleted successfully."
+            : `Deleted ${successCount} QR codes successfully.`
+        })
+      } else if (successCount > 0) {
+        toast({
+          title: "Partial Delete Complete",
+          description: `Deleted ${successCount} of ${totalSelected} QR codes. ${failedDeletes.length} failed.`,
+          variant: "destructive"
+        })
+      } else {
+        toast({
+          title: totalSelected === 1 ? "Delete Failed" : "Bulk Delete Failed",
+          description: totalSelected === 1 
+            ? "Failed to delete QR code. Please try again."
+            : "All QR codes failed to delete. Please try again.",
+          variant: "destructive"
+        })
+      }
+      
       setSelectedQRs([])
     } catch (error) {
+      console.error('Bulk delete error:', error)
       toast({
-        title: "Bulk Delete Failed",
-        description: "Some QR codes failed to delete. Please try again.",
+        title: totalSelected === 1 ? "Delete Failed" : "Bulk Delete Failed",
+        description: totalSelected === 1 
+          ? "Failed to delete QR code. Please try again."
+          : "Some QR codes failed to delete. Please try again.",
         variant: "destructive"
       })
     }
   }
 
   // Filter and sort QR codes
+  console.log('[QRCodes] Filtering QR codes:', {
+    totalQRCodes: qrCodes.length,
+    searchTerm,
+    sortBy,
+    sortOrder,
+    qrCodesData: qrCodes.map(qr => ({
+      id: qr.id,
+      productName: qr.product?.name,
+      urlSlug: qr.url_slug,
+      isPremium: qr.is_premium,
+      scanCount: qr.scan_count,
+      createdAt: qr.created_at
+    }))
+  });
+
   const filteredQRCodes = qrCodes
     .filter(qr => {
       const matchesSearch = !searchTerm || 
         qr.product?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         qr.url_slug?.toLowerCase().includes(searchTerm.toLowerCase())
       
-      const matchesFilter = filterType === 'all' || 
-        (filterType === 'premium' && qr.is_premium) ||
-        (filterType === 'basic' && !qr.is_premium)
+      console.log('[QRCodes] Filter check for QR:', {
+        qrId: qr.id,
+        productName: qr.product?.name,
+        urlSlug: qr.url_slug,
+        isPremium: qr.is_premium,
+        searchTerm,
+        matchesSearch,
+        finalMatch: matchesSearch
+      });
       
-      return matchesSearch && matchesFilter
+      return matchesSearch
     })
     .sort((a, b) => {
       let aValue, bValue
@@ -604,7 +865,19 @@ export default function QRCodes() {
       } else {
         return aValue < bValue ? 1 : -1
       }
-    })
+    });
+
+  console.log('[QRCodes] Filtered QR codes result:', {
+    originalCount: qrCodes.length,
+    filteredCount: filteredQRCodes.length,
+    filteredQRCodes: filteredQRCodes.map(qr => ({
+      id: qr.id,
+      productName: qr.product?.name,
+      urlSlug: qr.url_slug,
+      isPremium: qr.is_premium,
+      scanCount: qr.scan_count
+    }))
+  });
 
   return (
     <div className="flex-1">
@@ -710,14 +983,73 @@ export default function QRCodes() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Content Input */}
+                  {/* Product Selection */}
                   <div className="space-y-2">
-                    <Label>Content</Label>
-                    <Textarea
-                      placeholder="Enter your content here..."
+                    <Label className="flex items-center gap-2">
+                      <Package className="w-4 h-4" />
+                      Select Product
+                    </Label>
+                    <Select 
+                      value={selectedProduct?.id?.toString() || ""} 
+                      onValueChange={(value) => {
+                        if (value === "none") {
+                          setSelectedProduct(null)
+                        } else {
+                          const product = products.find(p => p.id?.toString() === value)
+                          if (product) {
+                            setSelectedProduct(product)
+                            // Auto-fill content with product's public URL if available
+                            if (product.is_public) {
+                              const publicUrl = `${window.location.origin}/products/public/${product.id}`
+                              setQrContent(publicUrl)
+                            }
+                          }
+                        }
+                      }}
+                      disabled={loadingProducts}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={loadingProducts ? "Loading products..." : "Select a product"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No Product (Custom QR Code)</SelectItem>
+                        {products.map((product) => (
+                          <SelectItem key={product.id} value={product.id?.toString() || ""}>
+                            <div className="flex items-center gap-2">
+                              <span>{product.name}</span>
+                              {product.is_public && (
+                                <Badge variant="secondary" className="text-xs">
+                                  Public
+                                </Badge>
+                              )}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {selectedProduct && (
+                      <p className="text-sm text-muted-foreground">
+                        Selected: <span className="font-medium">{selectedProduct.name}</span>
+                        {selectedProduct.is_public && (
+                          <span className="text-green-600 ml-2">• Public product</span>
+                        )}
+                      </p>
+                    )}
+                  </div>
+
+                  <Separator />
+
+                  {/* URL Input */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Link className="w-4 h-4" />
+                      URL
+                    </Label>
+                    <Input
+                      type="url"
+                      placeholder="Enter URL for your QR code..."
                       value={qrContent}
                       onChange={(e) => setQrContent(e.target.value)}
-                      rows={3}
                     />
                   </div>
 
@@ -861,46 +1193,78 @@ export default function QRCodes() {
                         <div className="flex flex-col items-center space-y-6">
                           {/* QR Code Image */}
                           <div className="relative">
-                            {generatedQR.image_url ? (
-                              <div className="bg-white p-6 rounded-2xl shadow-lg border-2 border-white">
-                                <img 
-                                  src={getStorageUrl(generatedQR.image_url) || generatedQR.image_url} 
-                                  alt="Generated QR Code" 
-                                  className="w-56 h-56 object-contain"
-                                  onLoad={() => {
-                                    console.log('[QR_DEBUG] QR Code image loaded successfully:', {
-                                      imageUrl: generatedQR.image_url,
-                                      fullUrl: getStorageUrl(generatedQR.image_url) || generatedQR.image_url,
-                                      timestamp: new Date().toISOString()
-                                    });
-                                  }}
-                                  onError={(e) => {
-                                    console.error('[QR_DEBUG] QR Code image failed to load:', {
-                                      imageUrl: generatedQR.image_url,
-                                      fullUrl: getStorageUrl(generatedQR.image_url) || generatedQR.image_url,
-                                      error: e,
-                                      timestamp: new Date().toISOString()
-                                    });
-                                  }}
-                                />
-                              </div>
-                            ) : (
-                              <div className="bg-white p-6 rounded-2xl shadow-lg border-2 border-white">
+                            <div className="bg-white p-6 rounded-2xl shadow-lg border-2 border-white">
+                              {generatedQR.image_url ? (
+                                imageLoadError ? (
+                                  <div className="w-56 h-56 flex items-center justify-center text-muted-foreground border-2 border-dashed border-red-300 rounded-lg">
+                                    <div className="text-center">
+                                      <QrCode className="w-16 h-16 mx-auto mb-3 opacity-50 text-red-400" />
+                                      <p className="text-sm font-medium text-red-600">Image Load Failed</p>
+                                      <p className="text-xs mt-1 text-red-500">Click reload to try again</p>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <img 
+                                    key={`qr-image-${imageReloadKey}`}
+                                    src={getStorageUrl(generatedQR.image_url) || generatedQR.image_url} 
+                                    alt="Generated QR Code" 
+                                    className="w-56 h-56 object-contain"
+                                    onLoad={() => {
+                                      console.log('[QR_IMAGE] QR Code image loaded successfully:', {
+                                        imageUrl: generatedQR.image_url,
+                                        fullUrl: getStorageUrl(generatedQR.image_url) || generatedQR.image_url,
+                                        reloadKey: imageReloadKey,
+                                        timestamp: new Date().toISOString()
+                                      });
+                                      setImageLoadError(false);
+                                    }}
+                                    onError={(e) => {
+                                      console.error('[QR_IMAGE] QR Code image failed to load:', {
+                                        imageUrl: generatedQR.image_url,
+                                        fullUrl: getStorageUrl(generatedQR.image_url) || generatedQR.image_url,
+                                        reloadKey: imageReloadKey,
+                                        error: e,
+                                        errorType: e.type,
+                                        target: e.target,
+                                        timestamp: new Date().toISOString()
+                                      });
+                                      setImageLoadError(true);
+                                    }}
+                                  />
+                                )
+                              ) : (
                                 <div className="w-56 h-56 flex items-center justify-center text-muted-foreground">
                                   <div className="text-center">
                                     <QrCode className="w-16 h-16 mx-auto mb-3 opacity-50" />
-                                    <p className="text-sm font-medium">QR Code Generation Failed</p>
-                                    <p className="text-xs mt-1">Please try again</p>
+                                    <p className="text-sm font-medium">QR Code Generated Successfully</p>
+                                    <p className="text-xs mt-1">Image URL not available</p>
                                   </div>
                                 </div>
-                              </div>
-                            )}
+                              )}
+                            </div>
                             
                             {/* Success Badge */}
                             <div className="absolute -top-2 -right-2 bg-green-500 text-white rounded-full p-2 shadow-lg">
                               <QrCode className="w-4 h-4" />
                             </div>
                           </div>
+                          
+                          {/* Reload Button - Show for both success and failure */}
+                          {generatedQR && (
+                            <div className="flex justify-center">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={handleReloadImage}
+                                disabled={isReloadingImage}
+                                className="bg-white hover:bg-gray-50 border-gray-300 shadow-md px-4 py-2 h-9"
+                                title="Reload Preview Image"
+                              >
+                                <RefreshCw className={`w-4 h-4 mr-2 ${isReloadingImage ? 'animate-spin' : ''}`} />
+                                {isReloadingImage ? 'Reloading...' : 'Reload Preview'}
+                              </Button>
+                            </div>
+                          )}
                           
                           {/* QR Code Info */}
                           <div className="text-center space-y-3">
@@ -1001,18 +1365,7 @@ export default function QRCodes() {
                       />
                     </div>
                     
-                    {/* Filter */}
-                    <Select value={filterType} onValueChange={(value: 'all' | 'premium' | 'basic') => setFilterType(value)}>
-                      <SelectTrigger className="w-full sm:w-40">
-                        <Filter className="w-4 h-4 mr-2" />
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All QR Codes</SelectItem>
-                        <SelectItem value="premium">Premium Only</SelectItem>
-                        <SelectItem value="basic">Basic Only</SelectItem>
-                      </SelectContent>
-                    </Select>
+
                     
                     {/* Sort */}
                     <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => {
@@ -1029,8 +1382,6 @@ export default function QRCodes() {
                         <SelectItem value="created_at-asc">Oldest First</SelectItem>
                         <SelectItem value="scan_count-desc">Most Scanned</SelectItem>
                         <SelectItem value="scan_count-asc">Least Scanned</SelectItem>
-                        <SelectItem value="product_name-asc">Product A-Z</SelectItem>
-                        <SelectItem value="product_name-desc">Product Z-A</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1071,123 +1422,156 @@ export default function QRCodes() {
                     </div>
                   )}
                 </div>
+              
 
-                {isLoading ? (
-                  <div className="text-center py-8">
-                    <div className="w-8 h-8 mx-auto mb-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                    <p className="text-sm text-muted-foreground">Loading QR codes...</p>
-                  </div>
-                ) : filteredQRCodes.length > 0 ? (
-                  <div className="space-y-4">
-                    {filteredQRCodes.map((qr) => (
-                      <div key={qr.id} className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors">
-                        <div className="flex items-center gap-4">
-                          <Checkbox
-                            checked={selectedQRs.includes(qr.id)}
-                            onCheckedChange={() => handleSelectQR(qr.id)}
-                          />
-                          <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center">
-                            {qr.image_path ? (
-                              <img 
-                                src={getStorageUrl(qr.image_path) || qr.image_path} 
-                                alt="QR Code" 
-                                className="w-full h-full object-contain rounded"
-                              />
-                            ) : (
-                              <QrCode className="w-8 h-8 text-muted-foreground" />
-                            )}
-                          </div>
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <h3 className="font-medium">{qr.product?.name || 'Unknown Product'}</h3>
-                              {qr.is_premium && (
-                                <Badge variant="secondary" className="text-xs">
-                                  <Crown className="w-3 h-3 mr-1" />
-                                  Premium
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="text-sm text-muted-foreground truncate max-w-md">{qr.url_slug}</p>
-                            <div className="flex items-center gap-4 mt-2">
-                              <div className="flex items-center gap-1">
-                                <BarChart3 className="w-3 h-3 text-muted-foreground" />
-                                <span className="text-xs text-muted-foreground">
-                                  {qr.scan_count || 0} scans
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <Calendar className="w-3 h-3 text-muted-foreground" />
-                                <span className="text-xs text-muted-foreground">
-                                  {new Date(qr.created_at).toLocaleDateString()}
-                                </span>
-                              </div>
-                              {qr.last_scanned_at && (
-                                <div className="flex items-center gap-1">
-                                  <Eye className="w-3 h-3 text-muted-foreground" />
-                                  <span className="text-xs text-muted-foreground">
-                                    Last: {new Date(qr.last_scanned_at).toLocaleDateString()}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleCopyContent(qr.url_slug)}
-                            title="Copy URL"
-                          >
-                            <Copy className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDownloadQR(qr.id)}
-                            title="Download QR Code"
-                          >
-                            <Download className="w-4 h-4" />
-                          </Button>
-                          {qr.is_premium && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleShareQR(qr)}
-                              title="Share QR Code"
-                            >
-                              <Share2 className="w-4 h-4" />
-                            </Button>
-                          )}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDeleteQR(qr.id)}
-                            title="Delete QR Code"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
+                {(() => {
+                  console.log('[QRCodes] Display logic check:', {
+                    isLoading,
+                    filteredQRCodesLength: filteredQRCodes.length,
+                    searchTerm,
+                    displayState: isLoading ? 'loading' : 
+                      filteredQRCodes.length > 0 ? 'showing_qr_codes' : 
+                      searchTerm ? 'no_match_found' : 'empty_state'
+                  });
+                  
+                  if (isLoading) {
+                    console.log('[QRCodes] Displaying loading state');
+                    return (
+                      <div className="text-center py-8">
+                        <div className="w-8 h-8 mx-auto mb-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                        <p className="text-sm text-muted-foreground">Loading QR codes...</p>
                       </div>
-                    ))}
-                  </div>
-                ) : searchTerm || filterType !== 'all' ? (
-                  <div className="text-center py-8">
-                    <Search className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground">No QR codes match your search criteria</p>
-                    <p className="text-sm text-muted-foreground mt-2">
-                      Try adjusting your search terms or filters
-                    </p>
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <QrCode className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground">No QR codes generated yet</p>
-                    <p className="text-sm text-muted-foreground mt-2">
-                      Generate your first QR code using the generator above
-                    </p>
-                  </div>
-                )}
+                    );
+                  }
+                  
+                  if (filteredQRCodes.length > 0) {
+                    console.log('[QRCodes] Displaying QR codes grid:', filteredQRCodes.length, 'items');
+                    return (
+                      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                        {filteredQRCodes.map((qr) => (
+                          <Card key={qr.id} className="group hover:shadow-lg transition-all duration-200 hover:scale-[1.02]">
+                            <CardContent className="p-4">
+                              {/* Header with checkbox and premium badge */}
+                              <div className="flex items-center justify-between mb-3">
+                                <Checkbox
+                                  checked={selectedQRs.includes(qr.id)}
+                                  onCheckedChange={() => handleSelectQR(qr.id)}
+                                />
+                                {qr.is_premium && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    <Crown className="w-3 h-3 mr-1" />
+                                    Premium
+                                  </Badge>
+                                )}
+                              </div>
+
+                              {/* QR Code Image - Large Preview */}
+                              <div className="w-full aspect-square bg-muted rounded-lg flex items-center justify-center mb-4 overflow-hidden">
+                                {qr.image_url ? (
+                                  <img 
+                                    src={getStorageUrl(qr.image_url) || qr.image_url} 
+                                    alt="QR Code" 
+                                    className="w-full h-full object-contain rounded-lg hover:scale-105 transition-transform duration-200"
+                                  />
+                                ) : (
+                                  <QrCode className="w-16 h-16 text-muted-foreground" />
+                                )}
+                              </div>
+
+                              {/* Product Info */}
+                              <div className="space-y-2 mb-4">
+                                <h3 className="font-semibold text-sm truncate" title={qr.product_name || qr.product?.name || 'Unknown Product'}>
+                                  {qr.product_name || qr.product?.name || 'Unknown Product'}
+                                </h3>
+                                <p className="text-xs text-muted-foreground truncate" title={qr.url_slug}>
+                                  {qr.url_slug}
+                                </p>
+                              </div>
+
+                              {/* Stats */}
+                              <div className="space-y-2 mb-4">
+                                <div className="flex items-center justify-between text-xs">
+                                  <div className="flex items-center gap-1">
+                                    <BarChart3 className="w-3 h-3 text-muted-foreground" />
+                                    <span className="text-muted-foreground">
+                                      {qr.scan_count || 0} scans
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Calendar className="w-3 h-3 text-muted-foreground" />
+                                    <span className="text-muted-foreground">
+                                      {new Date(qr.created_at).toLocaleDateString()}
+                                    </span>
+                                  </div>
+                                </div>
+                                {qr.last_scanned_at && (
+                                  <div className="flex items-center gap-1 text-xs">
+                                    <Eye className="w-3 h-3 text-muted-foreground" />
+                                    <span className="text-muted-foreground">
+                                      Last: {new Date(qr.last_scanned_at).toLocaleDateString()}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Action Buttons */}
+                               <div className="flex gap-2">
+                                 <Button
+                                   variant="outline"
+                                   size="sm"
+                                   onClick={() => handleCopyContent(qr.url_slug)}
+                                   title="Copy URL"
+                                   className="text-xs flex-1"
+                                 >
+                                   <Copy className="w-3 h-3 mr-1" />
+                                   Copy
+                                 </Button>
+                                 {qr.is_premium && (
+                                   <Button
+                                     variant="outline"
+                                     size="sm"
+                                     onClick={() => handleShareQR(qr)}
+                                     title="Share QR Code"
+                                     className="text-xs flex-1"
+                                   >
+                                     <Share2 className="w-3 h-3 mr-1" />
+                                     Share
+                                   </Button>
+                                 )}
+                                 <Button
+                                   variant="outline"
+                                   size="sm"
+                                   onClick={() => handleDeleteQR(qr.id)}
+                                   title="Delete QR Code"
+                                   className="text-xs text-destructive hover:text-destructive"
+                                 >
+                                   <Trash2 className="w-3 h-3" />
+                                 </Button>
+                               </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    );
+                  }
+                  
+                  return searchTerm ? (
+                    <div className="text-center py-8">
+                      <Search className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                      <p className="text-muted-foreground">No QR codes match your search criteria</p>
+                      <p className="text-sm text-muted-foreground mt-2">
+                        Try adjusting your search terms or filters
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <QrCode className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                      <p className="text-muted-foreground">No QR codes generated yet</p>
+                      <p className="text-sm text-muted-foreground mt-2">
+                        Generate your first QR code using the generator above
+                      </p>
+                    </div>
+                  );                })()}
               </CardContent>
             </Card>
           </TabsContent>
@@ -1212,60 +1596,6 @@ export default function QRCodes() {
               </Card>
             ) : (
               <>
-                {/* Overview Stats */}
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                  <Card>
-                    <CardContent className="p-6">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-muted-foreground">Total Scans</p>
-                          <div className="text-2xl font-bold">{analytics?.overview?.total_scans || 0}</div>
-                          <p className="text-xs text-muted-foreground">all time</p>
-                        </div>
-                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card>
-                    <CardContent className="p-6">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-muted-foreground">Avg Scans</p>
-                          <div className="text-2xl font-bold">{analytics?.overview?.avg_scans_per_qr || 0}</div>
-                          <p className="text-xs text-muted-foreground">per QR code</p>
-                        </div>
-                        <BarChart3 className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card>
-                    <CardContent className="p-6">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-muted-foreground">Total QR Codes</p>
-                          <div className="text-2xl font-bold">{analytics?.overview?.total_qr_codes || 0}</div>
-                          <p className="text-xs text-muted-foreground">generated</p>
-                        </div>
-                        <QrCode className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card>
-                    <CardContent className="p-6">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-muted-foreground">Top Performer</p>
-                          <div className="text-2xl font-bold">{analytics?.overview?.max_scans || 0}</div>
-                          <p className="text-xs text-muted-foreground">max scans</p>
-                        </div>
-                        <Crown className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
 
                 {/* Scan Trends Chart */}
                 {analytics?.scan_trends && analytics.scan_trends.length > 0 && (

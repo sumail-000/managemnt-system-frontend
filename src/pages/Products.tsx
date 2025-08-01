@@ -68,7 +68,7 @@ const sortOptions = [
 
 export default function Products() {
   const { toast } = useToast()
-  const [viewMode, setViewMode] = useState<"grid" | "table" | "compact" | "masonry">("grid")
+  const [viewMode, setViewMode] = useState<"grid" | "table" | "compact">("grid")
   const [selectedProducts, setSelectedProducts] = useState<string[]>([])
   const [showFilters, setShowFilters] = useState(false)
   const [advancedFilters, setAdvancedFilters] = useState({
@@ -351,15 +351,7 @@ export default function Products() {
             >
               <AlignJustify className="h-4 w-4" />
             </Button>
-            <Button
-              variant={viewMode === "masonry" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("masonry")}
-              className="rounded-none"
-              title="Masonry View"
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </Button>
+
             <Button
               variant={viewMode === "table" ? "default" : "ghost"}
               size="sm"
@@ -494,21 +486,7 @@ export default function Products() {
         </div>
       )}
 
-      {viewMode === "masonry" && (
-        <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-6 space-y-6">
-          {products.map((product) => (
-            <div key={product.id} className="break-inside-avoid mb-6">
-              <ProductCard
-                product={product}
-                selected={selectedProducts.includes(product.id)}
-                onSelect={(checked) => handleSelectProduct(product.id, checked)}
-                variant="masonry"
-                onRefresh={refresh}
-              />
-            </div>
-          ))}
-        </div>
-      )}
+
 
       {viewMode === "table" && (
         <ProductTable

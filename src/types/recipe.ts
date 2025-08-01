@@ -143,7 +143,7 @@ export interface Recipe {
   calories: number;
   cookTime: number; // totalTime
   servings: number; // yield
-  difficulty: 'Easy' | 'Medium' | 'Hard'; // derived from totalTime
+  difficulty: 'easy' | 'medium' | 'hard'; // derived from totalTime
   diet: string[]; // dietLabels + healthLabels
   ingredients: string[]; // ingredientLines
   rating: number; // mock for now
@@ -167,8 +167,8 @@ export interface Recipe {
   // Preparation information
   estimatedCookTime?: number | null; // cooking time in minutes, null means "Not found"
   estimatedPrepTime?: number; // preparation time in minutes
-  skillLevel?: string; // skill level (easy, medium, hard)
-  timeCategory?: string; // time category (quick, moderate, long)
+  skillLevel?: string; // skill level (beginner, intermediate, advanced)
+  timeCategory?: string; // time category (quick, medium, long)
   totalTime?: number; // total time in minutes
   // Nutrition scoring
   diversityScore?: number;
@@ -254,7 +254,7 @@ export const transformRecipeFromAPI = (edamamRecipe: EdamamRecipe): Recipe => {
     calories: Math.round(edamamRecipe.calories),
     cookTime: edamamRecipe.totalTime || 0,
     servings: edamamRecipe.yield || 1,
-    difficulty,
+    difficulty: difficulty.toLowerCase() as 'easy' | 'medium' | 'hard',
     diet,
     ingredients: edamamRecipe.ingredientLines,
     rating: 4.0 + Math.random() * 1.0, // Mock rating for now
@@ -278,8 +278,10 @@ export const transformRecipeFromAPI = (edamamRecipe: EdamamRecipe): Recipe => {
     // Preparation information from API
     estimatedCookTime: edamamRecipe.preparationInfo?.estimatedCookTime === 0 ? null : edamamRecipe.preparationInfo?.estimatedCookTime || (edamamRecipe.totalTime ? Math.round(edamamRecipe.totalTime * 0.7) : undefined),
     estimatedPrepTime: edamamRecipe.preparationInfo?.estimatedPrepTime || (edamamRecipe.totalTime ? Math.round(edamamRecipe.totalTime * 0.3) : undefined),
-    skillLevel: edamamRecipe.preparationInfo?.skillLevel || difficulty.toLowerCase(),
-    timeCategory: edamamRecipe.preparationInfo?.timeCategory || (edamamRecipe.totalTime <= 30 ? 'quick' : edamamRecipe.totalTime <= 60 ? 'moderate' : 'long'),
+    skillLevel: edamamRecipe.preparationInfo?.skillLevel || 
+      (difficulty === 'Easy' ? 'beginner' : difficulty === 'Medium' ? 'intermediate' : 'advanced'),
+    timeCategory: edamamRecipe.preparationInfo?.timeCategory || 
+      (edamamRecipe.totalTime <= 30 ? 'quick' : edamamRecipe.totalTime <= 60 ? 'medium' : 'long'),
     totalTime: edamamRecipe.totalTime,
     // Nutrition scoring (from aggregated.diversityScore in API)
     diversityScore: (edamamRecipe as any).aggregated?.diversityScore || 50,

@@ -9,6 +9,8 @@ export interface ServingCalculations {
   caloriesPerServing: number;
   weightPerServing: number;
   servingsCount: number;
+  servingsPerContainer: number;
+  servingSize: number;
   totalCalories: number;
   totalWeight: number;
   portionSize: string;
@@ -41,6 +43,8 @@ export const calculateServingInfo = (
   formData?: {
     calories_per_serving?: number;
     total_servings?: number;
+    serving_size?: number;
+    servings_per_container?: number;
     portion_size?: string;
     serving_type?: string;
   },
@@ -53,6 +57,16 @@ export const calculateServingInfo = (
     formData?.total_servings ||
     selectedRecipe?.servingInfo?.servings ||
     nutritionData?.servings ||
+    1;
+
+  const servingsPerContainer = 
+    formData?.servings_per_container ||
+    selectedRecipe?.servings ||
+    selectedRecipe?.servingInfo?.servings ||
+    1;
+
+  const servingSize = 
+    formData?.serving_size ||
     1;
 
   const totalCalories = 
@@ -89,6 +103,8 @@ export const calculateServingInfo = (
     caloriesPerServing,
     weightPerServing,
     servingsCount,
+    servingsPerContainer,
+    servingSize,
     totalCalories,
     totalWeight,
     portionSize,
@@ -113,8 +129,8 @@ export const generateServingBreakdown = (
       servings: servingInfo.servingsCount
     },
     display: {
-      servingSize: `1 portion (${servingInfo.portionSize})`,
-      servingsPerContainer: servingInfo.servingsCount,
+      servingSize: `${servingInfo.servingSize} ${servingInfo.portionSize}`,
+      servingsPerContainer: servingInfo.servingsPerContainer,
       caloriesPerServing: `${servingInfo.caloriesPerServing} kcal`,
       weightPerServing: servingInfo.weightPerServing > 0 
         ? `${servingInfo.weightPerServing}g` 

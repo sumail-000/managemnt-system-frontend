@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { LabelData, QRCodeData } from '@/types/label';
 import { toast } from 'sonner';
+import { isValidUrl, validateUrl, formatUrl } from '@/utils/urlValidation';
 
 interface QRCodeGeneratorProps {
   labelData: LabelData;
@@ -30,7 +31,7 @@ interface QRCodeGeneratorProps {
 }
 
 const qrCodeTypes = [
-  { value: 'url', label: 'Website URL', icon: Link },
+  { value: 'url', label: 'Product URL', icon: Link },
   { value: 'nutrition', label: 'Nutrition Facts', icon: FileText },
   { value: 'ingredients', label: 'Ingredients List', icon: List },
   { value: 'custom', label: 'Custom Text', icon: QrCode }
@@ -56,6 +57,7 @@ export function QRCodeGenerator({ labelData, onChange }: QRCodeGeneratorProps) {
   const [qrPreview, setQrPreview] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
+  const [urlError, setUrlError] = useState<string>('');
 
   const qrData = labelData.qrCode || {
     content: '',
@@ -70,6 +72,18 @@ export function QRCodeGenerator({ labelData, onChange }: QRCodeGeneratorProps) {
 
   const handleQRCodeUpdate = (updates: Partial<QRCodeData>) => {
     const newQRData = { ...qrData, ...updates };
+    
+    // Clear URL error when switching away from URL type
+    if (updates.type !== undefined && updates.type !== 'url') {
+      setUrlError('');
+    }
+    
+    // Validate URL if content is being updated and type is URL
+    if (updates.content !== undefined && (newQRData.type === 'url' || updates.type === 'url')) {
+      const error = validateUrl(updates.content || '');
+      setUrlError(error);
+    }
+    
     onChange({ qrCode: newQRData });
   };
 
@@ -87,7 +101,9 @@ export function QRCodeGenerator({ labelData, onChange }: QRCodeGeneratorProps) {
         const ingredients = labelData.ingredients?.english || 'No ingredients specified';
         return `Ingredients: ${ingredients}`;
       case 'url':
-        return qrData.content || 'https://example.com';
+        // Ensure URL is properly formatted
+        const url = qrData.content || '';
+        return url.trim() ? (isValidUrl(url) ? url : formatUrl(url)) : 'https://example.com';
       case 'custom':
         return qrData.content || 'Custom QR Code';
       default:
@@ -96,7 +112,18 @@ export function QRCodeGenerator({ labelData, onChange }: QRCodeGeneratorProps) {
   };
 
   const generateQRCode = async () => {
-    if (!qrData.content && qrData.type === 'custom') {
+    // Validate content based on type
+    if (qrData.type === 'url') {
+      if (!qrData.content) {
+        toast.error('Please enter a URL for the QR code');
+        return;
+      }
+      const urlValidationError = validateUrl(qrData.content);
+      if (urlValidationError) {
+        toast.error(urlValidationError);
+        return;
+      }
+    } else if (qrData.type === 'custom' && !qrData.content) {
       toast.error('Please enter content for the QR code');
       return;
     }
@@ -225,13 +252,30 @@ export function QRCodeGenerator({ labelData, onChange }: QRCodeGeneratorProps) {
 
           {qrData.type === 'url' && (
             <div className="space-y-2">
-              <Label className="text-xs font-medium">Website URL</Label>
+              <Label className="text-xs font-medium">Product Public Page URL</Label>
               <Input
-                placeholder="https://example.com"
+                placeholder="https://example.com/public/product/123"
                 value={qrData.content}
-                onChange={(e) => handleQRCodeUpdate({ content: e.target.value })}
-                className="h-8"
+                onChange={(e) => {
+                  const value = e.target.value;
+                  handleQRCodeUpdate({ content: value });
+                }}
+                onBlur={(e) => {
+                  // Auto-format URL on blur if it's not empty and doesn't have protocol
+                  const value = e.target.value.trim();
+                  if (value && !value.match(/^https?:\/\//i)) {
+                    const formatted = formatUrl(value);
+                    handleQRCodeUpdate({ content: formatted });
+                  }
+                }}
+                className={`h-8 ${urlError ? 'border-red-500 focus:border-red-500' : ''}`}
               />
+              {urlError && (
+                <p className="text-xs text-red-500 mt-1">{urlError}</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Enter the public URL where users will be redirected when they scan the QR code. You can manually enter any URL or paste a product's public page URL.
+              </p>
             </div>
           )}
 

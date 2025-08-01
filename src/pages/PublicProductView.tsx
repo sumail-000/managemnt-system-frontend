@@ -339,9 +339,9 @@ export default function PublicProductView() {
                     QR Code
                   </h3>
                   <div className="text-center space-y-4">
-                    {product.qrCodes[0].image_path ? (
+                    {product.qrCodes[0].image_url ? (
                       <img
-                        src={`/storage/${product.qrCodes[0].image_path}`}
+                        src={product.qrCodes[0].image_url}
                         alt="QR Code for this recipe"
                         className="w-32 h-32 mx-auto border border-gray-200 rounded"
                       />

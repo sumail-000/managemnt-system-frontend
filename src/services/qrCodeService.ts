@@ -9,6 +9,11 @@ export interface QrCodeGenerationOptions {
   background_color?: string;
 }
 
+export interface QrCodeUrlGenerationOptions extends QrCodeGenerationOptions {
+  content: string;
+  type?: 'url' | 'custom';
+}
+
 export interface QrCodeData {
   id: number;
   url_slug: string;
@@ -107,7 +112,80 @@ export interface QrCodeDetailedAnalytics {
   avg_scans_per_day?: number;
 }
 
+export interface QrCodeCreationDeletionAnalytics {
+  creation_analytics: Array<{
+    date: string;
+    count: number;
+  }>;
+  deletion_analytics: Array<{
+    date: string;
+    count: number;
+  }>;
+  trends: Array<{
+    date: string;
+    created: number;
+    deleted: number;
+    net_change: number;
+  }>;
+  totals: {
+    created: number;
+    deleted: number;
+    net_qr_codes: number;
+  };
+  period_days: number;
+}
+
 class QrCodeService {
+  /**
+   * Generate QR code from URL content directly
+   */
+  async generateQrCodeFromUrl(options: QrCodeUrlGenerationOptions): Promise<QrCodeGenerationResponse> {
+    try {
+      console.log('🔧 [SERVICE DEBUG] Starting generateQrCodeFromUrl service call')
+      console.log('🔧 [SERVICE DEBUG] Options:', options)
+      
+      // Validate options before sending to API
+      const validation = this.validateOptions(options);
+      console.log('🔧 [SERVICE DEBUG] Validation result:', validation)
+      
+      if (!validation.valid) {
+        console.warn('🔧 [SERVICE DEBUG] Validation failed, returning error response')
+        return {
+          success: false,
+          message: `Validation failed: ${validation.errors.join(', ')}`
+        };
+      }
+
+      console.log('🔧 [SERVICE DEBUG] Making API call to:', `/qr-codes/generate-from-url`)
+      const response = await api.post(`/qr-codes/generate-from-url`, options);
+      
+      console.log('🔧 [SERVICE DEBUG] Raw API response:', response)
+      console.log('🔧 [SERVICE DEBUG] Response type:', typeof response)
+      console.log('🔧 [SERVICE DEBUG] Response keys:', Object.keys(response || {}))
+      
+      // The API interceptor already extracts response.data, so 'response' is the actual data
+      console.log('🔧 [SERVICE DEBUG] Returning response directly:', response)
+      return response as unknown as QrCodeGenerationResponse;
+    } catch (error: any) {
+      console.error('🔧 [SERVICE DEBUG] API call failed:')
+      console.error('🔧 [SERVICE DEBUG] Error:', error)
+      console.error('🔧 [SERVICE DEBUG] Error response:', error.response)
+      console.error('🔧 [SERVICE DEBUG] Error response status:', error.response?.status)
+      console.error('🔧 [SERVICE DEBUG] Error response data:', error.response?.data)
+      
+      if (error.response?.status === 403) {
+        console.log('🔧 [SERVICE DEBUG] 403 error, returning structured error response')
+        return {
+          success: false,
+          message: error.response.data.message || 'QR code generation requires a premium membership',
+          upgrade_required: true
+        };
+      }
+      console.log('🔧 [SERVICE DEBUG] Re-throwing error for other status codes')
+      throw error;
+    }
+  }
+
   /**
    * Generate QR code for a product
    */
@@ -138,7 +216,7 @@ class QrCodeService {
       
       // The API interceptor already extracts response.data, so 'response' is the actual data
       console.log('🔧 [SERVICE DEBUG] Returning response directly:', response)
-      return response.data as QrCodeGenerationResponse;
+      return response as unknown as QrCodeGenerationResponse;
     } catch (error: any) {
       console.error('🔧 [SERVICE DEBUG] API call failed:')
       console.error('🔧 [SERVICE DEBUG] Error:', error)
@@ -171,8 +249,80 @@ class QrCodeService {
    * Get all QR codes for the authenticated user
    */
   async getUserQRCodes(): Promise<{ success: boolean; data: QrCodeData[] }> {
-    const response = await api.get('/qr-codes/');
-    return response.data;
+    console.log('🌐 [QR_SERVICE] Starting getUserQRCodes API call...');
+    console.log('🔗 [QR_SERVICE] API endpoint: /qr-codes/');
+    
+    try {
+      const response = await api.get('/qr-codes/');
+      
+      console.log('📡 [QR_SERVICE] API response received:', {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+        dataKeys: Object.keys(response.data || {}),
+        responseData: response.data
+      });
+      
+      // Check if response has the expected structure
+      if (response.data && typeof response.data === 'object') {
+        // If response.data has success and data properties, return it directly
+        if ('success' in response.data && 'data' in response.data) {
+          console.log('📋 [QR_SERVICE] QR codes in structured response:', {
+            success: response.data.success,
+            count: response.data.data?.length || 0,
+            qrCodes: response.data.data?.map((qr: any) => ({
+              id: qr.id,
+              product_id: qr.product_id,
+              product_name: qr.product_name,
+              url_slug: qr.url_slug,
+              scan_count: qr.scan_count,
+              created_at: qr.created_at
+            })) || []
+          });
+          return response.data;
+        }
+        // If response.data is an array (legacy format), wrap it
+        else if (Array.isArray(response.data)) {
+          console.log('📋 [QR_SERVICE] QR codes in array response:', {
+            count: response.data.length,
+            qrCodes: response.data.map((qr: any) => ({
+              id: qr.id,
+              product_id: qr.product_id,
+              product_name: qr.product_name,
+              url_slug: qr.url_slug,
+              scan_count: qr.scan_count,
+              created_at: qr.created_at
+            }))
+          });
+          return {
+            success: true,
+            data: response.data
+          };
+        }
+      }
+      
+      // Fallback: return empty data with success false
+      console.warn('⚠️ [QR_SERVICE] Unexpected response format, returning empty data');
+      return {
+        success: false,
+        data: []
+      };
+      
+    } catch (error: any) {
+      console.error('❌ [QR_SERVICE] getUserQRCodes API call failed:', {
+        error: error,
+        message: error?.message,
+        status: error?.response?.status,
+        statusText: error?.response?.statusText,
+        responseData: error?.response?.data,
+        config: {
+          url: error?.config?.url,
+          method: error?.config?.method,
+          headers: error?.config?.headers
+        }
+      });
+      throw error;
+    }
   }
 
   /**
@@ -219,6 +369,21 @@ class QrCodeService {
     } catch (error: any) {
       if (error.response?.status === 403) {
         throw new Error(error.response.data.message || 'Detailed analytics requires a premium membership');
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Get QR code creation and deletion analytics
+   */
+  async getCreationDeletionAnalytics(days: number = 30): Promise<{ success: boolean; data: QrCodeCreationDeletionAnalytics }> {
+    try {
+      const response = await api.get(`/qr-codes/creation-deletion-analytics?days=${days}`);
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        throw new Error(error.response.data.message || 'Analytics requires a premium membership');
       }
       throw error;
     }

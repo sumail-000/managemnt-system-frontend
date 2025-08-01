@@ -10,7 +10,6 @@ import {
   Heart,
   Search,
   Plus,
-  ChefHat,
   Tag
 } from "lucide-react"
 import { NavLink, useLocation } from "react-router-dom"
@@ -28,22 +27,23 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 
-const mainItems = [
+const coreItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Products", url: "/products", icon: Package },
   { title: "Add Product", url: "/products/new", icon: Plus },
-
 ]
 
-const managementItems = [
-  { title: "Recipe Search", url: "/recipe-search", icon: ChefHat },
+const contentManagementItems = [
   { title: "Category Management", url: "/categories", icon: Tag },
   { title: "Label Generator", url: "/labels", icon: FileText },
   { title: "QR Codes", url: "/qr-codes", icon: QrCode },
+]
+
+const userItems = [
   { title: "Favorites", url: "/favorites", icon: Heart },
 ]
 
-const systemItems = [
+const administrationItems = [
   { title: "Billing", url: "/billing", icon: CreditCard },
   { title: "Settings", url: "/settings", icon: Settings },
   { title: "Enterprise Admin", url: "/enterprise", icon: Shield },
@@ -92,12 +92,12 @@ export function AppSidebar() {
           )}
         </div>
 
-        {/* Main Navigation */}
+        {/* Core Operations */}
         <SidebarGroup>
-          {!isCollapsed && <SidebarGroupLabel>Main</SidebarGroupLabel>}
+          {!isCollapsed && <SidebarGroupLabel>Core</SidebarGroupLabel>}
           <SidebarGroupContent>
             <SidebarMenu>
-              {mainItems.map((item) => (
+              {coreItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <NavLink to={item.url} end className={getNavCls}>
@@ -111,12 +111,12 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Management Tools */}
+        {/* Content Management */}
         <SidebarGroup>
-          {!isCollapsed && <SidebarGroupLabel>Management</SidebarGroupLabel>}
+          {!isCollapsed && <SidebarGroupLabel>Content</SidebarGroupLabel>}
           <SidebarGroupContent>
             <SidebarMenu>
-              {managementItems.map((item) => (
+              {contentManagementItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <NavLink to={item.url} className={getNavCls}>
@@ -130,12 +130,31 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* System */}
+        {/* User Features */}
         <SidebarGroup>
-          {!isCollapsed && <SidebarGroupLabel>System</SidebarGroupLabel>}
+          {!isCollapsed && <SidebarGroupLabel>Personal</SidebarGroupLabel>}
           <SidebarGroupContent>
             <SidebarMenu>
-              {systemItems.map((item) => (
+              {userItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild>
+                    <NavLink to={item.url} className={getNavCls}>
+                      <item.icon className="h-4 w-4" />
+                      {!isCollapsed && <span>{item.title}</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Administration */}
+        <SidebarGroup>
+          {!isCollapsed && <SidebarGroupLabel>Administration</SidebarGroupLabel>}
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {administrationItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <NavLink to={item.url} className={getNavCls}>
