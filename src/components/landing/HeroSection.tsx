@@ -54,9 +54,10 @@ export function HeroSection() {
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Link>
               </Button>
-              <Button size="xl" variant="outline" className="group">
-                <Play className="w-4 h-4 mr-2 group-hover:scale-110 transition-transform" />
-                Watch Demo
+              <Button size="xl" variant="outline" className="group border-green-500 text-green-600 hover:bg-green-50" asChild>
+                <Link to="/sample-label">
+                  Try Our Sample Label
+                </Link>
               </Button>
             </div>
 

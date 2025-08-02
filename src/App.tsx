@@ -18,6 +18,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ResetPassword from "./pages/ResetPassword";
 import Blog from "./pages/Blog";
+import SampleLabel from "./pages/SampleLabel";
 import NotFound from "./pages/NotFound";
 import QRCodes from "./pages/QRCodes";
 import Favorites from "./pages/Favorites";
@@ -66,6 +67,7 @@ const App = () => {
       <Route path="/forgot-password" element={<ResetPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/blog" element={<Blog />} />
+      <Route path="/sample-label" element={<SampleLabel />} />
       <Route path="/public/product/:id" element={<PublicProductView />} />
       
       {/* Protected Dashboard Routes */}

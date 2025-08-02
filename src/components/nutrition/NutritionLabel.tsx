@@ -150,21 +150,21 @@ export function NutritionLabel({
           }}
         >
           {/* Title */}
-          <div className="text-center mb-2">
-            <h1 className="text-xl font-bold border-b-4 border-black pb-1">
-              {productName} - Nutrition Facts
+          <div className="text-center mb-3">
+            <h1 className="text-3xl font-black tracking-tight border-b-8 border-black pb-2 mb-1" style={{ fontFamily: 'Arial Black, Arial, sans-serif', fontWeight: 900 }}>
+              Nutrition Facts
             </h1>
           </div>
 
           {/* Serving Information */}
           <div className="mb-2 text-sm">
-            <div className="flex justify-between border-b border-black pb-1">
-              <span>Servings Per Container</span>
+            <div className="flex justify-between border-b-2 border-black pb-1">
+              <span className="font-medium">Servings Per Container</span>
               <span className="font-bold">{servingsCount}</span>
             </div>
             <div className="mt-1">
               <span className="font-bold">Serving Size</span>
-              <span className="ml-2">{Math.round(weightPerServing)}g</span>
+              <span className="ml-2 font-bold">{Math.round(weightPerServing)}g</span>
             </div>
             {totalWeight && (
               <div className="mt-1 text-xs">
@@ -185,21 +185,21 @@ export function NutritionLabel({
           </div>
 
           {/* Daily Value Header */}
-          <div className="text-right text-sm font-bold mb-1 border-b border-black pb-1">
+          <div className="text-right text-sm font-bold mb-1 border-b-2 border-black pb-1">
             % Daily Value*
           </div>
 
           {/* Key Nutrients - Free Version (Limited) */}
-          <div className="space-y-1 text-sm">
+          <div className="space-y-0 text-sm">
             {/* Total Fat */}
-            <div className="flex justify-between border-b border-gray-400">
-              <span><strong>Total Fat</strong> {Math.round(totalFat / servingsCount)}g</span>
+            <div className="flex justify-between border-b-2 border-black py-1">
+              <span className="font-bold">Total Fat {Math.round(totalFat / servingsCount)}g</span>
               <span className="font-bold">{fatDV}%</span>
             </div>
             
             {/* Saturated Fat */}
             {saturatedFat > 0 && (
-              <div className="flex justify-between border-b border-gray-400 pl-4">
+              <div className="flex justify-between border-b border-black py-1 pl-4">
                 <span>Saturated Fat {Math.round(saturatedFat / servingsCount)}g</span>
                 <span className="font-bold">{saturatedFatDV}%</span>
               </div>
@@ -207,40 +207,40 @@ export function NutritionLabel({
             
             {/* Cholesterol */}
             {cholesterol > 0 && (
-              <div className="flex justify-between border-b border-gray-400">
-                <span><strong>Cholesterol</strong> {Math.round(cholesterol / servingsCount)}mg</span>
+              <div className="flex justify-between border-b-2 border-black py-1">
+                <span className="font-bold">Cholesterol {Math.round(cholesterol / servingsCount)}mg</span>
                 <span className="font-bold">{cholesterolDV}%</span>
               </div>
             )}
             
             {/* Sodium */}
-            <div className="flex justify-between border-b border-gray-400">
-              <span><strong>Sodium</strong> {Math.round(sodium / servingsCount)}mg</span>
+            <div className="flex justify-between border-b-2 border-black py-1">
+              <span className="font-bold">Sodium {Math.round(sodium / servingsCount)}mg</span>
               <span className="font-bold">{sodiumDV}%</span>
             </div>
             
             {/* Total Carbs */}
-            <div className="flex justify-between border-b border-gray-400">
-              <span><strong>Total Carbohydrate</strong> {Math.round(totalCarbs / servingsCount)}g</span>
+            <div className="flex justify-between border-b-2 border-black py-1">
+              <span className="font-bold">Total Carbohydrate {Math.round(totalCarbs / servingsCount)}g</span>
               <span className="font-bold">{carbsDV}%</span>
             </div>
             
             {/* Dietary Fiber */}
-            <div className="flex justify-between border-b border-gray-400 pl-4">
+            <div className="flex justify-between border-b border-black py-1 pl-4">
               <span>Dietary Fiber {Math.round(fiber / servingsCount)}g</span>
               <span className="font-bold">{fiberDV}%</span>
             </div>
             
             {/* Sugars */}
             {sugars > 0 && (
-              <div className="flex justify-between border-b border-gray-400 pl-4">
+              <div className="flex justify-between border-b border-black py-1 pl-4">
                 <span>Total Sugars {Math.round(sugars / servingsCount)}g</span>
               </div>
             )}
             
             {/* Protein */}
-            <div className="flex justify-between border-b-4 border-black pb-2">
-              <span><strong>Protein</strong> {Math.round(protein / servingsCount)}g</span>
+            <div className="flex justify-between border-b-8 border-black py-2">
+              <span className="font-bold">Protein {Math.round(protein / servingsCount)}g</span>
             </div>
           </div>
 
