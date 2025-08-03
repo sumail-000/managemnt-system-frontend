@@ -173,7 +173,7 @@ export const transformProductFromAPI = (apiProduct: any): Product => {
     serving_size: apiProduct.serving_size,
     serving_unit: apiProduct.serving_unit,
     servings_per_container: apiProduct.servings_per_container,
-    tags: apiProduct.recipe_tags || apiProduct.tags || [],
+    tags: apiProduct.tags || [],
     image: apiProduct.image,
     image_url: apiProduct.image_url,
     image_path: apiProduct.image_path,

@@ -91,7 +91,7 @@ export default function Dashboard() {
   // Real-time stats from API data
   const stats = [
     {
-      title: "Total Products",
+      title: "Total Recipes",
       value: (usage?.products?.total || 0).toString(),
       change: usage?.products?.total > 0 ? "+" + Math.round((currentUsage.products / usage.products.total) * 100) + "% this month" : "No data",
       icon: Package,
@@ -185,13 +185,14 @@ export default function Dashboard() {
 
   return (
     <div className="flex-1">
-      {/* Fixed Header */}
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border px-6 py-4">
+      <div className="container mx-auto max-w-7xl">
+        {/* Fixed Header */}
+        <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border px-6 py-4">
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
             <p className="text-muted-foreground">
-              Welcome back, {user?.name}! Here's what's happening with your food products.
+              Welcome back, {user?.name}! Here's what's happening with your recipes.
             </p>
           </div>
           <div className="flex items-center gap-4">
@@ -199,15 +200,15 @@ export default function Dashboard() {
             <Button variant="gradient" size="lg" asChild>
               <Link to="/products/new">
                 <Plus className="w-4 h-4 mr-2" />
-                Add Product
+                Create Recipe
               </Link>
             </Button>
           </div>
         </div>
       </div>
 
-      {/* Scrollable Content */}
-      <div className="space-y-6 p-6">
+        {/* Scrollable Content */}
+        <div className="space-y-6 p-6">
       {/* Enhanced Stats Cards */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat, index) => (
@@ -261,7 +262,7 @@ export default function Dashboard() {
                 <div className="p-1.5 rounded-md bg-gradient-to-br from-green-100 to-green-50 mr-3 group-hover/btn:from-green-200 group-hover/btn:to-green-100 transition-all">
                   <Plus className="w-4 h-4 text-green-600" />
                 </div>
-                Create New Product
+                Create New Recipe
               </Link>
             </Button>
             <Button 
@@ -315,7 +316,7 @@ export default function Dashboard() {
               <div className="p-2 rounded-lg bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/20 dark:to-indigo-900/20">
                 <Package className="w-5 h-5 text-blue-600 dark:text-blue-400" />
               </div>
-              Recent Products
+              Recent Recipes
             </CardTitle>
           </CardHeader>
           <CardContent className="relative pt-6">
@@ -372,14 +373,14 @@ export default function Dashboard() {
                         <Plus className="w-3 h-3 text-white" />
                       </div>
                     </div>
-                    <h4 className="font-semibold text-foreground mb-2">No products available</h4>
+                    <h4 className="font-semibold text-foreground mb-2">No recipes available</h4>
                     <p className="text-sm text-muted-foreground mb-4 max-w-sm">
-                      You haven't created any products yet. Start by adding your first product to begin managing your inventory.
+                      You haven't created any recipes yet. Start by adding your first recipe to begin managing your collection.
                     </p>
                     <Button size="sm" className="bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 text-white border-0" asChild>
                       <Link to="/products/new">
                         <Plus className="w-4 h-4 mr-2" />
-                        Create Your First Product
+                        Create Your First Recipe
                       </Link>
                     </Button>
                   </div>
@@ -558,6 +559,7 @@ export default function Dashboard() {
           )}
         </CardContent>
       </Card>
+        </div>
       </div>
     </div>
   )

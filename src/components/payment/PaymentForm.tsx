@@ -20,12 +20,20 @@ import { paymentAPI } from "@/services/api"
 import { useAuth } from "@/contexts/AuthContext"
 import { PaymentIntentResponse } from "@/types/api"
 import { useLocation, useNavigate } from "react-router-dom"
+import { useStripe, useElements, CardElement } from "@stripe/react-stripe-js"
+import { StripeProvider } from "@/components/providers/StripeProvider"
 
-export function PaymentForm() {
+// Main component that wraps the form with StripeProvider
+
+
+// Separate component for the form content that uses Stripe hooks
+function PaymentFormContent() {
   const { toast } = useToast()
   const { user, refreshUsage } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
+  const stripe = useStripe()
+  const elements = useElements()
   
   // Get navigation state for different payment contexts
   const navigationState = location.state as {
@@ -41,9 +49,6 @@ export function PaymentForm() {
   
   const [formData, setFormData] = useState({
     email: user?.email || "",
-    cardNumber: "",
-    expiryDate: "",
-    cvc: "",
     cardholderName: "",
     addressLine1: "",
     addressLine2: "",
@@ -56,7 +61,7 @@ export function PaymentForm() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [paymentStep, setPaymentStep] = useState<'payment' | 'processing' | 'success'>('payment')
   const [isLoading, setIsLoading] = useState(true)
-  const [cardType, setCardType] = useState<string>('')
+  const [cardError, setCardError] = useState<string | null>(null)
 
   // Get user's selected plan from their membership
   const userPlan = user?.membership_plan
@@ -134,78 +139,13 @@ export function PaymentForm() {
     )
   }
 
-  // Card type detection function
-  const detectCardType = (cardNumber: string) => {
-    const number = cardNumber.replace(/\s/g, '')
-    
-    if (/^4/.test(number)) {
-      return 'visa'
-    } else if (/^5[1-5]/.test(number) || /^2[2-7]/.test(number)) {
-      return 'mastercard'
-    } else if (/^3[47]/.test(number)) {
-      return 'amex'
-    } else if (/^6(?:011|5)/.test(number)) {
-      return 'discover'
-    } else if (/^(?:2131|1800|35\d{3})/.test(number)) {
-      return 'jcb'
-    } else if (/^3[0689]/.test(number)) {
-      return 'diners'
-    }
-    return ''
-  }
 
-  // Card logo component
-  const CardLogo = ({ type }: { type: string }) => {
-    const logoStyle = "w-8 h-5 object-contain"
-    
-    switch (type) {
-      case 'visa':
-        return (
-          <div className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold">
-            VISA
-          </div>
-        )
-      case 'mastercard':
-        return (
-          <div className="flex items-center">
-            <div className="w-4 h-4 bg-red-500 rounded-full"></div>
-            <div className="w-4 h-4 bg-yellow-500 rounded-full -ml-2"></div>
-          </div>
-        )
-      case 'amex':
-        return (
-          <div className="bg-blue-500 text-white px-2 py-1 rounded text-xs font-bold">
-            AMEX
-          </div>
-        )
-      case 'discover':
-        return (
-          <div className="bg-orange-500 text-white px-2 py-1 rounded text-xs font-bold">
-            DISCOVER
-          </div>
-        )
-      default:
-        return <CreditCard className="w-5 h-5 text-gray-400" />
-    }
-  }
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
     
     if (!formData.email || !/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = "Please enter a valid email address"
-    }
-    
-    if (!formData.cardNumber || formData.cardNumber.replace(/\s/g, "").length < 16) {
-      newErrors.cardNumber = "Please enter a valid card number"
-    }
-    
-    if (!formData.expiryDate || !/^\d{2}\/\d{2}$/.test(formData.expiryDate)) {
-      newErrors.expiryDate = "Please enter a valid expiry date (MM/YY)"
-    }
-    
-    if (!formData.cvc || formData.cvc.length < 3) {
-      newErrors.cvc = "Please enter a valid CVC"
     }
     
     if (!formData.cardholderName.trim()) {
@@ -236,44 +176,12 @@ export function PaymentForm() {
     return Object.keys(newErrors).length === 0
   }
 
-  const formatCardNumber = (value: string) => {
-    const v = value.replace(/\s+/g, "").replace(/[^0-9]/gi, "")
-    const matches = v.match(/\d{4,16}/g)
-    const match = matches && matches[0] || ""
-    const parts = []
-    
-    for (let i = 0, len = match.length; i < len; i += 4) {
-      parts.push(match.substring(i, i + 4))
-    }
-    
-    if (parts.length) {
-      return parts.join(" ")
-    } else {
-      return v
-    }
-  }
 
-  const formatExpiryDate = (value: string) => {
-    const v = value.replace(/\D/g, "")
-    if (v.length >= 2) {
-      return v.substring(0, 2) + "/" + v.substring(2, 4)
-    }
-    return v
-  }
 
   const handleInputChange = (field: string, value: string) => {
     let formattedValue = value
     
-    if (field === "cardNumber") {
-      formattedValue = formatCardNumber(value)
-      // Detect card type when card number changes
-      const detectedType = detectCardType(formattedValue)
-      setCardType(detectedType)
-    } else if (field === "expiryDate") {
-      formattedValue = formatExpiryDate(value)
-    } else if (field === "cvc") {
-      formattedValue = value.replace(/\D/g, "").substring(0, 4)
-    } else if (field === "postalCode") {
+    if (field === "postalCode") {
       // Allow alphanumeric postal codes for international support
       formattedValue = value.replace(/[^a-zA-Z0-9\s-]/g, "").substring(0, 10)
     }
@@ -289,22 +197,66 @@ export function PaymentForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    if (!stripe || !elements) {
+      toast({
+        title: "Payment Error",
+        description: "Stripe has not loaded yet. Please try again.",
+        variant: "destructive",
+      })
+      return
+    }
+    
     if (!validateForm()) {
+      return
+    }
+    
+    const cardElement = elements.getElement(CardElement)
+    if (!cardElement) {
+      toast({
+        title: "Payment Error",
+        description: "Card element not found. Please refresh and try again.",
+        variant: "destructive",
+      })
       return
     }
     
     setIsProcessing(true)
     setPaymentStep('processing')
+    setCardError(null)
     
     try {
+      // Create payment method using Stripe Elements
+      const { error, paymentMethod } = await stripe.createPaymentMethod({
+        type: 'card',
+        card: cardElement,
+        billing_details: {
+          name: formData.cardholderName.trim(),
+          email: formData.email,
+          address: {
+            line1: formData.addressLine1,
+            line2: formData.addressLine2 || undefined,
+            city: formData.city,
+            state: formData.state,
+            postal_code: formData.postalCode,
+            country: formData.country,
+          },
+        },
+      })
+      
+      if (error) {
+        throw new Error(error.message || 'Failed to create payment method')
+      }
+      
+      if (!paymentMethod) {
+        throw new Error('No payment method created')
+      }
+      
       let response;
       
       if (navigationState.isUpdate) {
         // Update payment method
         const updateData = {
-          card_number: formData.cardNumber.replace(/\s/g, ""),
-          expiry_date: formData.expiryDate,
-          cvc: formData.cvc,
+          payment_method_id: paymentMethod.id,
           cardholder_name: formData.cardholderName,
           billing_address: {
             line1: formData.addressLine1,
@@ -313,8 +265,7 @@ export function PaymentForm() {
             state: formData.state,
             postal_code: formData.postalCode,
             country: formData.country
-          },
-          card_type: cardType
+          }
         }
         
         response = await paymentAPI.updatePaymentMethod(updateData)
@@ -336,9 +287,6 @@ export function PaymentForm() {
         // Create payment intent for subscription (upgrade or new subscription)
         const paymentData = {
           email: formData.email,
-          card_number: formData.cardNumber.replace(/\s/g, ""),
-          expiry_date: formData.expiryDate,
-          cvc: formData.cvc,
           cardholder_name: formData.cardholderName,
           billing_address: {
             line1: formData.addressLine1,
@@ -348,9 +296,8 @@ export function PaymentForm() {
             postal_code: formData.postalCode,
             country: formData.country
           },
-          card_type: cardType,
           membership_plan_id: navigationState.planId ? parseInt(navigationState.planId) : userPlan.id,
-          payment_method_id: 'pm_card_visa', // This would be from Stripe Elements in real implementation
+          payment_method_id: paymentMethod.id,
           is_upgrade: navigationState.isUpgrade || false
         }
         
@@ -492,54 +439,35 @@ export function PaymentForm() {
                 <CreditCard className="h-3 w-3" />
                 Card Information
               </Label>
-                
-                  {/* Card Number */}
-                  <div className="space-y-1">
-                    <div className="relative">
-                      <Input
-                        placeholder="1234 1234 1234 1234"
-                        value={formData.cardNumber}
-                        onChange={(e) => handleInputChange("cardNumber", e.target.value)}
-                        maxLength={19}
-                        className={`pr-10 h-8 text-sm ${errors.cardNumber ? "border-destructive" : ""}`}
-                      />
-                      <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
-                        <CardLogo type={cardType} />
-                      </div>
-                    </div>
-                    {errors.cardNumber && (
-                      <p className="text-xs text-destructive">{errors.cardNumber}</p>
-                    )}
-                  </div>
-                  
-                  {/* Expiry and CVC */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <Input
-                        placeholder="MM/YY"
-                        value={formData.expiryDate}
-                        onChange={(e) => handleInputChange("expiryDate", e.target.value)}
-                        maxLength={5}
-                        className={`h-8 text-sm ${errors.expiryDate ? "border-destructive" : ""}`}
-                      />
-                      {errors.expiryDate && (
-                        <p className="text-xs text-destructive">{errors.expiryDate}</p>
-                      )}
-                    </div>
-                    <div className="space-y-1">
-                      <Input
-                        placeholder="CVC"
-                        value={formData.cvc}
-                        onChange={(e) => handleInputChange("cvc", e.target.value)}
-                        maxLength={4}
-                        className={`h-8 text-sm ${errors.cvc ? "border-destructive" : ""}`}
-                      />
-                      {errors.cvc && (
-                        <p className="text-xs text-destructive">{errors.cvc}</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
+              
+              {/* Stripe Card Element */}
+              <div className="border rounded-md p-3 bg-background">
+                <CardElement
+                  options={{
+                    style: {
+                      base: {
+                        fontSize: '14px',
+                        color: 'hsl(var(--foreground))',
+                        fontFamily: 'inherit',
+                        '::placeholder': {
+                          color: 'hsl(var(--muted-foreground))',
+                        },
+                      },
+                      invalid: {
+                        color: 'hsl(var(--destructive))',
+                      },
+                    },
+                    hidePostalCode: true,
+                  }}
+                  onChange={(event) => {
+                    setCardError(event.error ? event.error.message : null)
+                  }}
+                />
+              </div>
+              {cardError && (
+                <p className="text-xs text-destructive">{cardError}</p>
+              )}
+            </div>
 
                 <Separator className="my-1" />
 
@@ -677,3 +605,14 @@ export function PaymentForm() {
     </AnimatedBackground>
   )
 }
+
+// Main component that wraps the form with StripeProvider
+const PaymentForm: React.FC = () => {
+  return (
+    <StripeProvider>
+      <PaymentFormContent />
+    </StripeProvider>
+  )
+}
+
+export default PaymentForm

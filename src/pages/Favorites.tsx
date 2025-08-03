@@ -406,8 +406,9 @@ export default function Favorites() {
 
   return (
     <div className="flex-1">
-      {/* Header */}
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border px-6 py-4">
+      <div className="container mx-auto max-w-7xl">
+        {/* Header */}
+        <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border px-6 py-4">
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold text-foreground">Favorites Dashboard</h1>
@@ -481,7 +482,7 @@ export default function Favorites() {
         </div>
       </div>
 
-      <div className="space-y-6 p-6">
+        <div className="space-y-6 p-6">
         {/* Stats Cards */}
         <div className="grid gap-4 md:grid-cols-4">
           <Card>
@@ -1108,6 +1109,7 @@ export default function Favorites() {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
     </div>
   )

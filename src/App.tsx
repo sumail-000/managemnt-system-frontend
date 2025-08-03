@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import ProtectedRoute from './components/ProtectedRoute'
 import { DashboardLayout } from './components/DashboardLayout'
 import { AuthProvider } from './contexts/AuthContext'
+import { StripeProvider } from './components/providers/StripeProvider'
 import { Toaster } from './components/ui/toaster'
 import LandingPage from "./pages/LandingPage";
 import Dashboard from "./pages/Dashboard";
@@ -24,7 +25,7 @@ import QRCodes from "./pages/QRCodes";
 import Favorites from "./pages/Favorites";
 import Settings from "./pages/Settings";
 
-import { PaymentForm } from "./components/payment/PaymentForm";
+import PaymentForm from "./components/payment/PaymentForm";
 
 // Admin Panel Components
 import AdminPanel from "./pages/AdminPanel";
@@ -56,8 +57,9 @@ const App = () => {
   console.log('[App] Application initialized');
   
   return (
-    <Router>
-      <AuthProvider>
+    <StripeProvider>
+      <Router>
+        <AuthProvider>
       <Routes>
       {/* Public Routes */}
       <Route path="/" element={<LandingPage />} />
@@ -212,9 +214,10 @@ const App = () => {
       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
       <Route path="*" element={<NotFound />} />
       </Routes>
-      <Toaster />
-      </AuthProvider>
-    </Router>
+        <Toaster />
+        </AuthProvider>
+      </Router>
+    </StripeProvider>
   );
 };
 

@@ -30,14 +30,14 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { productsAPI, edamamAPI } from "@/services/api"
-import { Product, transformProductFromAPI, NutritionalData } from "@/types/product"
+import { Product, transformProductFromAPI } from "@/types/product"
 
 export default function PublicProductView() {
   const { id } = useParams()
   const { toast } = useToast()
   
   const [product, setProduct] = useState<Product | null>(null)
-  const [nutritionalData, setNutritionalData] = useState<NutritionalData | null>(null)
+
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -104,16 +104,7 @@ export default function PublicProductView() {
         const productData = transformProductFromAPI(response)
         setProduct(productData)
         
-        // Try to load nutritional data if available
-        try {
-          const nutritionResponse = await edamamAPI.nutrition.loadNutritionData(id)
-          if (nutritionResponse.data) {
-            setNutritionalData(nutritionResponse.data)
-          }
-        } catch (nutritionError) {
-          // Nutrition data is optional, don't show error
-          console.log('No nutrition data available for this product')
-        }
+
       } catch (error: any) {
         console.error('Error loading public product:', error)
         setError(error.message || "Failed to load product")

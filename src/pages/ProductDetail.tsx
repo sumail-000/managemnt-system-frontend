@@ -40,14 +40,12 @@ import {
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
 import { productsAPI, edamamAPI, collectionsAPI } from "@/services/api"
-import { Product, NutritionalData, transformProductFromAPI } from "@/types/product"
+import { Product, transformProductFromAPI } from "@/types/product"
 import { formatDistanceToNow } from "date-fns"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AlertTriangle, Zap, Heart, Leaf, Shield, QrCode, BarChart3, Plus } from "lucide-react"
-import { NutritionDashboard } from "@/components/nutrition/NutritionDashboard"
-import { WarningSystem } from "@/components/nutrition/WarningSystem"
 
 
 
@@ -58,102 +56,11 @@ export default function ProductDetail() {
   
   const [product, setProduct] = useState<Product | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [nutritionalData, setNutritionalData] = useState<NutritionalData | null>(null)
   const [collections, setCollections] = useState<any[]>([])
   const [productCollections, setProductCollections] = useState<any[]>([])
-  const [loadingNutrition, setLoadingNutrition] = useState(false)
   const [loadingCollections, setLoadingCollections] = useState(false)
   
-  // Transform nutritional data to match NutritionData interface for components
-  const transformedNutritionData = nutritionalData ? {
-    // Required properties for NutritionData interface
-    calories: nutritionalData.basic_nutrition?.total_calories || 0,
-    totalWeight: nutritionalData.basic_nutrition?.total_weight || 100,
-    totalNutrients: nutritionalData.nutrients || {},
-    ingredients: nutritionalData.ingredients || [],
-    totalNutrientsKCal: nutritionalData.nutrients_kcal || [],
-    co2EmissionsClass: nutritionalData.co2_emissions_class || null,
-    totalCO2Emissions: nutritionalData.total_co2_emissions || null,
-    analysisMetadata: {
-      analyzedAt: new Date().toISOString(),
-      source: 'edamam',
-      version: '2.0'
-    },
-    
-    // Existing properties
-    totalCalories: nutritionalData.basic_nutrition?.total_calories || 0,
-    macros: {
-      protein: nutritionalData.macronutrients?.protein || 0,
-      carbs: nutritionalData.macronutrients?.carbohydrates || 0,
-      fat: nutritionalData.macronutrients?.fat || 0,
-      fiber: nutritionalData.macronutrients?.fiber || 0
-    },
-    micros: nutritionalData.micronutrients || {},
-    cautions: nutritionalData.cautions || [],
-    warnings: nutritionalData.warnings || [],
-    servings: nutritionalData.basic_nutrition?.servings || 1,
-    weightPerServing: nutritionalData.basic_nutrition?.weight_per_serving || 100,
-    healthLabels: nutritionalData.health_labels || [],
-    dietLabels: nutritionalData.diet_labels || [],
-    highNutrients: nutritionalData.high_nutrients || [],
-    totalDaily: nutritionalData.daily_values || {},
-    nutritionSummary: nutritionalData.nutrition_summary || {}
-  } : null;
 
-  // Load nutritional data for the product
-  const loadNutritionalData = async (productId: string) => {
-    try {
-      setLoadingNutrition(true);
-      const response = await edamamAPI.nutrition.loadNutritionData(productId);
-      
-      // Use the same data access pattern as NutritionAnalysis component
-      const savedData = response.data;
-      
-      console.log('=== LOADED NUTRITION DATA FROM DATABASE (ProductDetail) ===', savedData);
-      
-      if (savedData) {
-        // Transform saved data back to NutritionData interface (same as NutritionAnalysis)
-        const transformedData: NutritionalData = {
-          id: savedData.id || 0,
-          product_id: savedData.product_id || parseInt(id),
-          basic_nutrition: {
-            total_calories: savedData.basic_nutrition?.total_calories || 0,
-            servings: savedData.basic_nutrition?.servings || 1,
-            weight_per_serving: savedData.basic_nutrition?.weight_per_serving || 100
-          },
-          macronutrients: {
-            protein: savedData.macronutrients?.protein || 0,
-            carbohydrates: savedData.macronutrients?.carbohydrates || 0,
-            fat: savedData.macronutrients?.fat || 0,
-            fiber: savedData.macronutrients?.fiber || 0
-          },
-          micronutrients: savedData.micronutrients || {},
-          allergens: savedData.allergens || [],
-          warnings: savedData.warnings || [],
-          health_labels: savedData.health_labels || [],
-          diet_labels: savedData.diet_labels || [],
-          high_nutrients: savedData.high_nutrients || [],
-          nutrition_summary: savedData.nutrition_summary || {},
-          daily_values: savedData.daily_values || {},
-          analysis_metadata: savedData.analysis_metadata || {
-            analyzed_at: new Date().toISOString(),
-            ingredient_query: '',
-            product_name: product?.name || ''
-          },
-          created_at: savedData.created_at || new Date().toISOString(),
-          updated_at: savedData.updated_at || new Date().toISOString()
-        };
-        
-        setNutritionalData(transformedData);
-        console.log('=== TRANSFORMED NUTRITION DATA (ProductDetail) ===', transformedData);
-      }
-    } catch (error) {
-      console.error('Error loading nutritional data:', error);
-      // Don't show error toast for missing nutrition data as it's optional
-    } finally {
-      setLoadingNutrition(false);
-    }
-  };
 
   // Load collections data
   const loadCollections = async () => {
@@ -182,10 +89,7 @@ export default function ProductDetail() {
         setProduct(transformedProduct)
         
         // Load additional data
-        await Promise.all([
-          loadNutritionalData(id),
-          loadCollections()
-        ]);
+        await loadCollections();
         
         // Extract product collections if available
         console.log('=== PRODUCT COLLECTIONS DEBUG ===');
@@ -703,17 +607,7 @@ export default function ProductDetail() {
                 Share Product
               </Button>
               
-              <Button variant="outline" className="w-full justify-start" asChild>
-                <Link to={`/nutrition?product_id=${product.id}`}>
-                  <BarChart3 className="w-4 h-4 mr-2" />
-                  Nutrition Analysis
-                </Link>
-              </Button>
-              
-              <Button variant="outline" className="w-full justify-start">
-                <Download className="w-4 h-4 mr-2" />
-                Generate Nutrition Label
-              </Button>
+
               
               {product.is_public && (
                 <Button variant="outline" className="w-full justify-start" onClick={handleGenerateQRCode}>
@@ -772,115 +666,7 @@ export default function ProductDetail() {
         </div>
       </div>
 
-      {/* Full-Width Nutritional Information Section */}
-      <div className="mt-8">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5" />
-              Nutritional Information
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loadingNutrition ? (
-              <div className="space-y-3">
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-3/4" />
-                <Skeleton className="h-4 w-1/2" />
-              </div>
-            ) : nutritionalData ? (
-              <Tabs defaultValue="dashboard" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-                  <TabsTrigger value="warnings">Warnings</TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value="dashboard" className="space-y-4">
-                  <NutritionDashboard 
-                    data={transformedNutritionData}
-                  />
-                </TabsContent>
-                
-                <TabsContent value="warnings" className="space-y-4">
-                  <WarningSystem 
-                    warnings={transformedNutritionData?.warnings || []}
-                    nutritionData={transformedNutritionData}
-                  />
-                </TabsContent>
-              </Tabs>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <BarChart3 className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p>No nutritional data available</p>
-                <Button variant="outline" size="sm" className="mt-2" asChild>
-                  <Link to={`/nutrition?product_id=${product.id}`}>
-                    <Zap className="h-4 w-4 mr-2" />
-                    Analyze Nutrition
-                  </Link>
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
 
-      {/* Safety & Compliance Information - Moved to end */}
-      {nutritionalData && ((nutritionalData.cautions && nutritionalData.cautions.length > 0) || 
-        (nutritionalData.health_labels && nutritionalData.health_labels.filter(label => label.endsWith('_FREE')).length > 0)) && (
-        <div className="mt-8">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="h-5 w-5" />
-                Safety & Compliance
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {/* Allergen Information */}
-              {((nutritionalData.cautions && nutritionalData.cautions.length > 0) || 
-                (nutritionalData.health_labels && nutritionalData.health_labels.filter(label => label.endsWith('_FREE')).length > 0)) && (
-                <div className="space-y-3">
-                  {/* Contains Allergens (Cautions) */}
-                  {nutritionalData.cautions && nutritionalData.cautions.length > 0 && (
-                    <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                      <h4 className="font-medium text-yellow-900 mb-2 flex items-center gap-2">
-                        <AlertTriangle className="h-4 w-4" />
-                        Contains Allergens (Cautions)
-                      </h4>
-                      <div className="flex flex-wrap gap-2">
-                        {nutritionalData.cautions.map((caution: string) => (
-                          <Badge key={caution} variant="destructive">
-                            {caution}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Allergen-Free Status */}
-                  {nutritionalData.health_labels && nutritionalData.health_labels.filter(label => label.endsWith('_FREE')).length > 0 && (
-                    <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                      <h4 className="font-medium text-green-900 mb-2 flex items-center gap-2">
-                        <Shield className="h-4 w-4" />
-                        Allergen-Free Status
-                      </h4>
-                      <div className="flex flex-wrap gap-2">
-                        {nutritionalData.health_labels
-                          .filter(label => label.endsWith('_FREE'))
-                          .map((label: string) => (
-                            <Badge key={label} variant="secondary" className="bg-green-100 text-green-800">
-                              {label.replace('_FREE', '').toLowerCase().replace('_', ' ')}-free
-                            </Badge>
-                          ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
     </div>
   )
 }

@@ -2,7 +2,6 @@
 // This file contains helper functions for calculating serving-related information
 
 import { NutritionData } from '@/types/nutrition';
-import { Recipe } from '@/types/recipe';
 
 // Interface for serving information calculations
 export interface ServingCalculations {
@@ -48,21 +47,17 @@ export const calculateServingInfo = (
     portion_size?: string;
     serving_type?: string;
   },
-  selectedRecipe?: Recipe,
   nutritionData?: NutritionData
 ): ServingCalculations => {
-  // Priority: Form data > Recipe data > Nutrition data > Defaults
+  // Priority: Form data > Nutrition data > Defaults
   
   const servingsCount = 
     formData?.total_servings ||
-    selectedRecipe?.servingInfo?.servings ||
     nutritionData?.servings ||
     1;
 
   const servingsPerContainer = 
     formData?.servings_per_container ||
-    selectedRecipe?.servings ||
-    selectedRecipe?.servingInfo?.servings ||
     1;
 
   const servingSize = 
@@ -71,7 +66,6 @@ export const calculateServingInfo = (
 
   const totalCalories = 
     nutritionData?.calories ||
-    selectedRecipe?.calories ||
     (formData?.calories_per_serving ? formData.calories_per_serving * servingsCount : 0);
 
   const totalWeight = 
@@ -80,7 +74,6 @@ export const calculateServingInfo = (
 
   const caloriesPerServing = 
     formData?.calories_per_serving ||
-    selectedRecipe?.servingInfo?.caloriesPerServing ||
     (nutritionData?.calories && nutritionData?.servings 
       ? Math.round(nutritionData.calories / nutritionData.servings)
       : Math.round(totalCalories / servingsCount));
@@ -91,12 +84,10 @@ export const calculateServingInfo = (
 
   const portionSize = 
     formData?.portion_size ||
-    selectedRecipe?.servingInfo?.portionSize ||
     'medium';
 
   const servingType = 
     formData?.serving_type ||
-    selectedRecipe?.servingInfo?.servingType ||
     'main';
 
   return {

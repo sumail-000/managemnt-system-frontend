@@ -474,7 +474,8 @@ export default function Billing() {
   }
 
   return (
-    <div className="flex-1 space-y-8 p-6 animate-fade-in">
+    <div className="flex-1 animate-fade-in">
+      <div className="container mx-auto px-6 py-8 max-w-6xl space-y-8">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div className="animate-fade-in">
@@ -1286,6 +1287,7 @@ export default function Billing() {
           </Card>
         </div>
       )}
+      </div>
     </div>
   )
 }

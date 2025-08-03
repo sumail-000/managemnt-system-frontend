@@ -589,73 +589,7 @@ export const edamamAPI = {
     }
   },
   
-  // Recipe Search API
-  recipe: {
-    search: (query: string, params?: {
-      limit?: number;
-      diet?: string[];
-      health?: string[];
-      cuisineType?: string[];
-      mealType?: string[];
-      dishType?: string[];
-      calories?: string;
-      time?: string;
-      excluded?: string[];
-    }) => {
-      console.log('[EDAMAM_API] Recipe search request initiated', { query, params });
-      const searchParams = {
-        type: 'public',
-        q: query,
-        to: params?.limit || 10,
-        from: 0,
-        ...params
-      };
-      delete searchParams.limit; // Remove limit as we use 'to' instead
-      return api.get('/edamam/recipes/search', { params: searchParams });
-    },
-    
-    getById: (id: string) => {
-      console.log('[EDAMAM_API] Recipe details request initiated', { id });
-      return api.get('/edamam/recipes/show', { params: { id } });
-    },
-    
-    getRandom: (count: number = 10, params?: {
-      diet?: string[];
-      health?: string[];
-      cuisineType?: string[];
-      mealType?: string[];
-      dishType?: string[];
-    }) => {
-      console.log('[EDAMAM_API] Random recipes request initiated', { count, params });
-      return api.get('/edamam/recipes/random', { params: { count, ...params } });
-    },
-    
-    getSuggestions: (ingredients: string[], limit: number = 10) => {
-      console.log('[EDAMAM_API] Recipe suggestions request initiated', { ingredients, limit });
-      return api.get('/edamam/recipes/suggest', { params: { ingredients: ingredients.join(','), limit } });
-    },
-    
-    getFilters: () => {
-      console.log('[EDAMAM_API] Recipe filters request initiated');
-      return api.get('/edamam/recipes/filters');
-    },
-    
-    clearCache: () => {
-      console.log('[EDAMAM_API] Clear recipe cache request initiated');
-      return api.delete('/edamam/recipes/cache');
-    },
-    
-    generateIngredients: (productName: string, options?: {
-      limit?: number;
-      serving_size?: number;
-    }) => {
-      console.log('[EDAMAM_API] Generate ingredients request initiated', { productName, options });
-      return api.post('/edamam/recipes/generate-ingredients', {
-        product_name: productName,
-        ...options
-      });
-    }
-  },
+
   
   // Ingredients API
   ingredients: {
