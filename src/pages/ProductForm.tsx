@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from "@/components/ui/badge";
-import { Search, Plus, Trash2, ChevronLeft, ChevronRight, X, Loader2 } from 'lucide-react';
+import { Search, Plus, Trash2, ChevronLeft, ChevronRight, X, Loader2, PlusCircle } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -14,9 +15,9 @@ import { foodParserApi, ParseIngredientResponse } from '@/services/foodParserApi
 import { NutritionApi } from '@/services/nutritionApi';
 import { processSearchResults, SimpleIngredient } from '@/utils/recipeIngredientExtractor';
 import { performEnhancedSearch, performProgressiveEnhancedSearch, ProgressiveSearchCallback } from '@/utils/enhancedSearchProcessor';
-import { 
-  mapNutritionDataToFDAFormat, 
-  getEmptyNutritionData, 
+import {
+  mapNutritionDataToFDAFormat,
+  getEmptyNutritionData,
   getEmptyFDANutritionData,
   extractNutritionData,
   calculatePerServingNutrition,
@@ -24,8 +25,9 @@ import {
   mapPerServingDataToFDAFormat,
   FDANutritionData,
   NutritionData,
-  PerServingNutritionData 
+  PerServingNutritionData
 } from '@/utils/nutritionDataMapper';
+import { CustomIngredientData } from '@/types/customIngredient';
 
 interface AddedIngredient {
   id: string;
@@ -42,27 +44,57 @@ interface AddedIngredient {
   allergens: string[];
   nutritionProportion?: {
     calories: number;
+    // Macronutrients
     totalFat: number;
     saturatedFat: number;
     transFat: number;
+    monounsaturatedFat: number;
+    polyunsaturatedFat: number;
     cholesterol: number;
     sodium: number;
     totalCarbohydrate: number;
     dietaryFiber: number;
     totalSugars: number;
     addedSugars: number;
+    sugarAlcohol: number;
     protein: number;
+    
+    // Comprehensive Vitamins - Based on exact API response structure
+    vitaminA?: number;
+    vitaminC?: number;
     vitaminD: number;
+    vitaminE?: number;
+    vitaminK?: number;
+    thiamin?: number;
+    riboflavin?: number;
+    niacin?: number;
+    vitaminB6?: number;
+    folate?: number;
+    vitaminB12?: number;
+    pantothenicAcid?: number;
+    
+    // Comprehensive Minerals - Based on exact API response structure
     calcium: number;
     iron: number;
     potassium: number;
-    // Daily values (percentages)
+    phosphorus?: number;
+    magnesium?: number;
+    zinc?: number;
+    selenium?: number;
+    copper?: number;
+    manganese?: number;
+    
+    // Daily values (percentages) - Basic nutrients
     totalFatDV: number;
     saturatedFatDV: number;
+    monounsaturatedFatDV: number;
+    polyunsaturatedFatDV: number;
     cholesterolDV: number;
     sodiumDV: number;
     totalCarbohydrateDV: number;
     dietaryFiberDV: number;
+    addedSugarsDV: number;
+    sugarAlcoholDV: number;
     proteinDV: number;
     vitaminDDV: number;
     calciumDV: number;
@@ -72,6 +104,9 @@ interface AddedIngredient {
 }
 
 export default function ProductForm() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [addedIngredients, setAddedIngredients] = useState<AddedIngredient[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -110,8 +145,112 @@ export default function ProductForm() {
   const [packagesFromRecipe, setPackagesFromRecipe] = useState<number>(1.42);
   const [servingSizeWeight, setServingSizeWeight] = useState<number>(224);
   const [servingSizeNumber, setServingSizeNumber] = useState<number>(1);
+
+  // Cache key for localStorage
+  const RECIPE_STATE_CACHE_KEY = 'recipe_state_cache';
   
 
+  // Cache functions for state preservation
+  const saveStateToCache = () => {
+    const currentState = {
+      recipeName,
+      addedIngredients,
+      isRecipeCreated,
+      searchQuery,
+      hasSearched,
+      searchResults,
+      totalResults,
+      currentPage,
+      servingsPerContainer,
+      servingSizeWeight,
+      servingSizeNumber,
+      labelSetupMode,
+      netWeightPerPackage,
+      servingsPerPackage,
+      timestamp: Date.now()
+    };
+    
+    try {
+      localStorage.setItem(RECIPE_STATE_CACHE_KEY, JSON.stringify(currentState));
+    } catch (error) {
+      console.warn('Failed to save recipe state to cache:', error);
+    }
+  };
+
+  const loadStateFromCache = () => {
+    try {
+      const cachedState = localStorage.getItem(RECIPE_STATE_CACHE_KEY);
+      if (cachedState) {
+        const parsedState = JSON.parse(cachedState);
+        
+        // Check if cache is not too old (1 hour max)
+        const maxAge = 60 * 60 * 1000; // 1 hour in milliseconds
+        if (Date.now() - parsedState.timestamp < maxAge) {
+          return parsedState;
+        } else {
+          // Clear old cache
+          localStorage.removeItem(RECIPE_STATE_CACHE_KEY);
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load recipe state from cache:', error);
+      localStorage.removeItem(RECIPE_STATE_CACHE_KEY);
+    }
+    return null;
+  };
+
+  const clearStateCache = () => {
+    try {
+      localStorage.removeItem(RECIPE_STATE_CACHE_KEY);
+    } catch (error) {
+      console.warn('Failed to clear recipe state cache:', error);
+    }
+  };
+
+  // Initialize state from cache on component mount
+  useEffect(() => {
+    const cachedState = loadStateFromCache();
+    if (cachedState) {
+      // Restore all the cached state
+      setRecipeName(cachedState.recipeName || '');
+      setAddedIngredients(cachedState.addedIngredients || []);
+      setIsRecipeCreated(cachedState.isRecipeCreated || false);
+      setSearchQuery(cachedState.searchQuery || '');
+      setHasSearched(cachedState.hasSearched || false);
+      setSearchResults(cachedState.searchResults || []);
+      setTotalResults(cachedState.totalResults || 0);
+      setCurrentPage(cachedState.currentPage || 1);
+      setServingsPerContainer(cachedState.servingsPerContainer || 1);
+      setServingSizeWeight(cachedState.servingSizeWeight || 224);
+      setServingSizeNumber(cachedState.servingSizeNumber || 1);
+      setLabelSetupMode(cachedState.labelSetupMode || 'package');
+      setNetWeightPerPackage(cachedState.netWeightPerPackage || 100);
+      setServingsPerPackage(cachedState.servingsPerPackage || 1);
+      
+      // Restore ingredient names tracking set
+      if (cachedState.addedIngredients) {
+        const ingredientNames = new Set<string>(
+          cachedState.addedIngredients.map((ing: AddedIngredient) => ing.name.toLowerCase().trim())
+        );
+        setAddedIngredientNames(ingredientNames);
+      }
+      
+      // Clear cache after successful restoration
+      clearStateCache();
+    }
+  }, []);
+
+  // Handle custom ingredient data returned from the custom ingredient page
+  useEffect(() => {
+    if (location.state?.customIngredient) {
+      const customIngredientData = location.state.customIngredient as CustomIngredientData;
+      handleCustomIngredientSubmit(customIngredientData);
+      
+      // Clear the state to prevent re-processing on subsequent renders
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state, navigate]);
+  
   // Analyze nutrition when ingredients change - but only if local recalculation isn't possible
   useEffect(() => {
     if (addedIngredients.length === 0) {
@@ -194,7 +333,7 @@ export default function ProductForm() {
     }
   };
   
-  // Function to calculate nutrition proportions for each ingredient
+  // Function to calculate nutrition proportions for each ingredient with comprehensive vitamins/minerals
   const calculateNutritionProportions = (ingredients: AddedIngredient[], totalNutrition: NutritionData) => {
     const totalGrams = ingredients.reduce((sum, ing) => sum + ing.grams, 0);
     if (totalGrams === 0) return ingredients;
@@ -205,27 +344,57 @@ export default function ProductForm() {
         ...ingredient,
         nutritionProportion: {
           calories: totalNutrition.calories * proportion,
+          // Macronutrients
           totalFat: totalNutrition.totalNutrients.FAT.quantity * proportion,
           saturatedFat: totalNutrition.totalNutrients.FASAT.quantity * proportion,
           transFat: totalNutrition.totalNutrients.FATRN.quantity * proportion,
+          monounsaturatedFat: (totalNutrition.totalNutrients.FAMS?.quantity || 0) * proportion,
+          polyunsaturatedFat: (totalNutrition.totalNutrients.FAPU?.quantity || 0) * proportion,
           cholesterol: totalNutrition.totalNutrients.CHOLE.quantity * proportion,
           sodium: totalNutrition.totalNutrients.NA.quantity * proportion,
           totalCarbohydrate: totalNutrition.totalNutrients.CHOCDF.quantity * proportion,
           dietaryFiber: totalNutrition.totalNutrients.FIBTG.quantity * proportion,
           totalSugars: totalNutrition.totalNutrients.SUGAR.quantity * proportion,
           addedSugars: 0, // Not available in current structure
+          sugarAlcohol: 0, // Not available in current structure
           protein: totalNutrition.totalNutrients.PROCNT.quantity * proportion,
+          
+          // Comprehensive Vitamins - Based on exact API response structure
+          vitaminA: (totalNutrition.totalNutrients.VITA_RAE?.quantity || 0) * proportion,
+          vitaminC: (totalNutrition.totalNutrients.VITC?.quantity || 0) * proportion,
           vitaminD: totalNutrition.totalNutrients.VITD.quantity * proportion,
+          vitaminE: (totalNutrition.totalNutrients.TOCPHA?.quantity || 0) * proportion,
+          vitaminK: (totalNutrition.totalNutrients.VITK1?.quantity || 0) * proportion,
+          thiamin: (totalNutrition.totalNutrients.THIA?.quantity || 0) * proportion,
+          riboflavin: (totalNutrition.totalNutrients.RIBF?.quantity || 0) * proportion,
+          niacin: (totalNutrition.totalNutrients.NIA?.quantity || 0) * proportion,
+          vitaminB6: (totalNutrition.totalNutrients.VITB6A?.quantity || 0) * proportion,
+          folate: (totalNutrition.totalNutrients.FOLDFE?.quantity || 0) * proportion,
+          vitaminB12: (totalNutrition.totalNutrients.VITB12?.quantity || 0) * proportion,
+          pantothenicAcid: (totalNutrition.totalNutrients.PANTAC?.quantity || 0) * proportion,
+          
+          // Comprehensive Minerals - Based on exact API response structure
           calcium: totalNutrition.totalNutrients.CA.quantity * proportion,
           iron: totalNutrition.totalNutrients.FE.quantity * proportion,
           potassium: totalNutrition.totalNutrients.K.quantity * proportion,
-          // Daily values (percentages)
+          phosphorus: (totalNutrition.totalNutrients.P?.quantity || 0) * proportion,
+          magnesium: totalNutrition.totalNutrients.MG.quantity * proportion,
+          zinc: (totalNutrition.totalNutrients.ZN?.quantity || 0) * proportion,
+          selenium: (totalNutrition.totalNutrients.SE?.quantity || 0) * proportion,
+          copper: (totalNutrition.totalNutrients.CU?.quantity || 0) * proportion,
+          manganese: (totalNutrition.totalNutrients.MN?.quantity || 0) * proportion,
+          
+          // Daily values (percentages) - Basic nutrients
           totalFatDV: totalNutrition.totalDaily.FAT.quantity * proportion,
           saturatedFatDV: totalNutrition.totalDaily.FASAT.quantity * proportion,
+          monounsaturatedFatDV: 0, // No DV established for monounsaturated fats
+          polyunsaturatedFatDV: 0, // No DV established for polyunsaturated fats
           cholesterolDV: totalNutrition.totalDaily.CHOLE.quantity * proportion,
           sodiumDV: totalNutrition.totalDaily.NA.quantity * proportion,
           totalCarbohydrateDV: totalNutrition.totalDaily.CHOCDF.quantity * proportion,
           dietaryFiberDV: totalNutrition.totalDaily.FIBTG.quantity * proportion,
+          addedSugarsDV: 0, // Not available in current structure
+          sugarAlcoholDV: 0, // No DV established for sugar alcohols
           proteinDV: totalNutrition.totalDaily.PROCNT.quantity * proportion,
           vitaminDDV: totalNutrition.totalDaily.VITD.quantity * proportion,
           calciumDV: totalNutrition.totalDaily.CA.quantity * proportion,
@@ -253,20 +422,43 @@ export default function ProductForm() {
       calories: 0,
       totalWeight: currentTotalGrams,
       totalNutrients: {
+        // Macronutrients
         FAT: { label: 'Total lipid (fat)', quantity: 0, unit: 'g' },
         FASAT: { label: 'Fatty acids, total saturated', quantity: 0, unit: 'g' },
         FATRN: { label: 'Fatty acids, total trans', quantity: 0, unit: 'g' },
+        FAMS: { label: 'Fatty acids, total monounsaturated', quantity: 0, unit: 'g' },
+        FAPU: { label: 'Fatty acids, total polyunsaturated', quantity: 0, unit: 'g' },
         CHOCDF: { label: 'Carbohydrate, by difference', quantity: 0, unit: 'g' },
         FIBTG: { label: 'Fiber, total dietary', quantity: 0, unit: 'g' },
         SUGAR: { label: 'Sugars, total', quantity: 0, unit: 'g' },
         PROCNT: { label: 'Protein', quantity: 0, unit: 'g' },
         CHOLE: { label: 'Cholesterol', quantity: 0, unit: 'mg' },
         NA: { label: 'Sodium, Na', quantity: 0, unit: 'mg' },
+        
+        // Comprehensive Vitamins
+        VITA_RAE: { label: 'Vitamin A, RAE', quantity: 0, unit: 'µg' },
+        VITC: { label: 'Vitamin C, total ascorbic acid', quantity: 0, unit: 'mg' },
+        VITD: { label: 'Vitamin D (D2 + D3)', quantity: 0, unit: 'µg' },
+        TOCPHA: { label: 'Vitamin E (alpha-tocopherol)', quantity: 0, unit: 'mg' },
+        VITK1: { label: 'Vitamin K (phylloquinone)', quantity: 0, unit: 'µg' },
+        THIA: { label: 'Thiamin', quantity: 0, unit: 'mg' },
+        RIBF: { label: 'Riboflavin', quantity: 0, unit: 'mg' },
+        NIA: { label: 'Niacin', quantity: 0, unit: 'mg' },
+        VITB6A: { label: 'Vitamin B-6', quantity: 0, unit: 'mg' },
+        FOLDFE: { label: 'Folate, DFE', quantity: 0, unit: 'µg' },
+        VITB12: { label: 'Vitamin B-12', quantity: 0, unit: 'µg' },
+        PANTAC: { label: 'Pantothenic acid', quantity: 0, unit: 'mg' },
+        
+        // Comprehensive Minerals
         CA: { label: 'Calcium, Ca', quantity: 0, unit: 'mg' },
-        MG: { label: 'Magnesium, Mg', quantity: 0, unit: 'mg' },
-        K: { label: 'Potassium, K', quantity: 0, unit: 'mg' },
         FE: { label: 'Iron, Fe', quantity: 0, unit: 'mg' },
-        VITD: { label: 'Vitamin D', quantity: 0, unit: 'µg' }
+        K: { label: 'Potassium, K', quantity: 0, unit: 'mg' },
+        P: { label: 'Phosphorus, P', quantity: 0, unit: 'mg' },
+        MG: { label: 'Magnesium, Mg', quantity: 0, unit: 'mg' },
+        ZN: { label: 'Zinc, Zn', quantity: 0, unit: 'mg' },
+        SE: { label: 'Selenium, Se', quantity: 0, unit: 'µg' },
+        CU: { label: 'Copper, Cu', quantity: 0, unit: 'mg' },
+        MN: { label: 'Manganese, Mn', quantity: 0, unit: 'mg' }
       },
       totalDaily: {
         FAT: { label: 'Total lipid (fat)', quantity: 0, unit: '%' },
@@ -297,19 +489,44 @@ export default function ProductForm() {
         
         // Scale all nutrition values for this ingredient
         recalculatedNutrition.calories += ingredient.nutritionProportion.calories * ingredientScaling;
+        
+        // Macronutrients
         recalculatedNutrition.totalNutrients.FAT.quantity += ingredient.nutritionProportion.totalFat * ingredientScaling;
         recalculatedNutrition.totalNutrients.FASAT.quantity += ingredient.nutritionProportion.saturatedFat * ingredientScaling;
         recalculatedNutrition.totalNutrients.FATRN.quantity += ingredient.nutritionProportion.transFat * ingredientScaling;
+        recalculatedNutrition.totalNutrients.FAMS.quantity += ingredient.nutritionProportion.monounsaturatedFat * ingredientScaling;
+        recalculatedNutrition.totalNutrients.FAPU.quantity += ingredient.nutritionProportion.polyunsaturatedFat * ingredientScaling;
         recalculatedNutrition.totalNutrients.CHOLE.quantity += ingredient.nutritionProportion.cholesterol * ingredientScaling;
         recalculatedNutrition.totalNutrients.NA.quantity += ingredient.nutritionProportion.sodium * ingredientScaling;
         recalculatedNutrition.totalNutrients.CHOCDF.quantity += ingredient.nutritionProportion.totalCarbohydrate * ingredientScaling;
         recalculatedNutrition.totalNutrients.FIBTG.quantity += ingredient.nutritionProportion.dietaryFiber * ingredientScaling;
         recalculatedNutrition.totalNutrients.SUGAR.quantity += ingredient.nutritionProportion.totalSugars * ingredientScaling;
         recalculatedNutrition.totalNutrients.PROCNT.quantity += ingredient.nutritionProportion.protein * ingredientScaling;
+        
+        // Comprehensive Vitamins
+        recalculatedNutrition.totalNutrients.VITA_RAE.quantity += (ingredient.nutritionProportion.vitaminA || 0) * ingredientScaling;
+        recalculatedNutrition.totalNutrients.VITC.quantity += (ingredient.nutritionProportion.vitaminC || 0) * ingredientScaling;
         recalculatedNutrition.totalNutrients.VITD.quantity += ingredient.nutritionProportion.vitaminD * ingredientScaling;
+        recalculatedNutrition.totalNutrients.TOCPHA.quantity += (ingredient.nutritionProportion.vitaminE || 0) * ingredientScaling;
+        recalculatedNutrition.totalNutrients.VITK1.quantity += (ingredient.nutritionProportion.vitaminK || 0) * ingredientScaling;
+        recalculatedNutrition.totalNutrients.THIA.quantity += (ingredient.nutritionProportion.thiamin || 0) * ingredientScaling;
+        recalculatedNutrition.totalNutrients.RIBF.quantity += (ingredient.nutritionProportion.riboflavin || 0) * ingredientScaling;
+        recalculatedNutrition.totalNutrients.NIA.quantity += (ingredient.nutritionProportion.niacin || 0) * ingredientScaling;
+        recalculatedNutrition.totalNutrients.VITB6A.quantity += (ingredient.nutritionProportion.vitaminB6 || 0) * ingredientScaling;
+        recalculatedNutrition.totalNutrients.FOLDFE.quantity += (ingredient.nutritionProportion.folate || 0) * ingredientScaling;
+        recalculatedNutrition.totalNutrients.VITB12.quantity += (ingredient.nutritionProportion.vitaminB12 || 0) * ingredientScaling;
+        recalculatedNutrition.totalNutrients.PANTAC.quantity += (ingredient.nutritionProportion.pantothenicAcid || 0) * ingredientScaling;
+        
+        // Comprehensive Minerals
         recalculatedNutrition.totalNutrients.CA.quantity += ingredient.nutritionProportion.calcium * ingredientScaling;
         recalculatedNutrition.totalNutrients.FE.quantity += ingredient.nutritionProportion.iron * ingredientScaling;
         recalculatedNutrition.totalNutrients.K.quantity += ingredient.nutritionProportion.potassium * ingredientScaling;
+        recalculatedNutrition.totalNutrients.P.quantity += (ingredient.nutritionProportion.phosphorus || 0) * ingredientScaling;
+        recalculatedNutrition.totalNutrients.MG.quantity += (ingredient.nutritionProportion.magnesium || 0) * ingredientScaling;
+        recalculatedNutrition.totalNutrients.ZN.quantity += (ingredient.nutritionProportion.zinc || 0) * ingredientScaling;
+        recalculatedNutrition.totalNutrients.SE.quantity += (ingredient.nutritionProportion.selenium || 0) * ingredientScaling;
+        recalculatedNutrition.totalNutrients.CU.quantity += (ingredient.nutritionProportion.copper || 0) * ingredientScaling;
+        recalculatedNutrition.totalNutrients.MN.quantity += (ingredient.nutritionProportion.manganese || 0) * ingredientScaling;
         
         // Scale daily values for this ingredient
         recalculatedNutrition.totalDaily.FAT.quantity += ingredient.nutritionProportion.totalFatDV * ingredientScaling;
@@ -1108,6 +1325,111 @@ export default function ProductForm() {
     setLoadingIngredientName(null);
   };
 
+  const handleCustomIngredientSubmit = async (ingredientData: CustomIngredientData) => {
+    try {
+      // Create a custom ingredient object that matches AddedIngredient interface
+      const customIngredient: AddedIngredient = {
+        id: `custom-${Date.now()}`,
+        name: ingredientData.name,
+        quantity: 1,
+        unit: ingredientData.servingUnit,
+        waste: 0.0,
+        grams: ingredientData.servingSize,
+        availableMeasures: [
+          {
+            uri: `custom-measure-${ingredientData.servingUnit}`,
+            label: ingredientData.servingUnit,
+            weight: ingredientData.servingSize
+          }
+        ],
+        allergens: ingredientData.allergens.contains || [],
+        // Add nutrition proportion based on custom ingredient data
+        nutritionProportion: {
+          calories: ingredientData.nutrition.calories,
+          // Macronutrients
+          totalFat: ingredientData.nutrition.fat,
+          saturatedFat: ingredientData.nutrition.saturatedFat,
+          transFat: ingredientData.nutrition.transFat,
+          monounsaturatedFat: 0, // Not available in custom ingredient form
+          polyunsaturatedFat: 0, // Not available in custom ingredient form
+          cholesterol: ingredientData.nutrition.cholesterol,
+          sodium: ingredientData.nutrition.sodium,
+          totalCarbohydrate: ingredientData.nutrition.carbohydrates,
+          dietaryFiber: ingredientData.nutrition.fiber,
+          totalSugars: ingredientData.nutrition.sugars,
+          addedSugars: ingredientData.nutrition.addedSugars,
+          sugarAlcohol: 0, // Not available in custom ingredient form
+          protein: ingredientData.nutrition.protein,
+          
+          // Comprehensive Vitamins - Use custom ingredient data or default to 0
+          vitaminA: ingredientData.nutrition.vitaminA || 0,
+          vitaminC: ingredientData.nutrition.vitaminC || 0,
+          vitaminD: ingredientData.nutrition.vitaminD || 0,
+          vitaminE: 0, // Not available in custom ingredient form
+          vitaminK: 0, // Not available in custom ingredient form
+          thiamin: ingredientData.nutrition.thiamine || 0, // Note: thiamine with 'e'
+          riboflavin: ingredientData.nutrition.riboflavin || 0,
+          niacin: ingredientData.nutrition.niacin || 0,
+          vitaminB6: ingredientData.nutrition.vitaminB6 || 0,
+          folate: ingredientData.nutrition.folate || 0,
+          vitaminB12: ingredientData.nutrition.vitaminB12 || 0,
+          pantothenicAcid: ingredientData.nutrition.pantothenicAcid || 0,
+          
+          // Comprehensive Minerals - Use custom ingredient data or default to 0
+          calcium: ingredientData.nutrition.calcium,
+          iron: ingredientData.nutrition.iron,
+          potassium: ingredientData.nutrition.potassium || 0,
+          phosphorus: ingredientData.nutrition.phosphorus || 0,
+          magnesium: ingredientData.nutrition.magnesium || 0,
+          zinc: ingredientData.nutrition.zinc || 0,
+          selenium: ingredientData.nutrition.selenium || 0,
+          copper: ingredientData.nutrition.copper || 0,
+          manganese: ingredientData.nutrition.manganese || 0,
+          
+          // Daily values - calculate based on standard daily values
+          totalFatDV: (ingredientData.nutrition.fat / 65) * 100,
+          saturatedFatDV: (ingredientData.nutrition.saturatedFat / 20) * 100,
+          monounsaturatedFatDV: 0, // No DV established for monounsaturated fats
+          polyunsaturatedFatDV: 0, // No DV established for polyunsaturated fats
+          cholesterolDV: (ingredientData.nutrition.cholesterol / 300) * 100,
+          sodiumDV: (ingredientData.nutrition.sodium / 2300) * 100,
+          totalCarbohydrateDV: (ingredientData.nutrition.carbohydrates / 300) * 100,
+          dietaryFiberDV: (ingredientData.nutrition.fiber / 25) * 100,
+          addedSugarsDV: (ingredientData.nutrition.addedSugars / 50) * 100,
+          sugarAlcoholDV: 0, // No DV established for sugar alcohols
+          proteinDV: (ingredientData.nutrition.protein / 50) * 100,
+          vitaminDDV: ((ingredientData.nutrition.vitaminD || 0) / 20) * 100,
+          calciumDV: (ingredientData.nutrition.calcium / 1000) * 100,
+          ironDV: (ingredientData.nutrition.iron / 18) * 100,
+          potassiumDV: ((ingredientData.nutrition.potassium || 0) / 3500) * 100
+        }
+      };
+
+      // Add the custom ingredient to the recipe
+      setAddedIngredients(prev => [...prev, customIngredient]);
+      
+      // Add to tracking set
+      const ingredientKey = ingredientData.name.toLowerCase().trim();
+      setAddedIngredientNames(prev => {
+        const newSet = new Set(prev);
+        newSet.add(ingredientKey);
+        return newSet;
+      });
+      
+    } catch (error) {
+      console.error('Error adding custom ingredient:', error);
+    }
+  };
+
+  const handleOpenCustomIngredient = () => {
+    // Save current state to cache before navigating
+    saveStateToCache();
+    
+    // Navigate to the custom ingredient page with return URL
+    const currentPath = location.pathname;
+    navigate(`/ingredients/create?returnTo=${encodeURIComponent(currentPath)}`);
+  };
+
   return (
       <div className="container mx-auto py-4 px-3">
         {/* Show header only when recipe is created */}
@@ -1290,50 +1612,68 @@ export default function ProductForm() {
             </Card>
           )}
           
+          
           {/* Search Bar */}
           <Card>
             <CardContent className="pt-6">
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                  <Input
-                    placeholder="Search ingredients..."
-                    value={searchQuery}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setSearchQuery(value);
-                      setCurrentPage(1);
-                      
-                      // Clear results if query becomes empty
-                      if (value.trim().length === 0) {
-                        setSearchResults([]);
-                        setHasSearched(false);
-                        setTotalResults(0);
-                        setTotalPages(0);
-                        setSearchError(null);
-                      }
-                    }}
-                    onKeyPress={handleKeyPress}
-                    className="pl-10"
-                  />
+              <div className="space-y-4">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                    <Input
+                      placeholder="Search ingredients..."
+                      value={searchQuery}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setSearchQuery(value);
+                        setCurrentPage(1);
+                        
+                        // Clear results if query becomes empty
+                        if (value.trim().length === 0) {
+                          setSearchResults([]);
+                          setHasSearched(false);
+                          setTotalResults(0);
+                          setTotalPages(0);
+                          setSearchError(null);
+                        }
+                      }}
+                      onKeyPress={handleKeyPress}
+                      className="pl-10"
+                    />
+                  </div>
+                  {!hasSearched ? (
+                    <Button
+                      onClick={handleSearch}
+                      disabled={!searchQuery.trim() || isSearching}
+                      className="px-6"
+                    >
+                      {isSearching ? 'Searching...' : 'Search'}
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={handleCancelSearch}
+                      variant="outline"
+                      className="px-4"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
-                {!hasSearched ? (
-                  <Button 
-                    onClick={handleSearch} 
-                    disabled={!searchQuery.trim() || isSearching}
-                    className="px-6"
-                  >
-                    {isSearching ? 'Searching...' : 'Search'}
-                  </Button>
-                ) : (
-                  <Button 
-                    onClick={handleCancelSearch} 
-                    variant="outline"
-                    className="px-4"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                )}
+                
+                {/* Permanent Custom Ingredient Link */}
+                <div className="border-t pt-4">
+                  <div className="text-center">
+                    <p className="text-sm text-gray-600 mb-3">Can't find an ingredient you're looking for?</p>
+                    <Button
+                      variant="outline"
+                      onClick={handleOpenCustomIngredient}
+                      className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create your own ingredient
+                    </Button>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -1513,7 +1853,16 @@ export default function ProductForm() {
                 
                 {/* FDA Nutrition Label - Uses actual nutrition data or fallback to zeros */}
                 <div>
-                  <FDANutritionLabel data={nutritionData} />
+                  <FDANutritionLabel
+                    data={nutritionData}
+                    showActionButtons={true}
+                    realIngredients={addedIngredients.map(ing => ({
+                      name: ing.name,
+                      allergens: ing.allergens
+                    }))}
+                    realAllergens={[...new Set(addedIngredients.flatMap(ing => ing.allergens))]}
+                    recipeName={recipeName}
+                  />
                 </div>
               </div>
             </CardContent>
@@ -1764,6 +2113,7 @@ export default function ProductForm() {
           </DialogContent>
         </Dialog>
 
+        {/* Custom Ingredient Modal - Removed, now using page navigation */}
 
       </div>
   );

@@ -7,22 +7,45 @@ export interface NutritionData {
   calories: number;
   totalWeight: number;
   
-  // Total nutrients (raw quantities)
+  // Total nutrients (raw quantities) - Based on exact API response structure
   totalNutrients: {
+    // Macronutrients
     FAT: { label: string; quantity: number; unit: string };
     FASAT: { label: string; quantity: number; unit: string };
     FATRN: { label: string; quantity: number; unit: string };
+    FAMS: { label: string; quantity: number; unit: string }; // Monounsaturated fats
+    FAPU: { label: string; quantity: number; unit: string }; // Polyunsaturated fats
     CHOCDF: { label: string; quantity: number; unit: string };
     FIBTG: { label: string; quantity: number; unit: string };
     SUGAR: { label: string; quantity: number; unit: string };
     PROCNT: { label: string; quantity: number; unit: string };
     CHOLE: { label: string; quantity: number; unit: string };
     NA: { label: string; quantity: number; unit: string };
-    CA: { label: string; quantity: number; unit: string };
-    MG: { label: string; quantity: number; unit: string };
-    K: { label: string; quantity: number; unit: string };
-    FE: { label: string; quantity: number; unit: string };
-    VITD: { label: string; quantity: number; unit: string };
+    
+    // Comprehensive Vitamins - Based on exact API response structure
+    VITA_RAE?: { label: string; quantity: number; unit: string }; // Vitamin A, RAE
+    VITC?: { label: string; quantity: number; unit: string }; // Vitamin C, total ascorbic acid
+    VITD: { label: string; quantity: number; unit: string }; // Vitamin D (D2 + D3)
+    TOCPHA?: { label: string; quantity: number; unit: string }; // Vitamin E (alpha-tocopherol)
+    VITK1?: { label: string; quantity: number; unit: string }; // Vitamin K (phylloquinone)
+    THIA?: { label: string; quantity: number; unit: string }; // Thiamin
+    RIBF?: { label: string; quantity: number; unit: string }; // Riboflavin
+    NIA?: { label: string; quantity: number; unit: string }; // Niacin
+    VITB6A?: { label: string; quantity: number; unit: string }; // Vitamin B-6
+    FOLDFE?: { label: string; quantity: number; unit: string }; // Folate, DFE
+    VITB12?: { label: string; quantity: number; unit: string }; // Vitamin B-12
+    PANTAC?: { label: string; quantity: number; unit: string }; // Pantothenic acid
+    
+    // Comprehensive Minerals - Based on exact API response structure
+    CA: { label: string; quantity: number; unit: string }; // Calcium, Ca
+    FE: { label: string; quantity: number; unit: string }; // Iron, Fe
+    K: { label: string; quantity: number; unit: string }; // Potassium, K
+    P?: { label: string; quantity: number; unit: string }; // Phosphorus, P
+    MG: { label: string; quantity: number; unit: string }; // Magnesium, Mg
+    ZN?: { label: string; quantity: number; unit: string }; // Zinc, Zn
+    SE?: { label: string; quantity: number; unit: string }; // Selenium, Se
+    CU?: { label: string; quantity: number; unit: string }; // Copper, Cu
+    MN?: { label: string; quantity: number; unit: string }; // Manganese, Mn
   };
   
   // Daily values (percentages)
@@ -98,12 +121,15 @@ export interface FDANutritionData {
   totalFat: number;
   saturatedFat: number;
   transFat: number;
+  monounsaturatedFat: number;
+  polyunsaturatedFat: number;
   cholesterol: number;
   sodium: number;
   totalCarbohydrate: number;
   dietaryFiber: number;
   totalSugars: number;
   addedSugars: number;
+  sugarAlcohol: number;
   protein: number;
   
   // Vitamins and Minerals (per serving)
@@ -137,10 +163,14 @@ export interface FDANutritionData {
   // Daily Values (percentages per serving)
   totalFatDV: number;
   saturatedFatDV: number;
+  monounsaturatedFatDV: number;
+  polyunsaturatedFatDV: number;
   cholesterolDV: number;
   sodiumDV: number;
   totalCarbohydrateDV: number;
   dietaryFiberDV: number;
+  addedSugarsDV: number;
+  sugarAlcoholDV: number;
   proteinDV: number;
   vitaminDDV: number;
   calciumDV: number;
@@ -183,20 +213,43 @@ export function extractNutritionData(response: EdamamNutritionResponse): Nutriti
     totalWeight: totalWeight || 0,
     
     totalNutrients: {
+      // Macronutrients
       FAT: extractNutrient('FAT'),
       FASAT: extractNutrient('FASAT'),
       FATRN: extractNutrient('FATRN'),
+      FAMS: extractNutrient('FAMS'),
+      FAPU: extractNutrient('FAPU'),
       CHOCDF: extractNutrient('CHOCDF'),
       FIBTG: extractNutrient('FIBTG'),
       SUGAR: extractNutrient('SUGAR'),
       PROCNT: extractNutrient('PROCNT'),
       CHOLE: extractNutrient('CHOLE'),
       NA: extractNutrient('NA'),
-      CA: extractNutrient('CA'),
-      MG: extractNutrient('MG'),
-      K: extractNutrient('K'),
-      FE: extractNutrient('FE'),
+      
+      // Comprehensive Vitamins - Based on exact API response structure
+      VITA_RAE: extractNutrient('VITA_RAE'),
+      VITC: extractNutrient('VITC'),
       VITD: extractNutrient('VITD'),
+      TOCPHA: extractNutrient('TOCPHA'),
+      VITK1: extractNutrient('VITK1'),
+      THIA: extractNutrient('THIA'),
+      RIBF: extractNutrient('RIBF'),
+      NIA: extractNutrient('NIA'),
+      VITB6A: extractNutrient('VITB6A'),
+      FOLDFE: extractNutrient('FOLDFE'),
+      VITB12: extractNutrient('VITB12'),
+      PANTAC: extractNutrient('PANTAC'),
+      
+      // Comprehensive Minerals - Based on exact API response structure
+      CA: extractNutrient('CA'),
+      FE: extractNutrient('FE'),
+      K: extractNutrient('K'),
+      P: extractNutrient('P'),
+      MG: extractNutrient('MG'),
+      ZN: extractNutrient('ZN'),
+      SE: extractNutrient('SE'),
+      CU: extractNutrient('CU'),
+      MN: extractNutrient('MN'),
     },
     
     totalDaily: {
@@ -284,9 +337,10 @@ export function calculatePerServingNutrition(
 }
 
 /**
- * Legacy function: Extracts and maps nutrition data from Edamam API response to FDA label format
+ * Comprehensive function: Extracts and maps nutrition data from Edamam API response to FDA label format
+ * Based on exact API response structure from nutritionapiresponse.json
  * @param response - The Edamam nutrition API response
- * @returns Mapped nutrition data for FDA label display
+ * @returns Mapped nutrition data for FDA label display with comprehensive vitamins/minerals
  */
 export function mapNutritionDataToFDAFormat(response: EdamamNutritionResponse): FDANutritionData {
   const { totalNutrients, totalDaily, calories, totalWeight } = response;
@@ -319,49 +373,60 @@ export function mapNutritionDataToFDAFormat(response: EdamamNutritionResponse): 
     totalFat: getPerServingValue(totalNutrients.FAT, 1),
     saturatedFat: getPerServingValue(totalNutrients.FASAT, 1),
     transFat: getPerServingValue(totalNutrients.FATRN, 1),
+    monounsaturatedFat: getPerServingValue(totalNutrients.FAMS, 1),
+    polyunsaturatedFat: getPerServingValue(totalNutrients.FAPU, 1),
     cholesterol: getPerServingValue(totalNutrients.CHOLE, 0),
     sodium: getPerServingValue(totalNutrients.NA, 0),
     totalCarbohydrate: getPerServingValue(totalNutrients.CHOCDF, 1),
     dietaryFiber: getPerServingValue(totalNutrients.FIBTG, 1),
     totalSugars: getPerServingValue(totalNutrients.SUGAR, 1),
     addedSugars: getPerServingValue(totalNutrients['SUGAR.added'], 1),
+    sugarAlcohol: 0, // Not available in current API response
     protein: getPerServingValue(totalNutrients.PROCNT, 1),
     
-    // Vitamins and Minerals (per serving)
-    vitaminD: getPerServingValue(totalNutrients.VITD, 1),
-    calcium: getPerServingValue(totalNutrients.CA, 0),
-    iron: getPerServingValue(totalNutrients.FE, 1),
-    potassium: getPerServingValue(totalNutrients.K, 0),
-    vitaminA: getPerServingValue(totalNutrients.VITA_RAE, 0),
-    vitaminC: getPerServingValue(totalNutrients.VITC, 1),
-    vitaminE: getPerServingValue(totalNutrients.TOCPHA, 1),
-    vitaminK: getPerServingValue(totalNutrients.VITK1, 1),
-    thiamin: getPerServingValue(totalNutrients.THIA, 2),
-    riboflavin: getPerServingValue(totalNutrients.RIBF, 2),
-    niacin: getPerServingValue(totalNutrients.NIA, 1),
-    vitaminB6: getPerServingValue(totalNutrients.VITB6A, 2),
-    folate: getPerServingValue(totalNutrients.FOLDFE, 0),
-    vitaminB12: getPerServingValue(totalNutrients.VITB12, 2),
+    // Comprehensive Vitamins (per serving) - Based on exact API response structure
+    vitaminA: getPerServingValue(totalNutrients.VITA_RAE, 0), // Vitamin A, RAE (µg)
+    vitaminC: getPerServingValue(totalNutrients.VITC, 1), // Vitamin C, total ascorbic acid (mg)
+    vitaminD: getPerServingValue(totalNutrients.VITD, 1), // Vitamin D (D2 + D3) (µg)
+    vitaminE: getPerServingValue(totalNutrients.TOCPHA, 1), // Vitamin E (alpha-tocopherol) (mg)
+    vitaminK: getPerServingValue(totalNutrients.VITK1, 1), // Vitamin K (phylloquinone) (µg)
+    thiamin: getPerServingValue(totalNutrients.THIA, 2), // Thiamin (mg)
+    riboflavin: getPerServingValue(totalNutrients.RIBF, 2), // Riboflavin (mg)
+    niacin: getPerServingValue(totalNutrients.NIA, 1), // Niacin (mg)
+    vitaminB6: getPerServingValue(totalNutrients.VITB6A, 2), // Vitamin B-6 (mg)
+    folate: getPerServingValue(totalNutrients.FOLDFE, 0), // Folate, DFE (µg)
+    vitaminB12: getPerServingValue(totalNutrients.VITB12, 2), // Vitamin B-12 (µg)
+    pantothenicAcid: getPerServingValue(totalNutrients.PANTAC, 1), // Pantothenic acid (mg)
+    
+    // Comprehensive Minerals (per serving) - Based on exact API response structure
+    calcium: getPerServingValue(totalNutrients.CA, 0), // Calcium, Ca (mg)
+    iron: getPerServingValue(totalNutrients.FE, 1), // Iron, Fe (mg)
+    potassium: getPerServingValue(totalNutrients.K, 0), // Potassium, K (mg)
+    phosphorus: getPerServingValue(totalNutrients.P, 0), // Phosphorus, P (mg)
+    magnesium: getPerServingValue(totalNutrients.MG, 0), // Magnesium, Mg (mg)
+    zinc: getPerServingValue(totalNutrients.ZN, 1), // Zinc, Zn (mg)
+    selenium: getPerServingValue(totalNutrients.SE, 1), // Selenium, Se (µg)
+    copper: getPerServingValue(totalNutrients.CU, 2), // Copper, Cu (mg)
+    manganese: getPerServingValue(totalNutrients.MN, 2), // Manganese, Mn (mg)
+    
+    // Legacy minerals (not in current API response but kept for compatibility)
     biotin: getPerServingValue(totalNutrients.BIOTC, 1),
-    pantothenicAcid: getPerServingValue(totalNutrients.PANTAC, 1),
-    phosphorus: getPerServingValue(totalNutrients.P, 0),
     iodine: getPerServingValue(totalNutrients.ID, 0),
-    magnesium: getPerServingValue(totalNutrients.MG, 0),
-    zinc: getPerServingValue(totalNutrients.ZN, 1),
-    selenium: getPerServingValue(totalNutrients.SE, 1),
-    copper: getPerServingValue(totalNutrients.CU, 2),
-    manganese: getPerServingValue(totalNutrients.MN, 2),
     chromium: getPerServingValue(totalNutrients.CR, 1),
     molybdenum: getPerServingValue(totalNutrients.MO, 1),
     chloride: getPerServingValue(totalNutrients.CLD, 0),
     
-    // Daily Values (percentages per serving)
+    // Daily Values (percentages per serving) - Based on exact API response structure
     totalFatDV: getDailyValuePercentage(totalDaily.FAT),
     saturatedFatDV: getDailyValuePercentage(totalDaily.FASAT),
+    monounsaturatedFatDV: 0, // No DV established for monounsaturated fats
+    polyunsaturatedFatDV: 0, // No DV established for polyunsaturated fats
     cholesterolDV: getDailyValuePercentage(totalDaily.CHOLE),
     sodiumDV: getDailyValuePercentage(totalDaily.NA),
     totalCarbohydrateDV: getDailyValuePercentage(totalDaily.CHOCDF),
     dietaryFiberDV: getDailyValuePercentage(totalDaily.FIBTG),
+    addedSugarsDV: 0, // Calculate from added sugars if available
+    sugarAlcoholDV: 0, // No DV established for sugar alcohols
     proteinDV: getDailyValuePercentage(totalDaily.PROCNT),
     vitaminDDV: getDailyValuePercentage(totalDaily.VITD),
     calciumDV: getDailyValuePercentage(totalDaily.CA),
@@ -384,12 +449,15 @@ export function mapPerServingDataToFDAFormat(perServingData: PerServingNutrition
     totalFat: perServingData.nutrients.FAT.quantity,
     saturatedFat: perServingData.nutrients.FASAT.quantity,
     transFat: perServingData.nutrients.FATRN.quantity,
+    monounsaturatedFat: 0, // Not available in current per-serving structure
+    polyunsaturatedFat: 0, // Not available in current per-serving structure
     cholesterol: perServingData.nutrients.CHOLE.quantity,
     sodium: perServingData.nutrients.NA.quantity,
     totalCarbohydrate: perServingData.nutrients.CHOCDF.quantity,
     dietaryFiber: perServingData.nutrients.FIBTG.quantity,
     totalSugars: perServingData.nutrients.SUGAR.quantity,
     addedSugars: 0, // Not available in per-serving data
+    sugarAlcohol: 0, // Not available in per-serving data
     protein: perServingData.nutrients.PROCNT.quantity,
     
     // Vitamins and Minerals
@@ -423,10 +491,14 @@ export function mapPerServingDataToFDAFormat(perServingData: PerServingNutrition
     // Daily Values (percentages)
     totalFatDV: perServingData.dailyValues.FAT.quantity,
     saturatedFatDV: perServingData.dailyValues.FASAT.quantity,
+    monounsaturatedFatDV: 0, // No DV established
+    polyunsaturatedFatDV: 0, // No DV established
     cholesterolDV: perServingData.dailyValues.CHOLE.quantity,
     sodiumDV: perServingData.dailyValues.NA.quantity,
     totalCarbohydrateDV: perServingData.dailyValues.CHOCDF.quantity,
     dietaryFiberDV: perServingData.dailyValues.FIBTG.quantity,
+    addedSugarsDV: 0, // Not available in per-serving data
+    sugarAlcoholDV: 0, // No DV established
     proteinDV: perServingData.dailyValues.PROCNT.quantity,
     vitaminDDV: perServingData.dailyValues.VITD.quantity,
     calciumDV: perServingData.dailyValues.CA.quantity,
@@ -448,20 +520,43 @@ export function getEmptyNutritionData(): NutritionData {
     totalWeight: 0,
     
     totalNutrients: {
+      // Macronutrients
       FAT: emptyNutrient,
       FASAT: emptyNutrient,
       FATRN: emptyNutrient,
+      FAMS: emptyNutrient,
+      FAPU: emptyNutrient,
       CHOCDF: emptyNutrient,
       FIBTG: emptyNutrient,
       SUGAR: emptyNutrient,
       PROCNT: emptyNutrient,
       CHOLE: emptyNutrient,
       NA: emptyNutrient,
-      CA: emptyNutrient,
-      MG: emptyNutrient,
-      K: emptyNutrient,
-      FE: emptyNutrient,
+      
+      // Comprehensive Vitamins
+      VITA_RAE: emptyNutrient,
+      VITC: emptyNutrient,
       VITD: emptyNutrient,
+      TOCPHA: emptyNutrient,
+      VITK1: emptyNutrient,
+      THIA: emptyNutrient,
+      RIBF: emptyNutrient,
+      NIA: emptyNutrient,
+      VITB6A: emptyNutrient,
+      FOLDFE: emptyNutrient,
+      VITB12: emptyNutrient,
+      PANTAC: emptyNutrient,
+      
+      // Comprehensive Minerals
+      CA: emptyNutrient,
+      FE: emptyNutrient,
+      K: emptyNutrient,
+      P: emptyNutrient,
+      MG: emptyNutrient,
+      ZN: emptyNutrient,
+      SE: emptyNutrient,
+      CU: emptyNutrient,
+      MN: emptyNutrient,
     },
     
     totalDaily: {
@@ -495,12 +590,15 @@ export function getEmptyFDANutritionData(): FDANutritionData {
     totalFat: 0,
     saturatedFat: 0,
     transFat: 0,
+    monounsaturatedFat: 0,
+    polyunsaturatedFat: 0,
     cholesterol: 0,
     sodium: 0,
     totalCarbohydrate: 0,
     dietaryFiber: 0,
     totalSugars: 0,
     addedSugars: 0,
+    sugarAlcohol: 0,
     protein: 0,
     
     // Vitamins and Minerals
@@ -534,10 +632,14 @@ export function getEmptyFDANutritionData(): FDANutritionData {
     // Daily Values
     totalFatDV: 0,
     saturatedFatDV: 0,
+    monounsaturatedFatDV: 0,
+    polyunsaturatedFatDV: 0,
     cholesterolDV: 0,
     sodiumDV: 0,
     totalCarbohydrateDV: 0,
     dietaryFiberDV: 0,
+    addedSugarsDV: 0,
+    sugarAlcoholDV: 0,
     proteinDV: 0,
     vitaminDDV: 0,
     calciumDV: 0,

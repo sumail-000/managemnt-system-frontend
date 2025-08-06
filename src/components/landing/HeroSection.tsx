@@ -55,7 +55,7 @@ export function HeroSection() {
                 </Link>
               </Button>
               <Button size="xl" variant="outline" className="group border-green-500 text-green-600 hover:bg-green-50" asChild>
-                <Link to="/sample-label">
+                <Link to="/nutrition-label">
                   Try Our Sample Label
                 </Link>
               </Button>

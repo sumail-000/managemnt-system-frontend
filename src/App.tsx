@@ -19,11 +19,12 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ResetPassword from "./pages/ResetPassword";
 import Blog from "./pages/Blog";
-import SampleLabel from "./pages/SampleLabel";
+import NutritionLabel from "./pages/NutritionLabel";
 import NotFound from "./pages/NotFound";
 import QRCodes from "./pages/QRCodes";
 import Favorites from "./pages/Favorites";
 import Settings from "./pages/Settings";
+import { CustomIngredientPage } from "./pages/CustomIngredientPage";
 
 import PaymentForm from "./components/payment/PaymentForm";
 
@@ -69,7 +70,7 @@ const App = () => {
       <Route path="/forgot-password" element={<ResetPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/blog" element={<Blog />} />
-      <Route path="/sample-label" element={<SampleLabel />} />
+      <Route path="/nutrition-label" element={<NutritionLabel />} />
       <Route path="/public/product/:id" element={<PublicProductView />} />
       
       {/* Protected Dashboard Routes */}
@@ -121,8 +122,13 @@ const App = () => {
         </ProtectedRoute>
       } />
       
+      {/* Custom Ingredient Routes */}
+      <Route path="/ingredients/create" element={
+        <ProtectedRoute>
+          <CustomIngredientPage />
+        </ProtectedRoute>
+      } />
 
-      
       <Route path="/categories" element={
         <ProtectedRoute>
           <DashboardLayout>

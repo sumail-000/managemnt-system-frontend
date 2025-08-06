@@ -103,6 +103,12 @@ export interface AllergenData {
   };
 }
 
+export interface VitaminsAndMineralsData {
+  entryType: 'percentage' | 'actual';
+  vitamins: Record<string, number>;
+  minerals: Record<string, number>;
+}
+
 export interface CustomIngredientData {
   // General Information
   name: string;
@@ -119,11 +125,13 @@ export interface CustomIngredientData {
   servingUnit: string;
   nutrition: NutritionData;
   nutritionNotes?: string;
-}
-
-export interface CustomIngredientFormProps {
-  onBack: () => void;
-  onSave: (ingredientData: CustomIngredientData) => void;
+  
+  // Extended Nutrition Information
+  vitaminsAndMinerals?: VitaminsAndMineralsData;
+  additionalNutrients?: Record<string, number>;
+  
+  // Save mode flag
+  saveOnly?: boolean;
 }
 
 // Legacy interface for backward compatibility
