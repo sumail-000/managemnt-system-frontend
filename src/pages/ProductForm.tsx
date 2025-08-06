@@ -621,6 +621,166 @@ export default function ProductForm() {
     }
    };
 
+  // Function to handle package configuration changes
+  const handlePackageConfigChange = (netWeight: number, servingsPerPkg: number) => {
+    if (!rawNutritionData || netWeight <= 0 || servingsPerPkg <= 0) return;
+    
+    // Calculate serving size based on package configuration
+    const servingSizeGrams = netWeight / servingsPerPkg;
+    
+    // Calculate scaling factor based on package weight vs total recipe weight
+    const packageScalingFactor = netWeight / rawNutritionData.totalWeight;
+    
+    // Create package-based per-serving nutrition data
+    const packagePerServingData: PerServingNutritionData = {
+      servingsPerContainer: servingsPerPkg,
+      servingSize: `${Math.round(servingSizeGrams)}g`,
+      servingSizeGrams: Math.round(servingSizeGrams),
+      calories: Math.round((rawNutritionData.calories * packageScalingFactor) / servingsPerPkg),
+      
+      nutrients: {
+        FAT: {
+          label: rawNutritionData.totalNutrients.FAT.label,
+          quantity: Math.round((rawNutritionData.totalNutrients.FAT.quantity * packageScalingFactor / servingsPerPkg) * 100) / 100,
+          unit: rawNutritionData.totalNutrients.FAT.unit
+        },
+        FASAT: {
+          label: rawNutritionData.totalNutrients.FASAT.label,
+          quantity: Math.round((rawNutritionData.totalNutrients.FASAT.quantity * packageScalingFactor / servingsPerPkg) * 100) / 100,
+          unit: rawNutritionData.totalNutrients.FASAT.unit
+        },
+        FATRN: {
+          label: rawNutritionData.totalNutrients.FATRN.label,
+          quantity: Math.round((rawNutritionData.totalNutrients.FATRN.quantity * packageScalingFactor / servingsPerPkg) * 100) / 100,
+          unit: rawNutritionData.totalNutrients.FATRN.unit
+        },
+        CHOCDF: {
+          label: rawNutritionData.totalNutrients.CHOCDF.label,
+          quantity: Math.round((rawNutritionData.totalNutrients.CHOCDF.quantity * packageScalingFactor / servingsPerPkg) * 100) / 100,
+          unit: rawNutritionData.totalNutrients.CHOCDF.unit
+        },
+        FIBTG: {
+          label: rawNutritionData.totalNutrients.FIBTG.label,
+          quantity: Math.round((rawNutritionData.totalNutrients.FIBTG.quantity * packageScalingFactor / servingsPerPkg) * 100) / 100,
+          unit: rawNutritionData.totalNutrients.FIBTG.unit
+        },
+        SUGAR: {
+          label: rawNutritionData.totalNutrients.SUGAR.label,
+          quantity: Math.round((rawNutritionData.totalNutrients.SUGAR.quantity * packageScalingFactor / servingsPerPkg) * 100) / 100,
+          unit: rawNutritionData.totalNutrients.SUGAR.unit
+        },
+        PROCNT: {
+          label: rawNutritionData.totalNutrients.PROCNT.label,
+          quantity: Math.round((rawNutritionData.totalNutrients.PROCNT.quantity * packageScalingFactor / servingsPerPkg) * 100) / 100,
+          unit: rawNutritionData.totalNutrients.PROCNT.unit
+        },
+        CHOLE: {
+          label: rawNutritionData.totalNutrients.CHOLE.label,
+          quantity: Math.round((rawNutritionData.totalNutrients.CHOLE.quantity * packageScalingFactor / servingsPerPkg) * 100) / 100,
+          unit: rawNutritionData.totalNutrients.CHOLE.unit
+        },
+        NA: {
+          label: rawNutritionData.totalNutrients.NA.label,
+          quantity: Math.round((rawNutritionData.totalNutrients.NA.quantity * packageScalingFactor / servingsPerPkg) * 100) / 100,
+          unit: rawNutritionData.totalNutrients.NA.unit
+        },
+        CA: {
+          label: rawNutritionData.totalNutrients.CA.label,
+          quantity: Math.round((rawNutritionData.totalNutrients.CA.quantity * packageScalingFactor / servingsPerPkg) * 100) / 100,
+          unit: rawNutritionData.totalNutrients.CA.unit
+        },
+        MG: {
+          label: rawNutritionData.totalNutrients.MG.label,
+          quantity: Math.round((rawNutritionData.totalNutrients.MG.quantity * packageScalingFactor / servingsPerPkg) * 100) / 100,
+          unit: rawNutritionData.totalNutrients.MG.unit
+        },
+        K: {
+          label: rawNutritionData.totalNutrients.K.label,
+          quantity: Math.round((rawNutritionData.totalNutrients.K.quantity * packageScalingFactor / servingsPerPkg) * 100) / 100,
+          unit: rawNutritionData.totalNutrients.K.unit
+        },
+        FE: {
+          label: rawNutritionData.totalNutrients.FE.label,
+          quantity: Math.round((rawNutritionData.totalNutrients.FE.quantity * packageScalingFactor / servingsPerPkg) * 100) / 100,
+          unit: rawNutritionData.totalNutrients.FE.unit
+        },
+        VITD: {
+          label: rawNutritionData.totalNutrients.VITD.label,
+          quantity: Math.round((rawNutritionData.totalNutrients.VITD.quantity * packageScalingFactor / servingsPerPkg) * 100) / 100,
+          unit: rawNutritionData.totalNutrients.VITD.unit
+        }
+      },
+      
+      dailyValues: {
+        FAT: {
+          label: rawNutritionData.totalDaily.FAT.label,
+          quantity: Math.round((rawNutritionData.totalDaily.FAT.quantity * packageScalingFactor / servingsPerPkg) * 100) / 100,
+          unit: rawNutritionData.totalDaily.FAT.unit
+        },
+        FASAT: {
+          label: rawNutritionData.totalDaily.FASAT.label,
+          quantity: Math.round((rawNutritionData.totalDaily.FASAT.quantity * packageScalingFactor / servingsPerPkg) * 100) / 100,
+          unit: rawNutritionData.totalDaily.FASAT.unit
+        },
+        CHOCDF: {
+          label: rawNutritionData.totalDaily.CHOCDF.label,
+          quantity: Math.round((rawNutritionData.totalDaily.CHOCDF.quantity * packageScalingFactor / servingsPerPkg) * 100) / 100,
+          unit: rawNutritionData.totalDaily.CHOCDF.unit
+        },
+        FIBTG: {
+          label: rawNutritionData.totalDaily.FIBTG.label,
+          quantity: Math.round((rawNutritionData.totalDaily.FIBTG.quantity * packageScalingFactor / servingsPerPkg) * 100) / 100,
+          unit: rawNutritionData.totalDaily.FIBTG.unit
+        },
+        PROCNT: {
+          label: rawNutritionData.totalDaily.PROCNT.label,
+          quantity: Math.round((rawNutritionData.totalDaily.PROCNT.quantity * packageScalingFactor / servingsPerPkg) * 100) / 100,
+          unit: rawNutritionData.totalDaily.PROCNT.unit
+        },
+        CHOLE: {
+          label: rawNutritionData.totalDaily.CHOLE.label,
+          quantity: Math.round((rawNutritionData.totalDaily.CHOLE.quantity * packageScalingFactor / servingsPerPkg) * 100) / 100,
+          unit: rawNutritionData.totalDaily.CHOLE.unit
+        },
+        NA: {
+          label: rawNutritionData.totalDaily.NA.label,
+          quantity: Math.round((rawNutritionData.totalDaily.NA.quantity * packageScalingFactor / servingsPerPkg) * 100) / 100,
+          unit: rawNutritionData.totalDaily.NA.unit
+        },
+        CA: {
+          label: rawNutritionData.totalDaily.CA.label,
+          quantity: Math.round((rawNutritionData.totalDaily.CA.quantity * packageScalingFactor / servingsPerPkg) * 100) / 100,
+          unit: rawNutritionData.totalDaily.CA.unit
+        },
+        MG: {
+          label: rawNutritionData.totalDaily.MG.label,
+          quantity: Math.round((rawNutritionData.totalDaily.MG.quantity * packageScalingFactor / servingsPerPkg) * 100) / 100,
+          unit: rawNutritionData.totalDaily.MG.unit
+        },
+        K: {
+          label: rawNutritionData.totalDaily.K.label,
+          quantity: Math.round((rawNutritionData.totalDaily.K.quantity * packageScalingFactor / servingsPerPkg) * 100) / 100,
+          unit: rawNutritionData.totalDaily.K.unit
+        },
+        FE: {
+          label: rawNutritionData.totalDaily.FE.label,
+          quantity: Math.round((rawNutritionData.totalDaily.FE.quantity * packageScalingFactor / servingsPerPkg) * 100) / 100,
+          unit: rawNutritionData.totalDaily.FE.unit
+        },
+        VITD: {
+          label: rawNutritionData.totalDaily.VITD.label,
+          quantity: Math.round((rawNutritionData.totalDaily.VITD.quantity * packageScalingFactor / servingsPerPkg) * 100) / 100,
+          unit: rawNutritionData.totalDaily.VITD.unit
+        }
+      }
+    };
+    
+    // Update the per-serving data and FDA nutrition data
+    setPerServingData(packagePerServingData);
+    const fdaNutritionData = mapPerServingDataToFDAFormat(packagePerServingData);
+    setNutritionData(fdaNutritionData);
+  };
+
   // Function to update nutrition data based on serving size
   const updateNutritionForServingSize = (servingNumber: number, servingWeight: number, nutritionData?: NutritionData) => {
     const dataToUse = nutritionData || rawNutritionData;
@@ -950,47 +1110,53 @@ export default function ProductForm() {
 
   return (
       <div className="container mx-auto py-4 px-3">
-        {/* Step-by-step Wizard Header */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-4">
-            <h1 className="text-2xl font-bold">
-              {isRecipeCreated && recipeName ? recipeName : 'New Recipe'}
-            </h1>
-            <Button variant="outline" size="sm" onClick={handleRename}>
-               🏷️ Rename...
-             </Button>
+        {/* Show header only when recipe is created */}
+        {isRecipeCreated && (
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-4">
+                <h1 className="text-2xl font-bold text-gray-900">
+                  {recipeName || 'Recipe'}
+                </h1>
+                <Button variant="outline" size="sm" onClick={handleRename} className="flex items-center gap-2">
+                  🏷️ Rename...
+                </Button>
+                <Button variant="outline" size="sm" className="flex items-center gap-2">
+                  🏷️ Add Tags...
+                </Button>
+              </div>
+              <div className="text-sm text-blue-600">
+                Updated about 3 hours ago
+              </div>
+            </div>
+            
+            {/* Wizard Tabs */}
+            <div className="border-b border-gray-200">
+              <nav className="flex space-x-8">
+                {[
+                  { id: 'recipe', label: 'Recipe' },
+                  { id: 'ingredient-statement', label: 'Ingredient Statement' },
+                  { id: 'allergens', label: 'Allergens' },
+                  { id: 'label', label: 'Label' },
+                  { id: 'cost', label: 'Cost' },
+                  { id: 'more', label: 'More' }
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+                      activeTab === tab.id
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </nav>
+            </div>
           </div>
-          <div className="text-sm text-gray-500">
-            Updated less than a minute ago
-          </div>
-        
-        {/* Wizard Tabs */}
-        <div className="border-b border-gray-200">
-          <nav className="flex space-x-8">
-            {[
-              { id: 'recipe', label: 'Recipe' },
-              { id: 'ingredient-statement', label: 'Ingredient Statement' },
-              { id: 'allergens', label: 'Allergens' },
-              { id: 'label', label: 'Label' },
-              { id: 'cost', label: 'Cost' },
-              { id: 'more', label: 'More' }
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === tab.id
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </nav>
-        </div>
-      </div>
+        )}
 
       {/* Main Content - Only show after recipe is created */}
       {isRecipeCreated ? (
@@ -1405,7 +1571,11 @@ export default function ProductForm() {
                         id="netWeight"
                         type="number"
                         value={netWeightPerPackage}
-                        onChange={(e) => setNetWeightPerPackage(Number(e.target.value))}
+                        onChange={(e) => {
+                          const newWeight = Number(e.target.value);
+                          setNetWeightPerPackage(newWeight);
+                          handlePackageConfigChange(newWeight, servingsPerPackage);
+                        }}
                         className="flex-1"
                         min="0"
                         step="0.1"
@@ -1435,7 +1605,11 @@ export default function ProductForm() {
                       id="servingsPerPkg"
                       type="number"
                       value={servingsPerPackage}
-                      onChange={(e) => setServingsPerPackage(Number(e.target.value))}
+                      onChange={(e) => {
+                        const newServings = Number(e.target.value);
+                        setServingsPerPackage(newServings);
+                        handlePackageConfigChange(netWeightPerPackage, newServings);
+                      }}
                       min="0.1"
                       step="0.1"
                     />
@@ -1497,17 +1671,15 @@ export default function ProductForm() {
         )}
         </div>
       ) : (
-        !isRecipeNameModalOpen && (
-          <div className="flex items-center justify-center h-64">
-            <div className="text-center">
-              <h2 className="text-xl font-semibold text-gray-600 mb-2">No Recipe Created</h2>
-              <p className="text-gray-500 mb-4">Please create a recipe to get started.</p>
-              <Button onClick={() => setIsRecipeNameModalOpen(true)}>
-                Create New Recipe
-              </Button>
-            </div>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <h2 className="text-xl font-semibold text-gray-600 mb-2">Create Your Recipe</h2>
+            <p className="text-gray-500 mb-4">Start by giving your recipe a name</p>
+            <Button onClick={() => setIsRecipeNameModalOpen(true)}>
+              Create New Recipe
+            </Button>
           </div>
-        )
+        </div>
       )}
 
         {/* Add Recipe Modal */}
@@ -1594,5 +1766,5 @@ export default function ProductForm() {
 
 
       </div>
-    </div>
-  )};
+  );
+}
