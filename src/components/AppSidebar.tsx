@@ -29,8 +29,8 @@ import {
 
 const coreItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-  { title: "Products", url: "/products", icon: Package },
-  { title: "Add Product", url: "/products/new", icon: Plus },
+  { title: "Recipes", url: "/products", icon: Package },
+  { title: "Add Recipe", url: "/products/new", icon: Plus },
 ]
 
 const contentManagementItems = [

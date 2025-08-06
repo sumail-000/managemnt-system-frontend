@@ -50,7 +50,7 @@ import { NotificationSettings } from "@/components/notifications/NotificationSet
 
 const coreNavItems = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { title: "Products", href: "/products", icon: Package },
+  { title: "Recipes", href: "/products", icon: Package },
   { title: "Categories", href: "/categories", icon: Tag },
   { title: "Labels", href: "/labels", icon: FileText },
   { title: "QR Codes", href: "/qr-codes", icon: QrCode },
@@ -164,7 +164,7 @@ export function HeaderNavigation() {
                               Dashboard
                             </div>
                             <p className="text-sm leading-tight text-muted-foreground">
-                              Overview of your products, analytics, and quick actions.
+                              Overview of your recipes, analytics, and quick actions.
                             </p>
                           </NavLink>
                         </NavigationMenuLink>
@@ -183,8 +183,8 @@ export function HeaderNavigation() {
                               <div className="text-sm font-medium leading-none">{item.title}</div>
                             </div>
                             <p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
-                              {item.title === "Products" && "Manage your food product inventory"}
-                              {item.title === "Categories" && "Organize products by categories"}
+                              {item.title === "Recipes" && "Manage your food recipe inventory"}
+                              {item.title === "Categories" && "Organize recipes by categories"}
                               {item.title === "Labels" && "Generate compliance labels"}
                               {item.title === "QR Codes" && "Create digital QR codes"}
                               {item.title === "Favorites" && "Your saved favorite items"}
@@ -209,9 +209,44 @@ export function HeaderNavigation() {
           <Button size="sm" className="hidden sm:flex bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 text-primary-foreground border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105" asChild>
             <NavLink to="/products/new">
               <Plus className="w-4 h-4 mr-2" />
-              Add Product
+              Add Recipe
             </NavLink>
           </Button>
+
+          {/* Settings Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="gap-2 hover:bg-accent/50 transition-colors">
+                <Settings className="h-4 w-4" />
+                <ChevronDown className="h-3 w-3 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72 p-2">
+              <DropdownMenuLabel className="text-sm font-medium px-2 py-2">
+                Settings & Administration
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {settingsNavItems.map((item) => (
+                <DropdownMenuItem key={item.href} asChild className="p-0">
+                  <NavLink
+                    to={item.href}
+                    className={cn(
+                      "flex items-start gap-3 rounded-md px-3 py-3 text-sm transition-colors hover:bg-accent w-full",
+                      isActive(item.href) && "bg-accent/70"
+                    )}
+                  >
+                    <div className="p-1.5 rounded-md bg-gradient-to-br from-primary/10 to-accent/10 mt-0.5">
+                      <item.icon className="h-4 w-4 text-primary" />
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <div className="font-medium">{item.title}</div>
+                      <div className="text-xs text-muted-foreground">{item.description}</div>
+                    </div>
+                  </NavLink>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* Notifications */}
           <DropdownMenu>
@@ -276,41 +311,6 @@ export function HeaderNavigation() {
                   View all notifications
                 </Button>
               </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* Settings Dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="gap-2 hover:bg-accent/50 transition-colors">
-                <Settings className="h-4 w-4" />
-                <ChevronDown className="h-3 w-3 opacity-50" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72 p-2">
-              <DropdownMenuLabel className="text-sm font-medium px-2 py-2">
-                Settings & Administration
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {settingsNavItems.map((item) => (
-                <DropdownMenuItem key={item.href} asChild className="p-0">
-                  <NavLink
-                    to={item.href}
-                    className={cn(
-                      "flex items-start gap-3 rounded-md px-3 py-3 text-sm transition-colors hover:bg-accent w-full",
-                      isActive(item.href) && "bg-accent/70"
-                    )}
-                  >
-                    <div className="p-1.5 rounded-md bg-gradient-to-br from-primary/10 to-accent/10 mt-0.5">
-                      <item.icon className="h-4 w-4 text-primary" />
-                    </div>
-                    <div className="flex-1 space-y-1">
-                      <div className="font-medium">{item.title}</div>
-                      <div className="text-xs text-muted-foreground">{item.description}</div>
-                    </div>
-                  </NavLink>
-                </DropdownMenuItem>
-              ))}
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -424,7 +424,7 @@ export function HeaderNavigation() {
               <Button size="sm" className="w-full justify-start bg-gradient-to-r from-primary to-accent text-primary-foreground" asChild>
                 <NavLink to="/products/new" onClick={() => setIsMobileMenuOpen(false)}>
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Product
+                  Add Recipe
                 </NavLink>
               </Button>
             </div>

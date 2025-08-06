@@ -471,10 +471,7 @@ export const paymentAPI = {
 export const edamamAPI = {
   // Food Database API
   food: {
-    autocomplete: (query: string, limit: number = 10) => {
-      console.log('[EDAMAM_API] Food autocomplete request initiated', { query, limit });
-      return api.get('/edamam/food/autocomplete', { params: { q: query, limit } });
-    },
+
     
     search: (query: string, params?: {
       limit?: number;
