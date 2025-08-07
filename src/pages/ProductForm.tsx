@@ -13,6 +13,7 @@ import { FDANutritionLabel } from '@/components/previewlabel/FDANutritionLabel';
 import { edamamDirectApi, EdamamSearchResult } from '@/services/edamamDirectApi';
 import { foodParserApi, ParseIngredientResponse } from '@/services/foodParserApi';
 import { NutritionApi } from '@/services/nutritionApi';
+import { ProgressiveRecipeApi, ProgressiveRecipeData, RecipeProgress } from '@/services/progressiveRecipeApi';
 import { processSearchResults, SimpleIngredient } from '@/utils/recipeIngredientExtractor';
 import { performEnhancedSearch, performProgressiveEnhancedSearch, ProgressiveSearchCallback } from '@/utils/enhancedSearchProcessor';
 import {
@@ -106,6 +107,11 @@ interface AddedIngredient {
 export default function ProductForm() {
   const navigate = useNavigate();
   const location = useLocation();
+  
+  // Progressive recipe state
+  const [currentRecipe, setCurrentRecipe] = useState<ProgressiveRecipeData | null>(null);
+  const [recipeProgress, setRecipeProgress] = useState<RecipeProgress | null>(null);
+  const [isCreatingRecipe, setIsCreatingRecipe] = useState(false);
   
   const [searchQuery, setSearchQuery] = useState('');
   const [addedIngredients, setAddedIngredients] = useState<AddedIngredient[]>([]);
@@ -207,7 +213,7 @@ export default function ProductForm() {
     }
   };
 
-  // Initialize state from cache on component mount
+  // Initialize state from cache on component mount and handle direct navigation
   useEffect(() => {
     const cachedState = loadStateFromCache();
     if (cachedState) {
@@ -237,8 +243,14 @@ export default function ProductForm() {
       
       // Clear cache after successful restoration
       clearStateCache();
+    } else {
+      // Check if this is a direct navigation to create new recipe
+      if (location.pathname === '/products/new' && !isRecipeCreated && !recipeName && !isRecipeNameModalOpen) {
+        // For direct navigation, only open recipe name modal, don't set isRecipeCreated yet
+        setIsRecipeNameModalOpen(true);
+      }
     }
-  }, []);
+  }, [location.pathname]); // Remove dependencies that cause loops
 
   // Handle custom ingredient data returned from the custom ingredient page
   useEffect(() => {
@@ -283,7 +295,7 @@ export default function ProductForm() {
       setNutritionError(null);
       
       // Convert ingredients to strings for API
-      const ingredientStrings = addedIngredients.map(ingredient => 
+      const ingredientStrings = addedIngredients.map(ingredient =>
         NutritionApi.buildIngredientString(
           ingredient.quantity,
           ingredient.unit,
@@ -324,12 +336,117 @@ export default function ProductForm() {
       // Use the new function to calculate nutrition data
       updateNutritionForServingSize(servingSizeNumber, defaultServingWeight, extractedData);
       
+      // Step 3: Save nutrition data to backend progressively
+      if (currentRecipe?.id) {
+        await saveNutritionToBackend(extractedData, defaultServings);
+      }
+      
     } catch (error: any) {
       setNutritionError(error.message || 'Failed to analyze nutrition');
       // Fallback to empty nutrition data
       initializeEmptyNutrition();
     } finally {
       setIsLoadingNutrition(false);
+    }
+  };
+
+  // Step 3: Live sync nutrition data to backend (save processed display data)
+  const saveNutritionToBackend = async (nutritionData: NutritionData, servingsPerContainer: number) => {
+    if (!currentRecipe?.id) {
+      console.warn('⚠️ No current recipe ID, skipping nutrition save');
+      return;
+    }
+    
+    try {
+      // Transform nutrition data to processed display format (what user sees)
+      const processedNutritionData = {
+        // Basic nutrition info
+        calories: nutritionData.calories,
+        total_weight: nutritionData.totalWeight,
+        yield: nutritionData.yield,
+        servings_per_container: servingsPerContainer,
+        
+        // Processed macronutrients (display values)
+        macronutrients: {
+          total_fat: nutritionData.totalNutrients.FAT.quantity,
+          saturated_fat: nutritionData.totalNutrients.FASAT.quantity,
+          trans_fat: nutritionData.totalNutrients.FATRN.quantity,
+          cholesterol: nutritionData.totalNutrients.CHOLE.quantity,
+          sodium: nutritionData.totalNutrients.NA.quantity,
+          total_carbohydrate: nutritionData.totalNutrients.CHOCDF.quantity,
+          dietary_fiber: nutritionData.totalNutrients.FIBTG.quantity,
+          total_sugars: nutritionData.totalNutrients.SUGAR.quantity,
+          protein: nutritionData.totalNutrients.PROCNT.quantity
+        },
+        
+        // Processed vitamins & minerals (display values)
+        vitamins_minerals: {
+          vitamin_d: nutritionData.totalNutrients.VITD.quantity,
+          calcium: nutritionData.totalNutrients.CA.quantity,
+          iron: nutritionData.totalNutrients.FE.quantity,
+          potassium: nutritionData.totalNutrients.K.quantity,
+          magnesium: nutritionData.totalNutrients.MG.quantity
+        },
+        
+        // Processed daily values (display percentages)
+        daily_values: {
+          total_fat_dv: nutritionData.totalDaily.FAT.quantity,
+          saturated_fat_dv: nutritionData.totalDaily.FASAT.quantity,
+          cholesterol_dv: nutritionData.totalDaily.CHOLE.quantity,
+          sodium_dv: nutritionData.totalDaily.NA.quantity,
+          total_carbohydrate_dv: nutritionData.totalDaily.CHOCDF.quantity,
+          dietary_fiber_dv: nutritionData.totalDaily.FIBTG.quantity,
+          protein_dv: nutritionData.totalDaily.PROCNT.quantity,
+          vitamin_d_dv: nutritionData.totalDaily.VITD.quantity,
+          calcium_dv: nutritionData.totalDaily.CA.quantity,
+          iron_dv: nutritionData.totalDaily.FE.quantity,
+          potassium_dv: nutritionData.totalDaily.K.quantity
+        },
+        
+        // Per-serving processed data (what displays on label)
+        per_serving_data: perServingData ? {
+          serving_size: perServingData.servingSize,
+          serving_size_grams: perServingData.servingSizeGrams,
+          calories_per_serving: perServingData.calories,
+          nutrients_per_serving: perServingData.nutrients,
+          daily_values_per_serving: perServingData.dailyValues
+        } : null
+      };
+      
+      console.log('🔄 Live sync: Saving processed nutrition data to backend:', {
+        recipeId: currentRecipe.id,
+        processedData: processedNutritionData
+      });
+      
+      const response = await ProgressiveRecipeApi.saveNutritionData(
+        currentRecipe.id,
+        processedNutritionData,
+        servingsPerContainer,
+        perServingData
+      );
+      
+      console.log('📡 Live sync nutrition API response:', response);
+      
+      if (response.success) {
+        console.log('✅ Live sync: Processed nutrition data saved successfully');
+        
+        // Update progress in real-time
+        try {
+          const progressResponse = await ProgressiveRecipeApi.getProgress(currentRecipe.id);
+          if (progressResponse.success) {
+            console.log('📊 Live nutrition progress update:', progressResponse.data.progress);
+            setRecipeProgress(progressResponse.data.progress);
+          }
+        } catch (progressError) {
+          console.error('❌ Live sync nutrition progress error:', progressError);
+        }
+      } else {
+        console.error('❌ Live sync nutrition failed:', response);
+        alert('Live sync nutrition failed: ' + (response.message || 'Unknown error'));
+      }
+    } catch (error: any) {
+      console.error('❌ Live sync nutrition error:', error);
+      alert('Live sync nutrition error: ' + (error.message || 'Network error'));
     }
   };
   
@@ -569,7 +686,6 @@ export default function ProductForm() {
   
   const handleAddIngredient = async (ingredient: SimpleIngredient, forceAdd: boolean = false) => {
     try {
-
       setLoadingIngredientName(ingredient.name);
       
       const ingredientKey = ingredient.name.toLowerCase().trim();
@@ -579,29 +695,22 @@ export default function ProductForm() {
         const isDuplicate = addedIngredientNames.has(ingredientKey);
         
         if (isDuplicate) {
-  
           setDuplicateIngredient(ingredient);
           setIsDuplicateDialogOpen(true);
           setLoadingIngredientName(null);
           return;
-        } else {
-  
         }
-      } else {
-  
       }
       
       // Add ingredient name to tracking set after duplicate check passes
       setAddedIngredientNames(prev => {
         const newSet = new Set(prev);
         newSet.add(ingredientKey);
-
         return newSet;
       });
       
       // Call the food parser API to get detailed ingredient data
       const parseResponse = await foodParserApi.parseIngredient(ingredient.name);
-
       
       if (!parseResponse) {
         console.error('❌ API call failed or no food data:', parseResponse);
@@ -610,11 +719,9 @@ export default function ProductForm() {
       
       const foodData = parseResponse;
       
-      
       // Check if we have parsed data
       if (foodData.parsed && foodData.parsed.length > 0) {
         const parsed = foodData.parsed[0];
-        
         
         // Get hints for available measures
         const hints = foodData.hints;
@@ -624,12 +731,10 @@ export default function ProductForm() {
         }
         
         const hint = hints[0];
-
         
         // Filter out measures without labels
         const allMeasures = hint.measures || [];
         let measures = allMeasures.filter(measure => measure.label && measure.label.trim() !== '');
-
         
         // Use actual parsed values - NO FALLBACKS
         if (!parsed.quantity) {
@@ -646,8 +751,6 @@ export default function ProductForm() {
         const actualMeasure = parsed.measure;
         const ingredientName = hint.food.label;
         
-
-        
         // Find the corresponding measure in availableMeasures to ensure consistency
         let correspondingMeasure = measures.find(m => m.label === actualMeasure.label);
         
@@ -662,8 +765,6 @@ export default function ProductForm() {
           // Add the parsed measure to the beginning of measures array for priority
           measures = [parsedMeasureToAdd, ...measures];
           correspondingMeasure = parsedMeasureToAdd;
-          
-
         }
         
         if (measures.length === 0) {
@@ -689,10 +790,15 @@ export default function ProductForm() {
           allergens: []
         };
         
-
+        // Add to local state first
         setAddedIngredients(prev => {
           const updated = [...prev, newIngredient];
-
+          
+          // Step 2: Save ingredients to backend progressively
+          if (currentRecipe?.id) {
+            saveIngredientsToBackend(updated);
+          }
+          
           return updated;
         });
         
@@ -702,9 +808,63 @@ export default function ProductForm() {
       
     } catch (error) {
       console.error('💥 Error adding ingredient:', error);
-      // No fallback - just log the error
     } finally {
       setLoadingIngredientName(null);
+    }
+  };
+
+  // Step 2: Live sync ingredients to backend (save processed display data)
+  const saveIngredientsToBackend = async (ingredients: AddedIngredient[]) => {
+    if (!currentRecipe?.id) {
+      console.warn('⚠️ No current recipe ID, skipping ingredient save');
+      return;
+    }
+    
+    try {
+      // Transform ingredients to processed display data format (not raw API data)
+      const processedIngredients = ingredients.map(ing => ({
+        id: ing.id,
+        name: ing.name,
+        quantity: ing.quantity,
+        unit: ing.unit,
+        waste_percentage: ing.waste,
+        grams: ing.grams,
+        available_measures: ing.availableMeasures,
+        allergens: ing.allergens,
+        // Include processed nutrition data if available
+        nutrition_proportion: ing.nutritionProportion || null
+      }));
+      
+      console.log('🔄 Live sync: Saving processed ingredient data to backend:', {
+        recipeId: currentRecipe.id,
+        ingredientCount: processedIngredients.length,
+        processedData: processedIngredients
+      });
+      
+      const response = await ProgressiveRecipeApi.addIngredients(currentRecipe.id, processedIngredients);
+      
+      console.log('📡 Live sync API response:', response);
+      
+      if (response.success) {
+        console.log('✅ Live sync: Processed ingredients saved successfully');
+        
+        // Update progress in real-time
+        try {
+          const progressResponse = await ProgressiveRecipeApi.getProgress(currentRecipe.id);
+          if (progressResponse.success) {
+            console.log('📊 Live progress update:', progressResponse.data.progress);
+            setRecipeProgress(progressResponse.data.progress);
+          }
+        } catch (progressError) {
+          console.error('❌ Live sync progress error:', progressError);
+        }
+      } else {
+        console.error('❌ Live sync failed:', response);
+        alert('Live sync failed: ' + (response.message || 'Unknown error'));
+      }
+    } catch (error: any) {
+      console.error('❌ Live sync error:', error);
+      alert('Live sync error: ' + (error.message || 'Network error'));
     }
   };
   
@@ -744,6 +904,12 @@ export default function ProductForm() {
       } else {
         // No ingredients left, initialize empty nutrition
         initializeEmptyNutrition();
+      }
+      
+      // Live sync: Immediately sync ingredient removal to backend
+      if (currentRecipe?.id) {
+        console.log('🔄 Live sync: Ingredient removed, syncing deletion to backend...');
+        saveIngredientsToBackend(updated);
       }
       
       return updated;
@@ -795,6 +961,12 @@ export default function ProductForm() {
       }
       // If local recalculation fails, the useEffect will trigger API call
       
+      // Live sync: Immediately sync ingredient update to backend
+      if (currentRecipe?.id) {
+        console.log('🔄 Live sync: Ingredient updated, syncing changes to backend...');
+        saveIngredientsToBackend(updated);
+      }
+      
       return updated;
     });
   };
@@ -839,7 +1011,7 @@ export default function ProductForm() {
    };
 
   // Function to handle package configuration changes
-  const handlePackageConfigChange = (netWeight: number, servingsPerPkg: number) => {
+  const handlePackageConfigChange = async (netWeight: number, servingsPerPkg: number) => {
     if (!rawNutritionData || netWeight <= 0 || servingsPerPkg <= 0) return;
     
     // Calculate serving size based on package configuration
@@ -996,6 +1168,90 @@ export default function ProductForm() {
     setPerServingData(packagePerServingData);
     const fdaNutritionData = mapPerServingDataToFDAFormat(packagePerServingData);
     setNutritionData(fdaNutritionData);
+    
+    // Step 4: Save serving configuration to backend
+    if (currentRecipe?.id) {
+      await saveServingConfigToBackend({
+        mode: 'package',
+        servings_per_container: servingsPerPkg,
+        serving_size_grams: Math.round(servingSizeGrams),
+        net_weight_per_package: netWeight,
+        servings_per_package: servingsPerPkg
+      });
+    }
+  };
+
+  // Step 4: Save serving configuration to backend
+  const saveServingConfigToBackend = async (servingConfig: any) => {
+    if (!currentRecipe?.id) {
+      console.warn('⚠️ No current recipe ID, skipping serving config save');
+      return;
+    }
+    
+    try {
+      console.log('🔄 Saving serving configuration to backend:', {
+        recipeId: currentRecipe.id,
+        servingConfig
+      });
+      
+      const response = await ProgressiveRecipeApi.configureServing(currentRecipe.id, servingConfig);
+      
+      console.log('📡 Serving config API response:', response);
+      
+      if (response.success) {
+        console.log('✅ Serving configuration saved to backend successfully:', response.data);
+        
+        // Update progress
+        try {
+          const progressResponse = await ProgressiveRecipeApi.getProgress(currentRecipe.id);
+          if (progressResponse.success) {
+            console.log('📊 Progress updated after serving config save:', progressResponse.data.progress);
+            setRecipeProgress(progressResponse.data.progress);
+            
+            // Step 5: Complete recipe if all steps are done
+            if (progressResponse.data.progress.current_step === 'serving_configured') {
+              console.log('🎯 All steps completed, finalizing recipe...');
+              await completeRecipe();
+            }
+          } else {
+            console.warn('⚠️ Failed to get progress after serving config save');
+          }
+        } catch (progressError) {
+          console.error('❌ Error getting progress after serving config save:', progressError);
+        }
+      } else {
+        console.error('❌ Serving config save failed:', response);
+        alert('Failed to save serving configuration: ' + (response.message || 'Unknown error'));
+      }
+    } catch (error: any) {
+      console.error('❌ Error saving serving configuration to backend:', error);
+      alert('Failed to save serving configuration: ' + (error.message || 'Network error'));
+    }
+  };
+
+  // Step 5: Complete recipe creation
+  const completeRecipe = async () => {
+    if (!currentRecipe?.id) return;
+    
+    try {
+      const response = await ProgressiveRecipeApi.completeRecipe(currentRecipe.id, false);
+      
+      if (response.success) {
+        console.log('✅ Recipe completed successfully:', response.data);
+        
+        // Update progress to show completion
+        const progressResponse = await ProgressiveRecipeApi.getProgress(currentRecipe.id);
+        if (progressResponse.success) {
+          setRecipeProgress(progressResponse.data.progress);
+        }
+        
+        // Show success message
+        alert('🎉 Recipe created successfully! Your nutrition label is ready.');
+      }
+    } catch (error: any) {
+      console.error('❌ Error completing recipe:', error);
+      alert('Failed to complete recipe: ' + error.message);
+    }
   };
 
   // Function to update nutrition data based on serving size
@@ -1279,18 +1535,74 @@ export default function ProductForm() {
     setIsRecipeNameModalOpen(true);
   };
 
-  const handleRecipeNameSubmit = () => {
-    if (recipeName.trim()) {
-      setIsRecipeNameModalOpen(false);
-      setIsRecipeCreated(true);
-      // Here you would typically create a new recipe with the given name
+  const handleRecipeNameSubmit = async () => {
+    if (recipeName.trim() && !isCreatingRecipe) {
+      setIsCreatingRecipe(true);
+      try {
+        console.log('🚀 Creating recipe with name:', recipeName.trim());
+        
+        // Step 1: Create recipe with progressive API
+        const response = await ProgressiveRecipeApi.createRecipe({
+          name: recipeName.trim(),
+          description: '',
+          is_public: false
+        });
+
+        console.log('📡 API Response:', response);
+
+        // Handle both direct response and wrapped response formats
+        const responseData = response.success ? response : response.data || response;
+        const recipeData = responseData.data || responseData;
+        
+        if (responseData.success !== false && recipeData) {
+          console.log('✅ Recipe created successfully, setting states...');
+          console.log('📦 Recipe data:', recipeData);
+          
+          // Set all states immediately after successful creation
+          setCurrentRecipe(recipeData);
+          setIsRecipeCreated(true);
+          setIsRecipeNameModalOpen(false);
+          
+          // Get initial progress
+          try {
+            const progressResponse = await ProgressiveRecipeApi.getProgress(recipeData.id!);
+            if (progressResponse.success) {
+              setRecipeProgress(progressResponse.data.progress);
+              console.log('📊 Progress loaded:', progressResponse.data.progress);
+            }
+          } catch (progressError) {
+            console.warn('⚠️ Failed to load progress, but recipe was created:', progressError);
+          }
+          
+          // Clear any existing cache to prevent conflicts
+          clearStateCache();
+          
+          console.log('🎉 Recipe creation completed successfully!');
+        } else {
+          throw new Error(responseData.error || responseData.message || 'Failed to create recipe');
+        }
+      } catch (error: any) {
+        console.error('❌ Error creating recipe:', error);
+        alert('Failed to create recipe: ' + (error.message || 'Unknown error'));
+        // Reset states on error but keep the modal open for retry
+        setCurrentRecipe(null);
+        setRecipeProgress(null);
+        setIsRecipeCreated(false);
+      } finally {
+        setIsCreatingRecipe(false);
+      }
     }
   };
 
   const handleCancelRecipeCreation = () => {
     setIsRecipeNameModalOpen(false);
     setRecipeName('');
-    // Optionally redirect back or show a different state
+    setIsRecipeCreated(false);
+    setCurrentRecipe(null);
+    setRecipeProgress(null);
+    setIsCreatingRecipe(false);
+    // Navigate back to home or previous page
+    navigate('/');
   };
 
   const handleRename = () => {
@@ -1448,9 +1760,118 @@ export default function ProductForm() {
                 </Button>
               </div>
               <div className="text-sm text-blue-600">
-                Updated about 3 hours ago
+                {recipeProgress?.current_step === 'completed' ? '✅ Recipe Complete' : 'In Progress...'}
               </div>
             </div>
+
+            {/* Progressive Recipe Creation Steps */}
+            {recipeProgress && (
+              <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                <h3 className="text-sm font-medium text-gray-700 mb-3">Recipe Creation Progress</h3>
+                <div className="flex items-center space-x-4">
+                  {/* Step 1: Recipe Name */}
+                  <div className="flex items-center">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                      recipeProgress.steps_completed.name_created
+                        ? 'bg-green-500 text-white'
+                        : 'bg-gray-300 text-gray-600'
+                    }`}>
+                      {recipeProgress.steps_completed.name_created ? '✓' : '1'}
+                    </div>
+                    <span className="ml-2 text-sm text-gray-600">Name</span>
+                  </div>
+
+                  <div className={`flex-1 h-1 ${
+                    recipeProgress.steps_completed.ingredients_added ? 'bg-green-500' : 'bg-gray-300'
+                  }`}></div>
+
+                  {/* Step 2: Ingredients */}
+                  <div className="flex items-center">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                      recipeProgress.steps_completed.ingredients_added
+                        ? 'bg-green-500 text-white'
+                        : recipeProgress.current_step === 'ingredients_added' || addedIngredients.length > 0
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-gray-300 text-gray-600'
+                    }`}>
+                      {recipeProgress.steps_completed.ingredients_added ? '✓' : '2'}
+                    </div>
+                    <span className="ml-2 text-sm text-gray-600">Ingredients</span>
+                  </div>
+
+                  <div className={`flex-1 h-1 ${
+                    recipeProgress.steps_completed.nutrition_analyzed ? 'bg-green-500' : 'bg-gray-300'
+                  }`}></div>
+
+                  {/* Step 3: Nutrition */}
+                  <div className="flex items-center">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                      recipeProgress.steps_completed.nutrition_analyzed
+                        ? 'bg-green-500 text-white'
+                        : recipeProgress.current_step === 'nutrition_analyzed' || isLoadingNutrition
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-gray-300 text-gray-600'
+                    }`}>
+                      {recipeProgress.steps_completed.nutrition_analyzed ? '✓' : isLoadingNutrition ? '⏳' : '3'}
+                    </div>
+                    <span className="ml-2 text-sm text-gray-600">Nutrition</span>
+                  </div>
+
+                  <div className={`flex-1 h-1 ${
+                    recipeProgress.steps_completed.serving_configured ? 'bg-green-500' : 'bg-gray-300'
+                  }`}></div>
+
+                  {/* Step 4: Serving */}
+                  <div className="flex items-center">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                      recipeProgress.steps_completed.serving_configured
+                        ? 'bg-green-500 text-white'
+                        : recipeProgress.current_step === 'serving_configured'
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-gray-300 text-gray-600'
+                    }`}>
+                      {recipeProgress.steps_completed.serving_configured ? '✓' : '4'}
+                    </div>
+                    <span className="ml-2 text-sm text-gray-600">Serving</span>
+                  </div>
+
+                  <div className={`flex-1 h-1 ${
+                    recipeProgress.steps_completed.completed ? 'bg-green-500' : 'bg-gray-300'
+                  }`}></div>
+
+                  {/* Step 5: Complete */}
+                  <div className="flex items-center">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                      recipeProgress.steps_completed.completed
+                        ? 'bg-green-500 text-white'
+                        : 'bg-gray-300 text-gray-600'
+                    }`}>
+                      {recipeProgress.steps_completed.completed ? '✓' : '5'}
+                    </div>
+                    <span className="ml-2 text-sm text-gray-600">Complete</span>
+                  </div>
+                </div>
+
+                {/* Current Step Description */}
+                <div className="mt-3 text-sm text-gray-600">
+                  {recipeProgress.current_step === 'name_created' && addedIngredients.length === 0 && (
+                    <span>👆 Next: Add ingredients to your recipe</span>
+                  )}
+                  {recipeProgress.current_step === 'ingredients_added' && !recipeProgress.steps_completed.nutrition_analyzed && (
+                    <span>⚗️ Analyzing nutrition data...</span>
+                  )}
+                  {recipeProgress.current_step === 'nutrition_analyzed' && !recipeProgress.steps_completed.serving_configured && (
+                    <span>📏 Configure serving size below</span>
+                  )}
+                  {recipeProgress.current_step === 'serving_configured' && !recipeProgress.steps_completed.completed && (
+                    <span>🔄 Finalizing recipe...</span>
+                  )}
+                  {recipeProgress.steps_completed.completed && (
+                    <span>🎉 Recipe complete! Your nutrition label is ready.</span>
+                  )}
+                </div>
+              </div>
+            )}
             
             {/* Wizard Tabs */}
             <div className="border-b border-gray-200">
@@ -2019,20 +2440,17 @@ export default function ProductForm() {
           </Card>
         )}
         </div>
-      ) : (
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <h2 className="text-xl font-semibold text-gray-600 mb-2">Create Your Recipe</h2>
-            <p className="text-gray-500 mb-4">Start by giving your recipe a name</p>
-            <Button onClick={() => setIsRecipeNameModalOpen(true)}>
-              Create New Recipe
-            </Button>
-          </div>
-        </div>
-      )}
+      ) : null}
 
         {/* Add Recipe Modal */}
-        <Dialog open={isRecipeNameModalOpen} onOpenChange={setIsRecipeNameModalOpen}>
+        <Dialog
+          open={isRecipeNameModalOpen && !isRecipeCreated}
+          onOpenChange={(open) => {
+            if (!isCreatingRecipe) {
+              setIsRecipeNameModalOpen(open);
+            }
+          }}
+        >
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Create New Recipe</DialogTitle>
@@ -2045,15 +2463,30 @@ export default function ProductForm() {
                   placeholder="Enter recipe name..."
                   value={recipeName}
                   onChange={(e) => setRecipeName(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleRecipeNameSubmit()}
+                  onKeyPress={(e) => e.key === 'Enter' && !isCreatingRecipe && handleRecipeNameSubmit()}
+                  disabled={isCreatingRecipe}
                 />
               </div>
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={handleCancelRecipeCreation}>
+                <Button
+                  variant="outline"
+                  onClick={handleCancelRecipeCreation}
+                  disabled={isCreatingRecipe}
+                >
                   Cancel
                 </Button>
-                <Button onClick={handleRecipeNameSubmit} disabled={!recipeName.trim()}>
-                  Create Recipe
+                <Button
+                  onClick={handleRecipeNameSubmit}
+                  disabled={!recipeName.trim() || isCreatingRecipe}
+                >
+                  {isCreatingRecipe ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Creating Recipe...
+                    </>
+                  ) : (
+                    'Create Recipe'
+                  )}
                 </Button>
               </div>
             </div>
