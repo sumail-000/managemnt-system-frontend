@@ -23,13 +23,11 @@ import { useAuth } from "@/contexts/AuthContext"
 import { productsAPI } from "@/services/api"
 import { Product } from "@/types/product"
 import { ProductSelector } from "@/components/ProductSelector"
-import { ComplianceFeedback } from "@/components/ComplianceFeedback"
 
 export default function Dashboard() {
   const { user, usage, usagePercentages: usage_percentages, trialInfo: trial_info, subscriptionDetails: subscription_details } = useAuth()
   const [recentProducts, setRecentProducts] = useState<Product[]>([])
   const [isLoadingProducts, setIsLoadingProducts] = useState(true)
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   
   // Debug logging
   console.log('[DASHBOARD] Debug data:', {
@@ -194,15 +192,6 @@ export default function Dashboard() {
             <p className="text-muted-foreground">
               Welcome back, {user?.name}! Here's what's happening with your recipes.
             </p>
-          </div>
-          <div className="flex items-center gap-4">
-
-            <Button variant="gradient" size="lg" asChild>
-              <Link to="/products/new">
-                <Plus className="w-4 h-4 mr-2" />
-                Create Recipe
-              </Link>
-            </Button>
           </div>
         </div>
       </div>
@@ -444,29 +433,6 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Compliance Feedback Section */}
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-foreground">Compliance Feedback</h2>
-            <p className="text-muted-foreground">
-              Select a product to view detailed nutritional compliance metrics and analysis.
-            </p>
-          </div>
-        </div>
-        
-        {/* Product Selection */}
-        <ProductSelector 
-          onProductSelect={setSelectedProduct}
-          selectedProductId={selectedProduct?.id}
-        />
-        
-        {/* Compliance Metrics */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-foreground">Key Nutrition Metrics</h3>
-          <ComplianceFeedback product={selectedProduct} />
-        </div>
-      </div>
 
       {/* Enhanced Membership Status */}
       <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/80 shadow-lg hover:shadow-xl transition-all duration-300">

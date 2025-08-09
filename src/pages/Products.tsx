@@ -45,6 +45,17 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination"
+import { 
+  AlertDialog, 
+  AlertDialogAction, 
+  AlertDialogCancel, 
+  AlertDialogContent, 
+  AlertDialogDescription, 
+  AlertDialogFooter, 
+  AlertDialogHeader, 
+  AlertDialogTitle, 
+  AlertDialogTrigger 
+} from "@/components/ui/alert-dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { FilterSidebar } from "@/components/products/FilterSidebar"
 import { ProductCard } from "@/components/products/ProductCard"
@@ -229,6 +240,25 @@ export default function Products() {
     }
   }
 
+  const handleBulkDelete = async () => {
+    try {
+      await productsAPI.bulkDelete(selectedProducts.map(id => parseInt(id)));
+      toast({
+        title: "Products deleted",
+        description: `${selectedProducts.length} product(s) have been moved to trash.`,
+      });
+      setSelectedProducts([]);
+      refresh();
+    } catch (error: any) {
+      console.error('Error deleting products:', error);
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to delete products",
+        variant: "destructive"
+      });
+    }
+  };
+
   return (
     <div className="flex-1 space-y-6 p-6">
       {/* Header */}
@@ -411,9 +441,19 @@ export default function Products() {
           )}
         </span>
         {selectedProducts.length > 0 && (
-          <span>
-            {selectedProducts.length} selected
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-sm">
+              {selectedProducts.length} selected
+            </span>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleBulkDelete}
+            >
+              <Trash2 className="w-4 h-4 mr-1" />
+              Delete All
+            </Button>
+          </div>
         )}
       </div>
 

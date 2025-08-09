@@ -60,8 +60,6 @@ const coreNavItems = [
 const settingsNavItems = [
   { title: "Billing", href: "/billing", icon: CreditCard, description: "Manage subscriptions and payments" },
   { title: "Settings", href: "/settings", icon: Settings, description: "Account and preferences" },
-  { title: "Enterprise Admin", href: "/enterprise", icon: Shield, description: "Enterprise management" },
-  { title: "System Admin", href: "/admin", icon: Settings, description: "System administration" },
 ]
 
 export function HeaderNavigation() {
@@ -205,14 +203,6 @@ export function HeaderNavigation() {
 
         {/* Right Side - Actions & User Menu */}
         <div className="flex items-center gap-4">
-          {/* Quick Add Button */}
-          <Button size="sm" className="hidden sm:flex bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 text-primary-foreground border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105" asChild>
-            <NavLink to="/products/new">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Recipe
-            </NavLink>
-          </Button>
-
           {/* Settings Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -419,15 +409,6 @@ export function HeaderNavigation() {
               ))}
             </div>
 
-            {/* Mobile Quick Actions */}
-            <div className="pt-4 border-t border-border">
-              <Button size="sm" className="w-full justify-start bg-gradient-to-r from-primary to-accent text-primary-foreground" asChild>
-                <NavLink to="/products/new" onClick={() => setIsMobileMenuOpen(false)}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Recipe
-                </NavLink>
-              </Button>
-            </div>
           </div>
         </div>
       )}

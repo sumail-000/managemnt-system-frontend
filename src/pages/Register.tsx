@@ -206,22 +206,45 @@ export default function Register() {
       // Navigation is handled by AuthContext based on payment requirements
     } catch (error: any) {
       const errorMessage = error.message || "Registration failed. Please try again."
+      const validationErrors = error.response?.data?.errors
       
       logService.error('Registration failed', {
         email: formData.email,
         error: errorMessage,
-        validationErrors: error.response?.data?.errors
+        validationErrors: validationErrors
       }, 'Register');
       
-      toast({
-        title: "Registration Failed",
-        description: errorMessage,
-        variant: "destructive",
-      })
+      // Check for specific email validation error
+      if (validationErrors?.email) {
+        const emailError = Array.isArray(validationErrors.email)
+          ? validationErrors.email[0]
+          : validationErrors.email;
+        
+        if (emailError.includes('already been taken') || emailError.includes('has already been taken')) {
+          toast({
+            title: "Email Already Exists",
+            description: "This email address is already registered. Please use a different email or try logging in.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Invalid Email",
+            description: emailError,
+            variant: "destructive",
+          });
+        }
+      } else {
+        // Generic error message for other types of errors
+        toast({
+          title: "Registration Failed",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      }
       
-      // Handle validation errors
-      if (error.response?.data?.errors) {
-        setErrors(error.response.data.errors)
+      // Handle validation errors for form field highlighting
+      if (validationErrors) {
+        setErrors(validationErrors)
       }
     }
   }

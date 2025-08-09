@@ -13,7 +13,6 @@ import ProductTrash from "./pages/ProductTrash";
 import PublicProductView from "./pages/PublicProductView";
 
 import CategoryManagement from "./pages/CategoryManagement";
-import LabelGeneratorPage from "./pages/LabelGenerator";
 import Billing from "./pages/Billing";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -139,13 +138,6 @@ const App = () => {
       
 
       
-      <Route path="/labels" element={
-        <ProtectedRoute>
-          <DashboardLayout>
-            <LabelGeneratorPage />
-          </DashboardLayout>
-        </ProtectedRoute>
-      } />
       
       <Route path="/qr-codes" element={
         <ProtectedRoute requiredPlan="pro">

@@ -223,24 +223,13 @@ export function usePaginatedProducts(options: UsePaginatedProductsOptions = {}):
     }
   }, [])
 
-  // Load tags
+  // Load tags - Currently not implemented, return empty array
   const loadTags = useCallback(async () => {
     try {
       setTagsLoading(true)
-      const response = await productsAPI.getTags()
-      console.log('[usePaginatedProducts] Tags API response:', response)
-      
-      if (Array.isArray(response)) {
-        const tagNames = response.map(tag => 
-          typeof tag === 'string' ? tag : tag.name
-        )
-        setTags(tagNames)
-      } else if (response?.data && Array.isArray(response.data)) {
-        const tagNames = response.data.map(tag => 
-          typeof tag === 'string' ? tag : tag.name
-        )
-        setTags(tagNames)
-      }
+      // TODO: Implement tags system - could extract from nutrition analysis data
+      console.log('[usePaginatedProducts] Tags system not implemented yet')
+      setTags([])
     } catch (error) {
       console.error('[usePaginatedProducts] Failed to load tags:', error)
       // Don't show error toast for tags as it's not critical

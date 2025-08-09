@@ -46,8 +46,6 @@ const userItems = [
 const administrationItems = [
   { title: "Billing", url: "/billing", icon: CreditCard },
   { title: "Settings", url: "/settings", icon: Settings },
-  { title: "Enterprise Admin", url: "/enterprise", icon: Shield },
-  { title: "System Admin", url: "/admin", icon: Settings },
 ]
 
 export function AppSidebar() {

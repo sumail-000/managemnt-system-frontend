@@ -129,6 +129,7 @@ export interface Product {
     name: string;
   };
   nutritional_data?: NutritionalData[];
+  nutrition_data?: any; // Backend nutrition data field with health_labels and diet_labels
 }
 
 // Helper type for API operations
@@ -204,6 +205,7 @@ export function transformProductToCamelCase(product: Product): ProductCamelCase 
     createdAt: new Date(product.created_at),
     updatedAt: new Date(product.updated_at),
     deletedAt: product.deleted_at ? new Date(product.deleted_at) : undefined,
+    nutritionData: (product as any).nutrition_data, // Map nutrition_data from backend
   };
 }
 
@@ -234,6 +236,7 @@ export interface ProductCamelCase {
     id: string;
     name: string;
   };
+  nutritionData?: any; // Add nutrition data field
 }
 
 // Laravel pagination response type

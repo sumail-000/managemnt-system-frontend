@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { FDANutritionLabel } from '@/components/previewlabel/FDANutritionLabel';
-import { generateLabelPDF } from '@/utils/pdfGenerator';
+import { generateNutritionLabelPDF } from '@/utils/pdfGenerator';
 import {
   ChevronDown,
   ChevronUp,
@@ -21,7 +21,9 @@ import {
   FileText,
   Calculator,
   Settings,
-  ArrowLeft
+  ArrowLeft,
+  QrCode,
+  ExternalLink
 } from "lucide-react";
 
 interface LabelSection {
@@ -73,7 +75,14 @@ export default function NutritionLabel() {
     nutritionData?: NutritionData;
     language?: string;
     ingredients?: Array<{name: string; allergens: string[]}>;
+    allergenData?: any; // Add allergen data from allergen management system
     recipeName?: string;
+    productId?: string; // Add product ID for QR code generation
+    publicationStatus?: {
+      status: string;
+      is_public: boolean;
+    };
+    showQRCodeOnReturn?: boolean; // Flag for returning from QR code generation
   } | null;
   const isLoggedUserWithData = !!passedData?.nutritionData;
   
@@ -174,6 +183,11 @@ export default function NutritionLabel() {
     sugarAdjustment: 0
   });
 
+  // QR Code management state
+  const [showQRCodeManagement, setShowQRCodeManagement] = useState(false);
+  const [qrCodeData, setQrCodeData] = useState<any>(null);
+  const [isLoadingQRCode, setIsLoadingQRCode] = useState(false);
+
   const labelTypeOptions = [
     "FDA Vertical (default)",
     "FDA Tabular",
@@ -182,10 +196,48 @@ export default function NutritionLabel() {
 
   // Extract real ingredients and allergens from passed data
   const realIngredients = passedData?.ingredients || [];
-  const realAllergens = realIngredients.reduce((acc: string[], ingredient) => {
-    return [...acc, ...ingredient.allergens];
-  }, []);
-  const uniqueAllergens = [...new Set(realAllergens)];
+  
+  // Extract allergens from comprehensive allergen data if available
+  const extractAllergensFromAllergenData = (allergenData: any): string[] => {
+    if (!allergenData) return [];
+    
+    const allAllergens: string[] = [];
+    
+    // Import ALLERGEN_CATEGORIES to iterate through categories
+    // For now, we'll extract from both detected and manual allergens
+    Object.keys(allergenData.detected || {}).forEach(categoryId => {
+      const detected = allergenData.detected[categoryId] || [];
+      // Ensure detected is an array before calling forEach
+      if (Array.isArray(detected)) {
+        detected.forEach((allergen: any) => {
+          if (!allAllergens.includes(allergen.name)) {
+            allAllergens.push(allergen.name);
+          }
+        });
+      }
+    });
+    
+    Object.keys(allergenData.manual || {}).forEach(categoryId => {
+      const manual = allergenData.manual[categoryId] || [];
+      // Ensure manual is an array before calling forEach
+      if (Array.isArray(manual)) {
+        manual.forEach((allergen: any) => {
+          if (!allAllergens.includes(allergen.name)) {
+            allAllergens.push(allergen.name);
+          }
+        });
+      }
+    });
+    
+    return allAllergens;
+  };
+  
+  // Use comprehensive allergen data if available, otherwise fall back to ingredient-based extraction
+  const uniqueAllergens = passedData?.allergenData
+    ? extractAllergensFromAllergenData(passedData.allergenData)
+    : [...new Set(realIngredients.reduce((acc: string[], ingredient) => {
+        return [...acc, ...ingredient.allergens];
+      }, []))];
 
   const toggleSection = (section: string) => {
     setExpandedSections(prev => ({
@@ -195,13 +247,43 @@ export default function NutritionLabel() {
   };
 
   const toggleLabelSection = (id: string) => {
-    setLabelSections(prev => 
-      prev.map(section => 
-        section.id === id 
-          ? { ...section, checked: !section.checked }
-          : section
-      )
-    );
+    if (id === 'showQRCode') {
+      // Handle QR code toggle
+      const currentSection = labelSections.find(s => s.id === 'showQRCode');
+      if (!currentSection?.checked) {
+        // User is trying to show QR code - check if we have QR code data
+        if (qrCodeData) {
+          // We have QR code data, just enable the checkbox
+          setLabelSections(prev =>
+            prev.map(section =>
+              section.id === id
+                ? { ...section, checked: true }
+                : section
+            )
+          );
+        } else {
+          // No QR code data, show management interface
+          handleShowQRCode();
+        }
+      } else {
+        // User is hiding QR code - just toggle off
+        setLabelSections(prev =>
+          prev.map(section =>
+            section.id === id
+              ? { ...section, checked: false }
+              : section
+          )
+        );
+      }
+    } else {
+      setLabelSections(prev =>
+        prev.map(section =>
+          section.id === id
+            ? { ...section, checked: !section.checked }
+            : section
+        )
+      );
+    }
   };
 
   const toggleOptionalNutrient = (id: string) => {
@@ -258,20 +340,48 @@ export default function NutritionLabel() {
     </Button>
   );
 
+  const [isGeneratingLabel, setIsGeneratingLabel] = useState(false);
+  const [showDownloadButton, setShowDownloadButton] = useState(false);
+
+  const handleGenerateLabel = async () => {
+    try {
+      setIsGeneratingLabel(true);
+      setShowDownloadButton(false);
+      
+      // Show loading for 2-3 seconds
+      await new Promise(resolve => setTimeout(resolve, 2500));
+      
+      const recipeName = passedData?.recipeName || 'nutrition-label';
+      const filename = `${recipeName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`;
+      
+      // Generate PDF with actual label dimensions (not A4)
+      await generateNutritionLabelPDF('fda-nutrition-label', {
+        filename,
+        quality: 1
+      });
+      
+      setShowDownloadButton(true);
+    } catch (error) {
+      console.error('PDF generation failed:', error);
+      alert('Failed to generate label. Please try again.');
+    } finally {
+      setIsGeneratingLabel(false);
+    }
+  };
+
   const handleDownloadPDF = async () => {
     try {
       const recipeName = passedData?.recipeName || 'nutrition-label';
       const filename = `${recipeName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`;
       
-      await generateLabelPDF('fda-nutrition-label', {
+      // Generate PDF with actual label dimensions (not A4)
+      await generateNutritionLabelPDF('fda-nutrition-label', {
         filename,
-        format: 'a4',
-        orientation: 'portrait',
-        quality: 2
+        quality: 1
       });
     } catch (error) {
       console.error('PDF generation failed:', error);
-      alert('Failed to generate PDF. Please try again.');
+      alert('Failed to download label. Please try again.');
     }
   };
 
@@ -291,6 +401,133 @@ export default function NutritionLabel() {
       ...prev,
       [field]: value
     }));
+  };
+
+  // QR Code management handlers
+  const handleShowQRCode = async () => {
+    setShowQRCodeManagement(true);
+  };
+
+  const handleManageQRCode = async () => {
+    if (!passedData?.productId) {
+      console.error('No product ID available for QR code generation');
+      return;
+    }
+
+    try {
+      setIsLoadingQRCode(true);
+      
+      // Import the QR code service
+      const qrCodeService = (await import('@/services/qrCodeService')).default;
+      
+      // Generate QR code for the product
+      const response = await qrCodeService.generateQrCode(parseInt(passedData.productId), {
+        size: 300,
+        format: 'png',
+        margin: 2,
+        color: '#000000',
+        background_color: '#ffffff'
+      });
+
+      if (response.success && response.qr_code) {
+        // Set the QR code data for display
+        setQrCodeData({
+          qr_code_url: response.image_url || response.qr_code.image_url,
+          name: response.qr_code.product?.name || 'Product QR Code',
+          public_url: response.public_url || response.qr_code.public_url
+        });
+
+        // Enable the QR code checkbox
+        setLabelSections(prev =>
+          prev.map(section =>
+            section.id === 'showQRCode'
+              ? { ...section, checked: true }
+              : section
+          )
+        );
+
+        // Close the management interface
+        setShowQRCodeManagement(false);
+
+        console.log('QR code generated successfully:', response.qr_code);
+      } else {
+        console.error('QR code generation failed:', response.message);
+        // Still close the management interface
+        setShowQRCodeManagement(false);
+      }
+    } catch (error) {
+      console.error('Error generating QR code:', error);
+      setShowQRCodeManagement(false);
+    } finally {
+      setIsLoadingQRCode(false);
+    }
+  };
+
+  const handleBackFromQRCode = () => {
+    setShowQRCodeManagement(false);
+    // If we have QR code data, enable the checkbox
+    if (qrCodeData) {
+      setLabelSections(prev =>
+        prev.map(section =>
+          section.id === 'showQRCode'
+            ? { ...section, checked: true }
+            : section
+        )
+      );
+    }
+  };
+
+  // Check if we're returning from QR code generation or load QR code on mount
+  useEffect(() => {
+    if (passedData?.showQRCodeOnReturn) {
+      // Enable QR code display
+      setLabelSections(prev =>
+        prev.map(section =>
+          section.id === 'showQRCode'
+            ? { ...section, checked: true }
+            : section
+        )
+      );
+      
+      // Load QR code data if available
+      if (passedData.productId) {
+        loadQRCodeForProduct(passedData.productId);
+      }
+    } else if (passedData?.productId) {
+      // Try to load existing QR code data on mount
+      loadQRCodeForProduct(passedData.productId);
+    }
+  }, [passedData?.showQRCodeOnReturn, passedData?.productId]);
+
+  const loadQRCodeForProduct = async (productId: string) => {
+    try {
+      setIsLoadingQRCode(true);
+      
+      // Import the QR code service
+      const qrCodeService = (await import('@/services/qrCodeService')).default;
+      
+      // Get existing QR codes for this product
+      const response = await qrCodeService.getProductQrCodes(parseInt(productId));
+      
+      if (response.success && response.data && response.data.length > 0) {
+        // Use the first QR code found for this product
+        const qrCode = response.data[0];
+        setQrCodeData({
+          qr_code_url: qrCode.image_url,
+          name: qrCode.product?.name || qrCode.product_name || 'Product QR Code',
+          public_url: qrCode.public_url
+        });
+        console.log('QR code data loaded:', qrCode);
+      } else {
+        setQrCodeData(null);
+        console.log('No QR codes found for product');
+      }
+    } catch (error) {
+      console.error('Error loading QR code:', error);
+      setQrCodeData(null);
+    } finally {
+      setIsLoadingQRCode(false);
+    }
   };
 
   // Apply nutrition adjustments to the data
@@ -336,15 +573,37 @@ export default function NutritionLabel() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleDownloadPDF}
-                  className="flex items-center gap-2"
-                >
-                  <Download className="h-4 w-4" />
-                  Download PDF
-                </Button>
+                {!showDownloadButton ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleGenerateLabel}
+                    disabled={isGeneratingLabel}
+                    className="flex items-center gap-2"
+                  >
+                    {isGeneratingLabel ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                        Generating Label...
+                      </>
+                    ) : (
+                      <>
+                        <FileText className="h-4 w-4" />
+                        Generate Label
+                      </>
+                    )}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleDownloadPDF}
+                    className="flex items-center gap-2 bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
+                  >
+                    <Download className="h-4 w-4" />
+                    Download
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -462,7 +721,7 @@ export default function NutritionLabel() {
                               onCheckedChange={() => toggleLabelSection(section.id)}
                               className="h-3 w-3"
                             />
-                            <label 
+                            <label
                               htmlFor={section.id}
                               className="text-xs text-foreground cursor-pointer"
                             >
@@ -474,6 +733,68 @@ export default function NutritionLabel() {
                           )}
                         </div>
                       ))}
+                      
+                      {/* QR Code Management Interface */}
+                      {showQRCodeManagement && (
+                        <div className="mt-3 p-3 border rounded-lg bg-blue-50 border-blue-200">
+                          <div className="flex items-center gap-2 mb-2">
+                            <QrCode className="h-4 w-4 text-blue-600" />
+                            <span className="text-sm font-medium text-blue-800">Manage QR Code</span>
+                          </div>
+                          
+                          {qrCodeData ? (
+                            <div className="space-y-2">
+                              <div className="text-xs text-blue-700">
+                                Active QR Code: {qrCodeData.name || 'Product QR Code'}
+                              </div>
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={handleManageQRCode}
+                                  className="text-xs px-2 py-1 h-6 border-blue-300 text-blue-700 hover:bg-blue-100"
+                                >
+                                  <ExternalLink className="h-3 w-3 mr-1" />
+                                  Edit QR Code
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={handleBackFromQRCode}
+                                  className="text-xs px-2 py-1 h-6 text-gray-600 hover:bg-gray-100"
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              <div className="text-xs text-blue-700">
+                                {isLoadingQRCode ? 'Loading QR code...' : 'No QR code found for this recipe.'}
+                              </div>
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  onClick={handleManageQRCode}
+                                  disabled={isLoadingQRCode}
+                                  className="text-xs px-2 py-1 h-6 bg-blue-600 hover:bg-blue-700 text-white"
+                                >
+                                  <QrCode className="h-3 w-3 mr-1" />
+                                  Generate QR Code
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={handleBackFromQRCode}
+                                  className="text-xs px-2 py-1 h-6 text-gray-600 hover:bg-gray-100"
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </Card>
@@ -777,6 +1098,7 @@ export default function NutritionLabel() {
                     realAllergens={uniqueAllergens}
                     businessInfo={businessInfo}
                     recipeName={passedData?.recipeName}
+                    qrCodeData={qrCodeData}
                   />
                 </div>
 
@@ -836,23 +1158,37 @@ export default function NutritionLabel() {
 
                 {/* Action Buttons */}
                 <div className="flex justify-center gap-4 mt-8">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleDownloadPDF}
-                    className="flex items-center gap-2 hover:bg-blue-50 border-blue-200 text-blue-700"
-                  >
-                    <Download className="h-4 w-4" />
-                    Download PDF
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex items-center gap-2"
-                  >
-                    <Share2 className="h-4 w-4" />
-                    Share
-                  </Button>
+                  {!showDownloadButton ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleGenerateLabel}
+                      disabled={isGeneratingLabel}
+                      className="flex items-center gap-2 hover:bg-blue-50 border-blue-200 text-blue-700"
+                    >
+                      {isGeneratingLabel ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                          Generating Label...
+                        </>
+                      ) : (
+                        <>
+                          <FileText className="h-4 w-4" />
+                          Generate Label
+                        </>
+                      )}
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDownloadPDF}
+                      className="flex items-center gap-2 bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
+                    >
+                      <Download className="h-4 w-4" />
+                      Download
+                    </Button>
+                  )}
                 </div>
               </Card>
             </div>

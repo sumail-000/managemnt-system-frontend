@@ -319,10 +319,6 @@ export const productsAPI = {
     return api.get('/products/categories/list');
   },
   
-  getTags: () => {
-    console.log('[PRODUCTS_API] Get tags request initiated');
-    return api.get('/products/tags/list');
-  },
 
   getProductTags: (id: number | string) => {
     console.log('[PRODUCTS_API] Get product tags request initiated', { id });
@@ -343,6 +339,11 @@ export const productsAPI = {
   forceDelete: (id: number | string) => {
     console.log('[PRODUCTS_API] Force delete product request initiated', { id });
     return api.delete(`/products/${id}/force-delete`);
+  },
+  
+  bulkDelete: (ids: number[]) => {
+    console.log('[PRODUCTS_API] Bulk delete products request initiated', { ids });
+    return api.post('/products/bulk-delete', { ids });
   },
   
   // Public products

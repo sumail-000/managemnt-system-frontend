@@ -148,12 +148,6 @@ export default function Billing() {
   
   // Use billing data from AuthContext (already destructured above)
 
-
-
-
-
-
-
   const handleCancelPlan = () => {
     setCancellationStep('initial')
     setCancellationReason('')
@@ -383,8 +377,6 @@ export default function Billing() {
       setIsLoading(false)
     }
   }
-
-
 
   const handlePaymentMethodUpdate = async (paymentMethodData: any) => {
     try {
@@ -619,7 +611,6 @@ export default function Billing() {
           </div>
         </CardContent>
       </Card>
-
 
 
       {/* Billing Details */}

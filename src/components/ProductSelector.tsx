@@ -81,7 +81,7 @@ export function ProductSelector({ onProductSelect, selectedProductId }: ProductS
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground text-center py-4">
-            No products available. Create your first product to see compliance feedback.
+            No products available. Create your first product to get started.
           </p>
         </CardContent>
       </Card>

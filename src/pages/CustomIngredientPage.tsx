@@ -8,6 +8,8 @@ import { GeneralInformation } from '@/components/custom-ingredient/GeneralInform
 import { RegulatoryInformation } from '@/components/custom-ingredient/RegulatoryInformation';
 import { NutritionInformation } from '@/components/custom-ingredient/NutritionInformation';
 import { CustomIngredientData } from '@/types/customIngredient';
+import { CustomIngredientApi } from '@/services/customIngredientApi';
+import { useToast } from '@/hooks/use-toast';
 
 const initialFormData: CustomIngredientData = {
   name: '',
@@ -105,6 +107,7 @@ export function CustomIngredientPage() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const returnTo = searchParams.get('returnTo') || '/products/create';
+  const { toast } = useToast();
   
   const [formData, setFormData] = useState<CustomIngredientData>(initialFormData);
   const [errors, setErrors] = useState<string[]>([]);
@@ -171,39 +174,9 @@ export function CustomIngredientPage() {
   const validateForm = (): boolean => {
     const newErrors: string[] = [];
 
+    // Only require ingredient name - remove all other validations
     if (!formData.name.trim()) {
       newErrors.push('Ingredient name is required');
-    }
-
-    if (!formData.category.trim()) {
-      newErrors.push('Category is required');
-    }
-
-    if (!formData.ingredientList.trim()) {
-      newErrors.push('Ingredient list is required');
-    }
-
-    if (formData.servingSize <= 0) {
-      newErrors.push('Serving size must be greater than 0');
-    }
-
-    // Check if at least some nutrition data is provided
-    const nutritionValues = Object.values(formData.nutrition);
-    const hasBasicNutritionData = nutritionValues.some(value => value > 0);
-    
-    // Check vitamins and minerals data
-    const hasVitaminsData = formData.vitaminsAndMinerals?.vitamins && 
-      Object.values(formData.vitaminsAndMinerals.vitamins).some(value => value > 0);
-    const hasMineralsData = formData.vitaminsAndMinerals?.minerals && 
-      Object.values(formData.vitaminsAndMinerals.minerals).some(value => value > 0);
-    
-    // Check additional nutrients data
-    const hasAdditionalNutrients = formData.additionalNutrients && 
-      Object.values(formData.additionalNutrients).some(value => value > 0);
-    
-    // At least one type of nutrition data must be provided
-    if (!hasBasicNutritionData && !hasVitaminsData && !hasMineralsData && !hasAdditionalNutrients) {
-      newErrors.push('At least one nutrition value must be provided (basic nutrition, vitamins/minerals, or additional nutrients)');
     }
 
     setErrors(newErrors);
@@ -217,53 +190,86 @@ export function CustomIngredientPage() {
 
     setIsLoading(true);
     try {
-      // Here you would typically make an API call to save the ingredient
-      // For now, we'll simulate the process
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const ingredientData = { ...formData, saveOnly };
+      console.log('🔄 Processing custom ingredient:', formData);
       
       if (saveOnly) {
-        // Save ingredient to database/storage
-        console.log('Saving ingredient:', ingredientData);
-        // Show success message or redirect to ingredients list
-        navigate('/ingredients');
+        // Save ingredient to database using API
+        console.log('💾 Saving ingredient to database:', formData);
+        
+        const apiData = {
+          name: formData.name,
+          brand: formData.brand,
+          category: formData.category,
+          description: formData.description,
+          ingredient_list: formData.ingredientList,
+          serving_size: formData.servingSize,
+          serving_unit: formData.servingUnit,
+          nutrition_data: formData.nutrition,
+          vitamins_minerals: formData.vitaminsAndMinerals,
+          additional_nutrients: formData.additionalNutrients,
+          allergens_data: formData.allergens,
+          nutrition_notes: formData.nutritionNotes,
+          is_public: false, // Default to private
+        };
+        
+        console.log('🔄 API data being sent:', apiData);
+        
+        const response = await CustomIngredientApi.createCustomIngredient(apiData);
+        
+        console.log('📡 Full API response:', response);
+
+        // Check if response has success property (wrapped format) or is direct data
+        const isSuccess = response?.success === true ||
+                         (response && typeof response === 'object' && (response as any).user_id);
+
+        if (isSuccess) {
+          const ingredientData = response.success ? response.data : response;
+          console.log('✅ Ingredient saved successfully:', ingredientData);
+          setErrors([]);
+          
+          toast({
+            title: "✅ Success!",
+            description: "Custom ingredient saved successfully!",
+          });
+          
+          // Reset form
+          setFormData(initialFormData);
+          
+          // Navigate back or to ingredients list
+          // navigate('/ingredients'); // Uncomment when ingredients list page exists
+        } else {
+          console.error('❌ API response indicates failure:', response);
+          throw new Error(response?.message || 'Failed to save ingredient - API returned unsuccessful response');
+        }
       } else {
         // Add to recipe - pass data back to the calling page
-        console.log('Adding ingredient to recipe:', ingredientData);
-        // Navigate back with the ingredient data
+        console.log('➕ Adding ingredient to recipe:', formData);
+        
+        // For adding to recipe, we don't need to save to database yet
+        // Just pass the data back to the recipe form
         navigate(returnTo, {
-          state: { customIngredient: ingredientData }
+          state: { customIngredient: formData }
         });
       }
-    } catch (error) {
-      console.error('Error processing ingredient:', error);
-      setErrors(['Failed to process ingredient. Please try again.']);
+    } catch (error: any) {
+      console.error('❌ Error processing ingredient:', error);
+      const errorMessage = error.message || 'Failed to process ingredient. Please try again.';
+      setErrors([errorMessage]);
+      
+      toast({
+        title: "❌ Error",
+        description: errorMessage,
+        variant: "destructive"
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
 
-  // Check if form is ready for submission
+  // Check if form is ready for submission - only require name
   const isFormValid = () => {
-    const hasBasicNutrition = Object.values(formData.nutrition).some(value => value > 0);
-    const hasVitaminsData = formData.vitaminsAndMinerals?.vitamins && 
-      Object.values(formData.vitaminsAndMinerals.vitamins).some(value => value > 0);
-    const hasMineralsData = formData.vitaminsAndMinerals?.minerals && 
-      Object.values(formData.vitaminsAndMinerals.minerals).some(value => value > 0);
-    const hasAdditionalNutrients = formData.additionalNutrients && 
-      Object.values(formData.additionalNutrients).some(value => value > 0);
-    
-    const hasAnyNutritionData = hasBasicNutrition || hasVitaminsData || hasMineralsData || hasAdditionalNutrients;
-    
-    return (
-      formData.name.trim() !== '' &&
-      formData.category.trim() !== '' &&
-      formData.ingredientList.trim() !== '' &&
-      formData.servingSize > 0 &&
-      hasAnyNutritionData
-    );
+    return formData.name.trim() !== '';
   };
 
   return (

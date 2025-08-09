@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Languages, Download, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { generateLabelPDF } from '@/utils/pdfGenerator';
+import { generateNutritionLabelPDF } from '@/utils/pdfGenerator';
 
 interface NutritionData {
   servings?: number;
@@ -114,8 +114,9 @@ interface FDANutritionLabelProps {
   customization?: LabelCustomization;
   selectedVitamins?: string[];
   selectedOptionalNutrients?: string[];
-  realIngredients?: Array<{name: string; allergens: string[]}>;
+  realIngredients?: Array<{name: string; allergens: string[]; customStatement?: string}>;
   realAllergens?: string[];
+  allergenData?: any; // Add allergen data from allergen management system
   businessInfo?: {
     companyName: string;
     address: string;
@@ -124,6 +125,7 @@ interface FDANutritionLabelProps {
     zipCode: string;
   };
   recipeName?: string;
+  qrCodeData?: any; // Add QR code data for displaying actual QR codes
 }
 
 type Language = 'en' | 'ar';
@@ -149,9 +151,29 @@ const translations = {
     includes: 'Includes',
     protein: 'Protein',
     vitaminD: 'Vitamin D',
+    vitaminA: 'Vitamin A',
+    vitaminC: 'Vitamin C',
+    vitaminE: 'Vitamin E',
+    vitaminK: 'Vitamin K',
+    thiamin: 'Thiamin',
+    riboflavin: 'Riboflavin',
+    niacin: 'Niacin',
+    vitaminB6: 'Vitamin B6',
+    folate: 'Folate',
+    vitaminB12: 'Vitamin B12',
+    pantothenicAcid: 'Pantothenic Acid',
     calcium: 'Calcium',
     iron: 'Iron',
     potassium: 'Potassium',
+    phosphorus: 'Phosphorus',
+    magnesium: 'Magnesium',
+    zinc: 'Zinc',
+    selenium: 'Selenium',
+    copper: 'Copper',
+    manganese: 'Manganese',
+    monounsaturatedFat: 'Monounsaturated Fat',
+    polyunsaturatedFat: 'Polyunsaturated Fat',
+    sugarAlcohol: 'Sugar Alcohol',
     footer: '* The % Daily Value tells you how much a nutrient in a serving of food contributes to a daily diet. 2,000 calories a day is used for general nutrition advice.',
     units: {
       g: 'g',
@@ -178,9 +200,29 @@ const translations = {
     includes: 'يشمل',
     protein: 'البروتين',
     vitaminD: 'فيتامين د',
+    vitaminA: 'فيتامين أ',
+    vitaminC: 'فيتامين ج',
+    vitaminE: 'فيتامين هـ',
+    vitaminK: 'فيتامين ك',
+    thiamin: 'الثيامين',
+    riboflavin: 'الريبوفلافين',
+    niacin: 'النياسين',
+    vitaminB6: 'فيتامين ب6',
+    folate: 'الفولات',
+    vitaminB12: 'فيتامين ب12',
+    pantothenicAcid: 'حمض البانتوثينيك',
     calcium: 'الكالسيوم',
     iron: 'الحديد',
     potassium: 'البوتاسيوم',
+    phosphorus: 'الفوسفور',
+    magnesium: 'المغنيسيوم',
+    zinc: 'الزنك',
+    selenium: 'السيلينيوم',
+    copper: 'النحاس',
+    manganese: 'المنغنيز',
+    monounsaturatedFat: 'الدهون الأحادية غير المشبعة',
+    polyunsaturatedFat: 'الدهون المتعددة غير المشبعة',
+    sugarAlcohol: 'كحول السكر',
     footer: '* تخبرك النسبة المئوية للقيمة اليومية بمقدار مساهمة العنصر الغذائي في حصة من الطعام في النظام الغذائي اليومي. يتم استخدام 2000 سعرة حرارية يومياً للحصول على نصائح التغذية العامة.',
     units: {
       g: 'جم',
@@ -201,8 +243,10 @@ export function FDANutritionLabel({
   selectedOptionalNutrients = [],
   realIngredients = [],
   realAllergens = [],
+  allergenData,
   businessInfo,
-  recipeName
+  recipeName,
+  qrCodeData
 }: FDANutritionLabelProps): JSX.Element {
   const [language, setLanguage] = useState<Language>('en');
   const navigate = useNavigate();
@@ -342,39 +386,39 @@ export function FDANutritionLabel({
     
     return vitaminsToShow.map((vitaminId) => {
       const vitaminMap: Record<string, { label: string; amount: number; unit: string; dv: number }> = {
-        vitaminA: { label: 'Vitamin A', amount: nutritionData.vitaminA || 0, unit: 'mcg', dv: calculateDV('vitaminA', nutritionData.vitaminA || 0, nutritionData.vitaminADV) },
-        vitaminC: { label: 'Vitamin C', amount: nutritionData.vitaminC || 0, unit: 'mg', dv: calculateDV('vitaminC', nutritionData.vitaminC || 0, nutritionData.vitaminCDV) },
-        vitaminD: { label: 'Vitamin D', amount: nutritionData.vitaminD || 0, unit: 'mcg', dv: calculateDV('vitaminD', nutritionData.vitaminD || 0, nutritionData.vitaminDDV) },
-        vitaminE: { label: 'Vitamin E', amount: nutritionData.vitaminE || 0, unit: 'mg', dv: calculateDV('vitaminE', nutritionData.vitaminE || 0, nutritionData.vitaminEDV) },
-        vitaminK: { label: 'Vitamin K', amount: nutritionData.vitaminK || 0, unit: 'mcg', dv: calculateDV('vitaminK', nutritionData.vitaminK || 0, nutritionData.vitaminKDV) },
-        thiamin: { label: 'Thiamin', amount: nutritionData.thiamin || 0, unit: 'mg', dv: calculateDV('thiamin', nutritionData.thiamin || 0, nutritionData.thiaminDV) },
-        riboflavin: { label: 'Riboflavin', amount: nutritionData.riboflavin || 0, unit: 'mg', dv: calculateDV('riboflavin', nutritionData.riboflavin || 0, nutritionData.riboflavinDV) },
-        niacin: { label: 'Niacin', amount: nutritionData.niacin || 0, unit: 'mg', dv: calculateDV('niacin', nutritionData.niacin || 0, nutritionData.niacinDV) },
-        vitaminB6: { label: 'Vitamin B6', amount: nutritionData.vitaminB6 || 0, unit: 'mg', dv: calculateDV('vitaminB6', nutritionData.vitaminB6 || 0, nutritionData.vitaminB6DV) },
-        folate: { label: 'Folate', amount: nutritionData.folate || 0, unit: 'mcg', dv: calculateDV('folate', nutritionData.folate || 0, nutritionData.folateDV) },
-        vitaminB12: { label: 'Vitamin B12', amount: nutritionData.vitaminB12 || 0, unit: 'mcg', dv: calculateDV('vitaminB12', nutritionData.vitaminB12 || 0, nutritionData.vitaminB12DV) },
-        pantothenicAcid: { label: 'Pantothenic Acid', amount: nutritionData.pantothenicAcid || 0, unit: 'mg', dv: calculateDV('pantothenicAcid', nutritionData.pantothenicAcid || 0, nutritionData.pantothenicAcidDV) },
-        calcium: { label: 'Calcium', amount: nutritionData.calcium || 0, unit: 'mg', dv: calculateDV('calcium', nutritionData.calcium || 0, nutritionData.calciumDV) },
-        iron: { label: 'Iron', amount: nutritionData.iron || 0, unit: 'mg', dv: calculateDV('iron', nutritionData.iron || 0, nutritionData.ironDV) },
-        potassium: { label: 'Potassium', amount: nutritionData.potassium || 0, unit: 'mg', dv: calculateDV('potassium', nutritionData.potassium || 0, nutritionData.potassiumDV) },
-        phosphorus: { label: 'Phosphorus', amount: nutritionData.phosphorus || 0, unit: 'mg', dv: calculateDV('phosphorus', nutritionData.phosphorus || 0, nutritionData.phosphorusDV) },
-        magnesium: { label: 'Magnesium', amount: nutritionData.magnesium || 0, unit: 'mg', dv: calculateDV('magnesium', nutritionData.magnesium || 0, nutritionData.magnesiumDV) },
-        zinc: { label: 'Zinc', amount: nutritionData.zinc || 0, unit: 'mg', dv: calculateDV('zinc', nutritionData.zinc || 0, nutritionData.zincDV) },
-        selenium: { label: 'Selenium', amount: nutritionData.selenium || 0, unit: 'mcg', dv: calculateDV('selenium', nutritionData.selenium || 0, nutritionData.seleniumDV) },
-        copper: { label: 'Copper', amount: nutritionData.copper || 0, unit: 'mg', dv: calculateDV('copper', nutritionData.copper || 0, nutritionData.copperDV) },
-        manganese: { label: 'Manganese', amount: nutritionData.manganese || 0, unit: 'mg', dv: calculateDV('manganese', nutritionData.manganese || 0, nutritionData.manganeseDV) }
+        vitaminA: { label: t.vitaminA, amount: nutritionData.vitaminA || 0, unit: t.units.mcg, dv: calculateDV('vitaminA', nutritionData.vitaminA || 0, nutritionData.vitaminADV) },
+        vitaminC: { label: t.vitaminC, amount: nutritionData.vitaminC || 0, unit: t.units.mg, dv: calculateDV('vitaminC', nutritionData.vitaminC || 0, nutritionData.vitaminCDV) },
+        vitaminD: { label: t.vitaminD, amount: nutritionData.vitaminD || 0, unit: t.units.mcg, dv: calculateDV('vitaminD', nutritionData.vitaminD || 0, nutritionData.vitaminDDV) },
+        vitaminE: { label: t.vitaminE, amount: nutritionData.vitaminE || 0, unit: t.units.mg, dv: calculateDV('vitaminE', nutritionData.vitaminE || 0, nutritionData.vitaminEDV) },
+        vitaminK: { label: t.vitaminK, amount: nutritionData.vitaminK || 0, unit: t.units.mcg, dv: calculateDV('vitaminK', nutritionData.vitaminK || 0, nutritionData.vitaminKDV) },
+        thiamin: { label: t.thiamin, amount: nutritionData.thiamin || 0, unit: t.units.mg, dv: calculateDV('thiamin', nutritionData.thiamin || 0, nutritionData.thiaminDV) },
+        riboflavin: { label: t.riboflavin, amount: nutritionData.riboflavin || 0, unit: t.units.mg, dv: calculateDV('riboflavin', nutritionData.riboflavin || 0, nutritionData.riboflavinDV) },
+        niacin: { label: t.niacin, amount: nutritionData.niacin || 0, unit: t.units.mg, dv: calculateDV('niacin', nutritionData.niacin || 0, nutritionData.niacinDV) },
+        vitaminB6: { label: t.vitaminB6, amount: nutritionData.vitaminB6 || 0, unit: t.units.mg, dv: calculateDV('vitaminB6', nutritionData.vitaminB6 || 0, nutritionData.vitaminB6DV) },
+        folate: { label: t.folate, amount: nutritionData.folate || 0, unit: t.units.mcg, dv: calculateDV('folate', nutritionData.folate || 0, nutritionData.folateDV) },
+        vitaminB12: { label: t.vitaminB12, amount: nutritionData.vitaminB12 || 0, unit: t.units.mcg, dv: calculateDV('vitaminB12', nutritionData.vitaminB12 || 0, nutritionData.vitaminB12DV) },
+        pantothenicAcid: { label: t.pantothenicAcid, amount: nutritionData.pantothenicAcid || 0, unit: t.units.mg, dv: calculateDV('pantothenicAcid', nutritionData.pantothenicAcid || 0, nutritionData.pantothenicAcidDV) },
+        calcium: { label: t.calcium, amount: nutritionData.calcium || 0, unit: t.units.mg, dv: calculateDV('calcium', nutritionData.calcium || 0, nutritionData.calciumDV) },
+        iron: { label: t.iron, amount: nutritionData.iron || 0, unit: t.units.mg, dv: calculateDV('iron', nutritionData.iron || 0, nutritionData.ironDV) },
+        potassium: { label: t.potassium, amount: nutritionData.potassium || 0, unit: t.units.mg, dv: calculateDV('potassium', nutritionData.potassium || 0, nutritionData.potassiumDV) },
+        phosphorus: { label: t.phosphorus, amount: nutritionData.phosphorus || 0, unit: t.units.mg, dv: calculateDV('phosphorus', nutritionData.phosphorus || 0, nutritionData.phosphorusDV) },
+        magnesium: { label: t.magnesium, amount: nutritionData.magnesium || 0, unit: t.units.mg, dv: calculateDV('magnesium', nutritionData.magnesium || 0, nutritionData.magnesiumDV) },
+        zinc: { label: t.zinc, amount: nutritionData.zinc || 0, unit: t.units.mg, dv: calculateDV('zinc', nutritionData.zinc || 0, nutritionData.zincDV) },
+        selenium: { label: t.selenium, amount: nutritionData.selenium || 0, unit: t.units.mcg, dv: calculateDV('selenium', nutritionData.selenium || 0, nutritionData.seleniumDV) },
+        copper: { label: t.copper, amount: nutritionData.copper || 0, unit: t.units.mg, dv: calculateDV('copper', nutritionData.copper || 0, nutritionData.copperDV) },
+        manganese: { label: t.manganese, amount: nutritionData.manganese || 0, unit: t.units.mg, dv: calculateDV('manganese', nutritionData.manganese || 0, nutritionData.manganeseDV) }
       };
 
       const vitamin = vitaminMap[vitaminId];
       if (!vitamin) return null;
 
       return (
-        <div key={vitaminId} className="flex py-0.5 justify-between">
+        <div key={vitaminId} className={cn("flex py-0.5", isRTL ? "justify-between" : "justify-between")}>
           <span className="text-sm" style={{ color: colors.textColor }}>
-            {formatText(vitamin.label)} {vitamin.amount}{vitamin.unit}
+            {isRTL ? `${vitamin.dv}%` : `${formatText(vitamin.label)} ${vitamin.amount}${vitamin.unit}`}
           </span>
           <span className="text-sm" style={{ color: colors.textColor }}>
-            {vitamin.dv}%
+            {isRTL ? `${formatText(vitamin.label)} ${vitamin.amount}${vitamin.unit}` : `${vitamin.dv}%`}
           </span>
         </div>
       );
@@ -390,36 +434,36 @@ export function FDANutritionLabel({
         case 'monounsaturatedFat':
           if ((nutritionData.monounsaturatedFat || 0) === 0) return null;
           return (
-            <div key={nutrientId} className="flex border-b border-black py-1 justify-between">
-              <span className="text-sm pl-4" style={{ color: colors.textColor }}>
-                {formatText('Monounsaturated Fat')} {(nutritionData.monounsaturatedFat || 0).toFixed(1)}g
+            <div key={nutrientId} className={cn("flex border-b border-black py-1 justify-between")}>
+              <span className={cn("text-sm", isRTL ? "pr-4" : "pl-4")} style={{ color: colors.textColor }}>
+                {isRTL ? "-" : `${formatText(t.monounsaturatedFat)} ${(nutritionData.monounsaturatedFat || 0).toFixed(1)}${t.units.g}`}
               </span>
               <span className="text-sm" style={{ color: colors.textColor }}>
-                -
+                {isRTL ? `${formatText(t.monounsaturatedFat)} ${(nutritionData.monounsaturatedFat || 0).toFixed(1)}${t.units.g}` : "-"}
               </span>
             </div>
           );
         case 'polyunsaturatedFat':
           if ((nutritionData.polyunsaturatedFat || 0) === 0) return null;
           return (
-            <div key={nutrientId} className="flex border-b border-black py-1 justify-between">
-              <span className="text-sm pl-4" style={{ color: colors.textColor }}>
-                {formatText('Polyunsaturated Fat')} {(nutritionData.polyunsaturatedFat || 0).toFixed(1)}g
+            <div key={nutrientId} className={cn("flex border-b border-black py-1 justify-between")}>
+              <span className={cn("text-sm", isRTL ? "pr-4" : "pl-4")} style={{ color: colors.textColor }}>
+                {isRTL ? "-" : `${formatText(t.polyunsaturatedFat)} ${(nutritionData.polyunsaturatedFat || 0).toFixed(1)}${t.units.g}`}
               </span>
               <span className="text-sm" style={{ color: colors.textColor }}>
-                -
+                {isRTL ? `${formatText(t.polyunsaturatedFat)} ${(nutritionData.polyunsaturatedFat || 0).toFixed(1)}${t.units.g}` : "-"}
               </span>
             </div>
           );
         case 'sugarAlcohol':
           if ((nutritionData.sugarAlcohol || 0) === 0) return null;
           return (
-            <div key={nutrientId} className="flex border-b border-black py-1 justify-between">
-              <span className="text-sm pl-4" style={{ color: colors.textColor }}>
-                {formatText('Sugar Alcohol')} {(nutritionData.sugarAlcohol || 0).toFixed(1)}g
+            <div key={nutrientId} className={cn("flex border-b border-black py-1 justify-between")}>
+              <span className={cn("text-sm", isRTL ? "pr-4" : "pl-4")} style={{ color: colors.textColor }}>
+                {isRTL ? "-" : `${formatText(t.sugarAlcohol)} ${(nutritionData.sugarAlcohol || 0).toFixed(1)}${t.units.g}`}
               </span>
               <span className="text-sm" style={{ color: colors.textColor }}>
-                -
+                {isRTL ? `${formatText(t.sugarAlcohol)} ${(nutritionData.sugarAlcohol || 0).toFixed(1)}${t.units.g}` : "-"}
               </span>
             </div>
           );
@@ -445,7 +489,12 @@ export function FDANutritionLabel({
     if (realIngredients.length === 0) {
       return "Sample ingredient list would appear here";
     }
-    return realIngredients.map(ing => ing.name).join(', ');
+    return realIngredients.map(ing => {
+      // Use custom statement if available, otherwise use ingredient name
+      return ing.customStatement && ing.customStatement.trim()
+        ? ing.customStatement.trim()
+        : ing.name;
+    }).join(', ');
   };
 
   // Helper function to render business info
@@ -462,6 +511,68 @@ export function FDANutritionLabel({
       return "Sample allergen information";
     }
     return realAllergens.join(', ');
+  };
+
+  // Helper function to render QR code
+  const renderQRCode = (colors: any) => {
+    if (qrCodeData && qrCodeData.qr_code_url) {
+      // Display actual QR code image
+      return (
+        <div className="pt-2 flex justify-center">
+          <img
+            src={qrCodeData.qr_code_url}
+            alt="QR Code"
+            className="w-16 h-16 object-contain"
+            style={{
+              filter: colors.textColor !== 'black' ? `invert(1)` : 'none'
+            }}
+          />
+        </div>
+      );
+    } else {
+      // Display placeholder QR code
+      return (
+        <div className="pt-2 flex justify-center">
+          <div className="w-16 h-16 bg-black flex items-center justify-center text-white text-xs" style={{ backgroundColor: colors.textColor }}>
+            <div className="text-center leading-tight">
+              <div>QR</div>
+              <div className="text-[6px]">Scan me</div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+  };
+
+  // Helper function to render Arabic QR code
+  const renderArabicQRCode = (colors: any) => {
+    if (qrCodeData && qrCodeData.qr_code_url) {
+      // Display actual QR code image
+      return (
+        <div className="pt-2 flex justify-center">
+          <img
+            src={qrCodeData.qr_code_url}
+            alt="QR Code"
+            className="w-16 h-16 object-contain"
+            style={{
+              filter: colors.textColor !== 'black' ? `invert(1)` : 'none'
+            }}
+          />
+        </div>
+      );
+    } else {
+      // Display placeholder QR code with Arabic text
+      return (
+        <div className="pt-2 flex justify-center">
+          <div className="w-16 h-16 bg-black flex items-center justify-center text-white text-xs" style={{ backgroundColor: colors.textColor }}>
+            <div className="text-center leading-tight">
+              <div>QR</div>
+              <div className="text-[6px]">امسح</div>
+            </div>
+          </div>
+        </div>
+      );
+    }
   };
 
   // FDA Vertical Template (Traditional Layout)
@@ -667,16 +778,7 @@ export function FDANutritionLabel({
             </div>
           )}
 
-          {customization.showQRCode && (
-            <div className="pt-2 flex justify-center">
-              <div className="w-16 h-16 bg-black flex items-center justify-center text-white text-xs" style={{ backgroundColor: colors.textColor }}>
-                <div className="text-center leading-tight">
-                  <div>QR</div>
-                  <div className="text-[6px]">Scan me</div>
-                </div>
-              </div>
-            </div>
-          )}
+          {customization.showQRCode && renderQRCode(colors)}
         </div>
       </Card>
     );
@@ -825,16 +927,7 @@ export function FDANutritionLabel({
             </div>
           )}
 
-          {customization.showQRCode && (
-            <div className="pt-2 flex justify-center">
-              <div className="w-16 h-16 bg-black flex items-center justify-center text-white text-xs" style={{ backgroundColor: colors.textColor }}>
-                <div className="text-center leading-tight">
-                  <div>QR</div>
-                  <div className="text-[6px]">Scan me</div>
-                </div>
-              </div>
-            </div>
-          )}
+          {customization.showQRCode && renderQRCode(colors)}
         </div>
       </Card>
     );
@@ -1045,16 +1138,7 @@ export function FDANutritionLabel({
             </div>
           )}
 
-          {customization.showQRCode && (
-            <div className="pt-2 flex justify-center">
-              <div className="w-16 h-16 bg-black flex items-center justify-center text-white text-xs" style={{ backgroundColor: colors.textColor }}>
-                <div className="text-center leading-tight">
-                  <div>QR</div>
-                  <div className="text-[6px]">Scan me</div>
-                </div>
-              </div>
-            </div>
-          )}
+          {customization.showQRCode && renderQRCode(colors)}
         </div>
       </Card>
     );
@@ -1063,195 +1147,455 @@ export function FDANutritionLabel({
   // Render English (LTR) Layout - Legacy function for backward compatibility
   const renderEnglishLayout = () => renderFDAVertical();
 
-  // Render Arabic (RTL) Layout
-  const renderArabicLayout = () => (
-    <Card
-      id="fda-nutrition-label"
-      className={cn(
-        "w-full max-w-[320px] mx-auto bg-white border-2 border-black shadow-lg rounded-none",
-        className
-      )}>
-        <div className="p-3" dir="rtl">
-          {/* Header */}
-          <div className="border-b-8 border-black pb-1 mb-2">
-            <h1 className="text-3xl font-black text-black text-center tracking-tight font-bold">
-              {t.nutritionFacts}
+  // Render Arabic (RTL) Layout with full customization support
+  const renderArabicLayout = () => {
+    // Support different label types for Arabic
+    switch (customization.labelType) {
+      case 'FDA Linear':
+        return renderArabicLinear();
+      case 'FDA Tabular':
+        return renderArabicTabular();
+      case 'FDA Vertical':
+      default:
+        return renderArabicVertical();
+    }
+  };
+
+  // Arabic Vertical Layout
+  const renderArabicVertical = () => {
+    const colors = getLabelColors();
+    const alignment = getLabelAlignment();
+    const width = getLabelWidth();
+    
+    return (
+      <Card
+        id="fda-nutrition-label"
+        className={cn(
+          "mx-auto border-2 border-black shadow-lg rounded-none",
+          className
+        )}
+        style={{
+          maxWidth: `${width}px`,
+          backgroundColor: colors.backgroundColor,
+          color: colors.textColor
+        }}>
+        <div className={cn("p-3", alignment)} dir="rtl">
+          {/* Header - Fixed Arabic layout with proper spacing */}
+          <div className="border-b-8 border-black pb-2 mb-3">
+            <h1 className={cn(
+              "text-2xl font-black text-center tracking-tight mb-2",
+              customization.removeUppercase || customization.makeLowercase ? "" : "uppercase"
+            )} style={{ color: colors.textColor, lineHeight: '1.2' }}>
+              {formatText(t.nutritionFacts)}
             </h1>
-            <div className="text-sm text-black font-medium text-right">
+            <div className="text-sm font-medium text-right mb-1" style={{ color: colors.textColor }}>
               {t.servingsPerContainer} {nutritionData.servings}
             </div>
-            <div className="flex items-baseline justify-between"> 
-              <span className="text-base font-bold text-black">
+            <div className="flex items-baseline justify-between flex-wrap gap-1">
+              <span className="text-sm font-bold" style={{ color: colors.textColor }}>
                 ({nutritionData.servingSizeGrams}{t.units.g}) {nutritionData.servingSize}
               </span>
-              <span className="text-base font-bold text-black">{t.servingSize}</span>
+              <span className="text-sm font-bold" style={{ color: colors.textColor }}>{t.servingSize}</span>
             </div>
           </div>
 
           {/* Amount Per Serving */}
           <div className="mb-1">
-            <div className="flex items-baseline justify-end"> 
-              <span className="text-sm font-bold text-black">{t.amountPerServing}</span>
+            <div className="flex items-baseline justify-end">
+              <span className="text-sm font-bold" style={{ color: colors.textColor }}>{t.amountPerServing}</span>
             </div>
           </div>
 
           {/* Calories */}
           <div className="border-b-8 border-black pb-1 mb-2">
-            <div className="flex items-center justify-between"> 
-              <span className="text-4xl font-black text-black">{nutritionData.calories}</span>
-              <span className="text-2xl font-black text-black font-bold">{t.calories}</span>
+            <div className="flex items-center justify-between">
+              <span className="text-4xl font-black" style={{ color: colors.textColor }}>{nutritionData.calories}</span>
+              <span className="text-2xl font-black" style={{ color: colors.textColor }}>{formatText(t.calories)}</span>
             </div>
           </div>
 
           {/* % Daily Value */}
           <div className="flex mb-1 justify-start">
-            <span className="text-sm font-bold text-black">{t.dailyValue}</span>
+            <span className="text-sm font-bold" style={{ color: colors.textColor }}>{t.dailyValue}</span>
           </div>
 
           {/* Nutrients */}
           <div className="space-y-0">
             {/* Total Fat */}
             <div className="flex border-b border-black py-1 justify-between">
-              <span className="text-sm font-bold text-black">
+              <span className="text-sm font-bold" style={{ color: colors.textColor }}>
                 {calculateDV('totalFat', nutritionData.totalFat, nutritionData.totalFatDV)}%
               </span>
-              <span className="text-sm font-bold text-black">
-                {t.totalFat} {nutritionData.totalFat}{t.units.g}
+              <span className="text-sm font-bold" style={{ color: colors.textColor }}>
+                {formatText(t.totalFat)} {nutritionData.totalFat}{t.units.g}
               </span>
             </div>
 
              {/* Saturated Fat */}
              <div className="flex border-b border-black py-1 justify-between">
-               <span className="text-sm text-black">
+               <span className="text-sm" style={{ color: colors.textColor }}>
                  {calculateDV('saturatedFat', nutritionData.saturatedFat, nutritionData.saturatedFatDV)}%
                </span>
-               <span className="text-sm text-black pr-4">
-                 {t.saturatedFat} {nutritionData.saturatedFat}{t.units.g}
+               <span className="text-sm pr-4" style={{ color: colors.textColor }}>
+                 {formatText(t.saturatedFat)} {nutritionData.saturatedFat}{t.units.g}
                </span>
              </div>
 
              {/* Trans Fat */}
              <div className="flex border-b border-black py-1 justify-between">
-               <span className="text-sm text-black"></span>
-               <span className="text-sm text-black pr-4">
-                 <em>{t.transFat}</em> {nutritionData.transFat}{t.units.g}
+               <span className="text-sm" style={{ color: colors.textColor }}></span>
+               <span className="text-sm pr-4" style={{ color: colors.textColor }}>
+                 <em>{formatText(t.transFat)}</em> {nutritionData.transFat}{t.units.g}
                </span>
              </div>
 
              {/* Cholesterol */}
              <div className="flex border-b border-black py-1 justify-between">
-               <span className="text-sm font-bold text-black">
+               <span className="text-sm font-bold" style={{ color: colors.textColor }}>
                  {calculateDV('cholesterol', nutritionData.cholesterol, nutritionData.cholesterolDV)}%
                </span>
-               <span className="text-sm font-bold text-black">
-                 {t.cholesterol} {nutritionData.cholesterol}{t.units.mg}
+               <span className="text-sm font-bold" style={{ color: colors.textColor }}>
+                 {formatText(t.cholesterol)} {nutritionData.cholesterol}{t.units.mg}
                </span>
              </div>
 
              {/* Sodium */}
              <div className="flex border-b border-black py-1 justify-between">
-               <span className="text-sm font-bold text-black">
+               <span className="text-sm font-bold" style={{ color: colors.textColor }}>
                  {calculateDV('sodium', nutritionData.sodium, nutritionData.sodiumDV)}%
                </span>
-               <span className="text-sm font-bold text-black">
-                 {t.sodium} {nutritionData.sodium}{t.units.mg}
+               <span className="text-sm font-bold" style={{ color: colors.textColor }}>
+                 {formatText(t.sodium)} {nutritionData.sodium}{t.units.mg}
                </span>
              </div>
 
              {/* Total Carbohydrate */}
              <div className="flex border-b border-black py-1 justify-between">
-               <span className="text-sm font-bold text-black">
+               <span className="text-sm font-bold" style={{ color: colors.textColor }}>
                  {calculateDV('totalCarbohydrate', nutritionData.totalCarbohydrate, nutritionData.totalCarbohydrateDV)}%
                </span>
-               <span className="text-sm font-bold text-black">
-                 {t.totalCarbohydrate} {nutritionData.totalCarbohydrate}{t.units.g}
+               <span className="text-sm font-bold" style={{ color: colors.textColor }}>
+                 {formatText(t.totalCarbohydrate)} {nutritionData.totalCarbohydrate}{t.units.g}
                </span>
              </div>
 
              {/* Dietary Fiber */}
              <div className="flex border-b border-black py-1 justify-between">
-               <span className="text-sm text-black">
+               <span className="text-sm" style={{ color: colors.textColor }}>
                  {calculateDV('dietaryFiber', nutritionData.dietaryFiber, nutritionData.dietaryFiberDV)}%
                </span>
-               <span className="text-sm text-black pr-4">
-                 {t.dietaryFiber} {nutritionData.dietaryFiber}{t.units.g}
+               <span className="text-sm pr-4" style={{ color: colors.textColor }}>
+                 {formatText(t.dietaryFiber)} {nutritionData.dietaryFiber}{t.units.g}
                </span>
              </div>
 
              {/* Total Sugars */}
              <div className="flex border-b border-black py-1 justify-between">
-               <span className="text-sm text-black"></span>
-               <span className="text-sm text-black pr-4">
-                 {t.totalSugars} {nutritionData.totalSugars}{t.units.g}
+               <span className="text-sm" style={{ color: colors.textColor }}></span>
+               <span className="text-sm pr-4" style={{ color: colors.textColor }}>
+                 {formatText(t.totalSugars)} {nutritionData.totalSugars}{t.units.g}
                </span>
              </div>
 
              {/* Added Sugars */}
-             <div className="flex border-b-4 border-black py-1 justify-between">
-               <span className="text-sm text-black">
+             <div className="flex border-b border-black py-1 justify-between">
+               <span className="text-sm" style={{ color: colors.textColor }}>
                  {calculateDV('addedSugars', nutritionData.addedSugars)}%
                </span>
-               <span className="text-sm text-black pr-8">
-                 {t.includes} {nutritionData.addedSugars}{t.units.g} {t.addedSugars}
+               <span className="text-sm pr-8" style={{ color: colors.textColor }}>
+                 {formatText(t.includes)} {nutritionData.addedSugars}{t.units.g} {formatText(t.addedSugars)}
                </span>
              </div>
 
+             {/* Optional Nutrients */}
+             {renderOptionalNutrients(colors)}
+
              {/* Protein */}
              <div className="flex border-b-4 border-black py-1 justify-between">
-               <span className="text-sm text-black">
-                 {calculateDV('protein', nutritionData.protein, nutritionData.proteinDV)}%
+               <span className="text-sm" style={{ color: colors.textColor }}>
+                 {selectedOptionalNutrients.includes('proteinPercentage') ?
+                   `${calculateDV('protein', nutritionData.protein, nutritionData.proteinDV)}%` :
+                   ''
+                 }
                </span>
-               <span className="text-sm font-bold text-black">
-                 {t.protein} {nutritionData.protein}{t.units.g}
+               <span className="text-sm font-bold" style={{ color: colors.textColor }}>
+                 {formatText(t.protein)} {nutritionData.protein}{t.units.g}
                </span>
              </div>
 
              {/* Vitamins and Minerals */}
              <div className="border-b-4 border-black py-1">
-               <div className="flex py-0.5 justify-between">
-                 <span className="text-sm text-black">{calculateDV('vitaminD', nutritionData.vitaminD, nutritionData.vitaminDDV)}%</span>
-                 <span className="text-sm text-black">{t.vitaminD} {nutritionData.vitaminD}{t.units.mcg}</span>
-               </div>
-               <div className="flex py-0.5 justify-between">
-                 <span className="text-sm text-black">{calculateDV('calcium', nutritionData.calcium, nutritionData.calciumDV)}%</span>
-                 <span className="text-sm text-black">{t.calcium} {nutritionData.calcium}{t.units.mg}</span>
-               </div>
-               <div className="flex py-0.5 justify-between">
-                 <span className="text-sm text-black">{calculateDV('iron', nutritionData.iron, nutritionData.ironDV)}%</span>
-                 <span className="text-sm text-black">{t.iron} {nutritionData.iron}{t.units.mg}</span>
-               </div>
-               <div className="flex py-0.5 justify-between">
-                 <span className="text-sm text-black">{calculateDV('potassium', nutritionData.potassium, nutritionData.potassiumDV)}%</span>
-                 <span className="text-sm text-black">{t.potassium} {nutritionData.potassium}{t.units.mg}</span>
-               </div>
+               {renderSelectedVitamins(colors)}
              </div>
           </div>
 
           {/* Footer */}
           <div className="pt-2">
-            <p className="text-xs text-black leading-tight text-right">
+            <p className="text-xs leading-tight text-right" style={{ color: colors.textColor }}>
               {t.footer}
             </p>
           </div>
+
+          {/* Conditional Sections */}
+          {!customization.hideIngredientList && (
+            <div className="pt-2 border-t border-black mt-2">
+              <p className="text-xs font-bold text-right" style={{ color: colors.textColor }}>
+                المكونات: {renderIngredientList(colors)}
+              </p>
+            </div>
+          )}
+
+          {!customization.hideBusinessInfo && (
+            <div className="pt-1">
+              <p className="text-xs text-right" style={{ color: colors.textColor }}>
+                مُصنع بواسطة: {renderBusinessInfo(colors)}
+              </p>
+            </div>
+          )}
+
+          {!customization.hideAllergens && realAllergens.length > 0 && (
+            <div className="pt-1">
+              <p className="text-xs font-bold text-right" style={{ color: colors.textColor }}>
+                يحتوي على: {renderAllergenInfo(colors)}
+              </p>
+            </div>
+          )}
+
+          {customization.showQRCode && renderArabicQRCode(colors)}
         </div>
       </Card>
-  );
+    );
+  };
+
+  // Arabic Linear Layout
+  const renderArabicLinear = () => {
+    const colors = getLabelColors();
+    const width = getLabelWidth();
+    
+    return (
+      <Card
+        id="fda-nutrition-label"
+        className={cn(
+          "mx-auto border-2 border-black shadow-lg rounded-none",
+          className
+        )}
+        style={{
+          maxWidth: `${width}px`,
+          backgroundColor: colors.backgroundColor,
+          color: colors.textColor
+        }}
+      >
+        <div className="p-3" dir="rtl">
+          {/* Header */}
+          <div className="border-b-4 border-black pb-1 mb-2">
+            <h1 className={cn(
+              "text-xl font-black text-center tracking-tight",
+              customization.removeUppercase || customization.makeLowercase ? "" : "uppercase"
+            )} style={{ color: colors.textColor }}>
+              {formatText(t.nutritionFacts)}
+            </h1>
+            <div className="text-xs font-medium text-center" style={{ color: colors.textColor }}>
+              {t.servingsPerContainer} {nutritionData.servings} | {formatText(t.servingSize)} {nutritionData.servingSize} ({nutritionData.servingSizeGrams}{t.units.g})
+            </div>
+          </div>
+
+          {/* Linear Format - All nutrients in paragraph style (RTL) */}
+          <div className="text-sm leading-relaxed text-right" style={{ color: colors.textColor }}>
+            <span className="font-bold">{formatText(t.calories)} {nutritionData.calories}</span>
+            {', '}
+            <span>{formatText(t.totalFat)} {nutritionData.totalFat}{t.units.g} ({calculateDV('totalFat', nutritionData.totalFat, nutritionData.totalFatDV)}% DV)</span>
+            {', '}
+            <span>{formatText(t.saturatedFat)} {nutritionData.saturatedFat}{t.units.g} ({calculateDV('saturatedFat', nutritionData.saturatedFat, nutritionData.saturatedFatDV)}% DV)</span>
+            {', '}
+            <span>{formatText(t.transFat)} {nutritionData.transFat}{t.units.g}</span>
+            {', '}
+            <span>{formatText(t.cholesterol)} {nutritionData.cholesterol}{t.units.mg} ({calculateDV('cholesterol', nutritionData.cholesterol, nutritionData.cholesterolDV)}% DV)</span>
+            {', '}
+            <span>{formatText(t.sodium)} {nutritionData.sodium}{t.units.mg} ({calculateDV('sodium', nutritionData.sodium, nutritionData.sodiumDV)}% DV)</span>
+            {', '}
+            <span>{formatText(t.totalCarbohydrate)} {nutritionData.totalCarbohydrate}{t.units.g} ({calculateDV('totalCarbohydrate', nutritionData.totalCarbohydrate, nutritionData.totalCarbohydrateDV)}% DV)</span>
+            {', '}
+            <span>{formatText(t.dietaryFiber)} {nutritionData.dietaryFiber}{t.units.g} ({calculateDV('dietaryFiber', nutritionData.dietaryFiber, nutritionData.dietaryFiberDV)}% DV)</span>
+            {', '}
+            <span>{formatText(t.totalSugars)} {nutritionData.totalSugars}{t.units.g}</span>
+            {', '}
+            <span>{formatText(t.addedSugars)} {nutritionData.addedSugars}{t.units.g} ({calculateDV('addedSugars', nutritionData.addedSugars)}% DV)</span>
+            {', '}
+            <span className="font-bold">
+              {formatText(t.protein)} {nutritionData.protein}{t.units.g}
+              {selectedOptionalNutrients.includes('proteinPercentage') &&
+                ` (${calculateDV('protein', nutritionData.protein, nutritionData.proteinDV)}% DV)`
+              }
+            </span>
+            {selectedVitamins.length > 0 && ', '}
+            {selectedVitamins.map((vitaminId, index) => {
+              const vitaminMap: Record<string, { label: string; amount: number; unit: string; dv: number }> = {
+                vitaminA: { label: t.vitaminA, amount: nutritionData.vitaminA || 0, unit: t.units.mcg, dv: calculateDV('vitaminA', nutritionData.vitaminA || 0, nutritionData.vitaminADV) },
+                vitaminC: { label: t.vitaminC, amount: nutritionData.vitaminC || 0, unit: t.units.mg, dv: calculateDV('vitaminC', nutritionData.vitaminC || 0, nutritionData.vitaminCDV) },
+                vitaminD: { label: t.vitaminD, amount: nutritionData.vitaminD || 0, unit: t.units.mcg, dv: calculateDV('vitaminD', nutritionData.vitaminD || 0, nutritionData.vitaminDDV) },
+                calcium: { label: t.calcium, amount: nutritionData.calcium || 0, unit: t.units.mg, dv: calculateDV('calcium', nutritionData.calcium || 0, nutritionData.calciumDV) },
+                iron: { label: t.iron, amount: nutritionData.iron || 0, unit: t.units.mg, dv: calculateDV('iron', nutritionData.iron || 0, nutritionData.ironDV) },
+                potassium: { label: t.potassium, amount: nutritionData.potassium || 0, unit: t.units.mg, dv: calculateDV('potassium', nutritionData.potassium || 0, nutritionData.potassiumDV) }
+              };
+              
+              const vitamin = vitaminMap[vitaminId];
+              if (!vitamin) return null;
+              
+              return (
+                <span key={vitaminId}>
+                  {formatText(vitamin.label)} {vitamin.amount}{vitamin.unit} ({vitamin.dv}% DV)
+                  {index < selectedVitamins.length - 1 ? ', ' : ''}
+                </span>
+              );
+            })}
+            {'. '}
+          </div>
+
+          {/* Footer */}
+          <div className="pt-2 border-t border-black mt-2">
+            <p className="text-xs leading-tight text-right" style={{ color: colors.textColor }}>
+              {t.footer}
+            </p>
+          </div>
+
+          {/* Conditional Sections */}
+          {!customization.hideIngredientList && (
+            <div className="pt-2 border-t border-black mt-2">
+              <p className="text-xs font-bold text-right" style={{ color: colors.textColor }}>
+                المكونات: {renderIngredientList(colors)}
+              </p>
+            </div>
+          )}
+
+          {!customization.hideBusinessInfo && (
+            <div className="pt-1">
+              <p className="text-xs text-right" style={{ color: colors.textColor }}>
+                مُصنع بواسطة: {renderBusinessInfo(colors)}
+              </p>
+            </div>
+          )}
+
+          {!customization.hideAllergens && realAllergens.length > 0 && (
+            <div className="pt-1">
+              <p className="text-xs font-bold text-right" style={{ color: colors.textColor }}>
+                يحتوي على: {renderAllergenInfo(colors)}
+              </p>
+            </div>
+          )}
+
+          {customization.showQRCode && renderArabicQRCode(colors)}
+        </div>
+      </Card>
+    );
+  };
+
+  // Arabic Tabular Layout
+  const renderArabicTabular = () => {
+    const colors = getLabelColors();
+    const width = getLabelWidth();
+    
+    return (
+      <Card
+        id="fda-nutrition-label"
+        className={cn(
+          "mx-auto border-2 border-black shadow-lg rounded-none",
+          className
+        )}
+        style={{
+          maxWidth: `${width}px`,
+          backgroundColor: colors.backgroundColor,
+          color: colors.textColor
+        }}
+      >
+        <div className="p-3" dir="rtl">
+          {/* Header */}
+          <div className="border-b-4 border-black pb-1 mb-2">
+            <h1 className={cn(
+              "text-2xl font-black text-center tracking-tight",
+              customization.removeUppercase || customization.makeLowercase ? "" : "uppercase"
+            )} style={{ color: colors.textColor }}>
+              {formatText(t.nutritionFacts)}
+            </h1>
+            <div className="text-sm font-medium text-center" style={{ color: colors.textColor }}>
+              {t.servingsPerContainer} {nutritionData.servings} | {formatText(t.servingSize)} {nutritionData.servingSize} ({nutritionData.servingSizeGrams}{t.units.g})
+            </div>
+          </div>
+
+          {/* Table Format (RTL) */}
+          <table className="w-full text-sm border-collapse" dir="rtl">
+            <thead>
+              <tr className="border-b-2 border-black">
+                <th className="text-right font-bold py-1" style={{ color: colors.textColor }}>% DV</th>
+                <th className="text-right font-bold py-1" style={{ color: colors.textColor }}>الكمية</th>
+                <th className="text-right font-bold py-1" style={{ color: colors.textColor }}>العنصر الغذائي</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-b border-black">
+                <td className="text-right py-1" style={{ color: colors.textColor }}>-</td>
+                <td className="text-right py-1" style={{ color: colors.textColor }}>{nutritionData.calories}</td>
+                <td className="font-bold py-1" style={{ color: colors.textColor }}>{formatText(t.calories)}</td>
+              </tr>
+              <tr className="border-b border-black">
+                <td className="text-right py-1" style={{ color: colors.textColor }}>{calculateDV('totalFat', nutritionData.totalFat, nutritionData.totalFatDV)}%</td>
+                <td className="text-right py-1" style={{ color: colors.textColor }}>{nutritionData.totalFat}{t.units.g}</td>
+                <td className="font-bold py-1" style={{ color: colors.textColor }}>{formatText(t.totalFat)}</td>
+              </tr>
+              {/* Add more nutrients as needed */}
+            </tbody>
+          </table>
+
+          {/* Footer */}
+          <div className="pt-2 border-t border-black mt-2">
+            <p className="text-xs leading-tight text-right" style={{ color: colors.textColor }}>
+              {t.footer}
+            </p>
+          </div>
+
+          {/* Conditional Sections */}
+          {!customization.hideIngredientList && (
+            <div className="pt-2 border-t border-black mt-2">
+              <p className="text-xs font-bold text-right" style={{ color: colors.textColor }}>
+                المكونات: {renderIngredientList(colors)}
+              </p>
+            </div>
+          )}
+
+          {!customization.hideBusinessInfo && (
+            <div className="pt-1">
+              <p className="text-xs text-right" style={{ color: colors.textColor }}>
+                مُصنع بواسطة: {renderBusinessInfo(colors)}
+              </p>
+            </div>
+          )}
+
+          {!customization.hideAllergens && realAllergens.length > 0 && (
+            <div className="pt-1">
+              <p className="text-xs font-bold text-right" style={{ color: colors.textColor }}>
+                يحتوي على: {renderAllergenInfo(colors)}
+              </p>
+            </div>
+          )}
+
+          {customization.showQRCode && renderArabicQRCode(colors)}
+        </div>
+      </Card>
+    );
+  };
 
   const handleDownload = async () => {
     if (onDownload) {
       onDownload();
     } else {
       try {
-        // Generate PDF from the nutrition label
+        // Generate PDF from the nutrition label with actual label dimensions
         const labelId = 'fda-nutrition-label';
         const recipeName = nutritionData.servingSize || 'nutrition-label';
         const filename = `${recipeName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`;
         
-        await generateLabelPDF(labelId, {
+        await generateNutritionLabelPDF(labelId, {
           filename,
-          format: 'a4',
-          orientation: 'portrait',
-          quality: 2
+          quality: 1
         });
       } catch (error) {
         console.error('PDF generation failed:', error);
@@ -1270,6 +1614,7 @@ export function FDANutritionLabel({
           nutritionData: data,
           language: language,
           ingredients: realIngredients,
+          allergenData: allergenData, // Pass the comprehensive allergen data
           recipeName: recipeName
         }
       });

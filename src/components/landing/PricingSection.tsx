@@ -104,7 +104,6 @@ export function PricingSection() {
               "Manual product entry only",
               "Max 3 product submissions/14 days",
               "Standard label templates",
-              "Basic compliance feedback",
               "Self-help support",
               "Email notifications",
               "Basic nutrition analysis"

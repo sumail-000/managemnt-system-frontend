@@ -6,6 +6,9 @@ export interface NutritionData {
   yield: number;
   calories: number;
   totalWeight: number;
+  healthLabels?: string[];
+  cautions?: string[];
+  allergens?: AllergenData;
   
   // Total nutrients (raw quantities) - Based on exact API response structure
   totalNutrients: {
@@ -64,6 +67,184 @@ export interface NutritionData {
     VITD: { label: string; quantity: number; unit: string };
   };
 }
+
+// Interface for comprehensive allergen data
+export interface AllergenData {
+  // Detected allergens from API (organized by category)
+  detected: { [categoryId: string]: AllergenItem[] };
+  // Manually added allergens (organized by category)
+  manual: { [categoryId: string]: AllergenItem[] };
+  // Combined allergen statement for labels
+  statement?: string;
+  // Show/hide on labels
+  displayOnLabel: boolean;
+}
+
+// Base allergen interface
+export interface AllergenItem {
+  name: string;
+  source: 'cautions' | 'healthLabels' | 'ingredients' | 'manual';
+  confidence: 'high' | 'medium' | 'low';
+  details?: string;
+}
+
+// Legacy interfaces for backward compatibility
+export interface DetectedAllergen extends AllergenItem {
+  source: 'cautions' | 'healthLabels' | 'ingredients';
+}
+
+export interface ManualAllergen extends AllergenItem {
+  source: 'manual';
+}
+
+// Comprehensive allergen classification system
+export const ALLERGEN_CATEGORIES = [
+  {
+    id: 'milk',
+    name: 'Milk & Dairy',
+    icon: '🥛',
+    subcategories: [
+      'Cow Milk',
+      'Goat Milk',
+      'Sheep Milk',
+      'Cheese',
+      'Butter',
+      'Cream',
+      'Yogurt',
+      'Lactose'
+    ]
+  },
+  {
+    id: 'eggs',
+    name: 'Eggs',
+    icon: '🥚',
+    subcategories: [
+      'Chicken Eggs',
+      'Duck Eggs',
+      'Quail Eggs',
+      'Egg Whites',
+      'Egg Yolks'
+    ]
+  },
+  {
+    id: 'fish',
+    name: 'Fish',
+    icon: '🐟',
+    subcategories: [
+      'Salmon',
+      'Tuna',
+      'Cod',
+      'Mackerel',
+      'Sardines',
+      'Anchovies',
+      'Other Fish'
+    ]
+  },
+  {
+    id: 'shellfish',
+    name: 'Shellfish',
+    icon: '🦐',
+    subcategories: [
+      'Crustaceans',
+      'Shrimp',
+      'Crab',
+      'Lobster',
+      'Mollusks',
+      'Oysters',
+      'Mussels',
+      'Clams',
+      'Scallops'
+    ]
+  },
+  {
+    id: 'tree_nuts',
+    name: 'Tree Nuts',
+    icon: '🌰',
+    subcategories: [
+      'Almonds',
+      'Walnuts',
+      'Cashews',
+      'Pistachios',
+      'Pecans',
+      'Hazelnuts',
+      'Brazil Nuts',
+      'Macadamia Nuts',
+      'Pine Nuts'
+    ]
+  },
+  {
+    id: 'peanuts',
+    name: 'Peanuts',
+    icon: '🥜',
+    subcategories: [
+      'Peanuts',
+      'Peanut Oil',
+      'Peanut Butter',
+      'Peanut Flour'
+    ]
+  },
+  {
+    id: 'wheat',
+    name: 'Wheat & Gluten',
+    icon: '🌾',
+    subcategories: [
+      'Wheat',
+      'Gluten',
+      'Barley',
+      'Rye',
+      'Oats (may contain gluten)',
+      'Spelt',
+      'Kamut'
+    ]
+  },
+  {
+    id: 'soy',
+    name: 'Soy',
+    icon: '🫘',
+    subcategories: [
+      'Soybeans',
+      'Soy Sauce',
+      'Tofu',
+      'Tempeh',
+      'Soy Oil',
+      'Soy Lecithin'
+    ]
+  },
+  {
+    id: 'sesame',
+    name: 'Sesame',
+    icon: '🌱',
+    subcategories: [
+      'Sesame Seeds',
+      'Sesame Oil',
+      'Tahini'
+    ]
+  },
+  {
+    id: 'sulfites',
+    name: 'Sulfites',
+    icon: '⚗️',
+    subcategories: [
+      'Sulfur Dioxide',
+      'Sodium Sulfite',
+      'Potassium Sulfite'
+    ]
+  },
+  {
+    id: 'other',
+    name: 'Other Allergens',
+    icon: '⚠️',
+    subcategories: [
+      'Celery',
+      'Mustard',
+      'Lupine',
+      'Alcohol',
+      'MSG',
+      'Artificial Colors',
+      'Artificial Flavors'
+    ]
+  }
+];
 
 // Interface for per-serving nutrition data
 export interface PerServingNutritionData {
@@ -179,6 +360,157 @@ export interface FDANutritionData {
 }
 
 /**
+ * Extracts allergen information from Edamam API response
+ * @param response - The Edamam nutrition API response
+ * @returns Extracted allergen data
+ */
+export function extractAllergenData(response: EdamamNutritionResponse): AllergenData {
+  const detected: { [categoryId: string]: AllergenItem[] } = {};
+  
+  // Initialize empty arrays for all categories
+  ALLERGEN_CATEGORIES.forEach(category => {
+    detected[category.id] = [];
+  });
+  
+  // Extract from cautions array (high confidence)
+  if (response.cautions && response.cautions.length > 0) {
+    response.cautions.forEach(caution => {
+      const categoryId = mapAllergenToCategory(caution);
+      if (categoryId) {
+        detected[categoryId].push({
+          name: caution,
+          source: 'cautions',
+          confidence: 'high',
+          details: 'Detected from Edamam cautions'
+        });
+      }
+    });
+  }
+  
+  // Extract from healthLabels (medium confidence)
+  if (response.healthLabels && response.healthLabels.length > 0) {
+    const allergenHealthLabels = response.healthLabels.filter(label =>
+      label.includes('_FREE') && !['ALCOHOL_FREE', 'NO_SUGAR_ADDED', 'SULPHITE_FREE'].includes(label)
+    );
+    
+    allergenHealthLabels.forEach(label => {
+      // Convert health labels to allergen names and categories
+      const allergenInfo = convertHealthLabelToAllergen(label);
+      if (allergenInfo) {
+        detected[allergenInfo.categoryId].push({
+          name: allergenInfo.name,
+          source: 'healthLabels',
+          confidence: 'medium',
+          details: `Inferred from health label: ${label}`
+        });
+      }
+    });
+  }
+  
+  // Initialize empty manual arrays for all categories
+  const manual: { [categoryId: string]: AllergenItem[] } = {};
+  ALLERGEN_CATEGORIES.forEach(category => {
+    manual[category.id] = [];
+  });
+  
+  return {
+    detected,
+    manual,
+    displayOnLabel: true
+  };
+}
+
+/**
+ * Maps allergen name to category ID
+ * @param allergenName - The allergen name
+ * @returns Category ID or null if not found
+ */
+function mapAllergenToCategory(allergenName: string): string | null {
+  const lowerName = allergenName.toLowerCase();
+  
+  for (const category of ALLERGEN_CATEGORIES) {
+    // Check if allergen name matches category name or subcategories
+    if (category.name.toLowerCase().includes(lowerName) ||
+        category.subcategories.some(sub => sub.toLowerCase().includes(lowerName))) {
+      return category.id;
+    }
+  }
+  
+  return 'other'; // Default to other category
+}
+
+/**
+ * Converts Edamam health labels to allergen names and categories
+ * @param healthLabel - The health label from Edamam (e.g., "MILK_FREE")
+ * @returns Allergen info with category ID and name, or null if not an allergen-related label
+ */
+function convertHealthLabelToAllergen(healthLabel: string): { categoryId: string; name: string } | null {
+  const allergenMap: Record<string, { categoryId: string; name: string }> = {
+    'DAIRY_FREE': { categoryId: 'milk', name: 'Dairy' },
+    'MILK_FREE': { categoryId: 'milk', name: 'Milk' },
+    'EGG_FREE': { categoryId: 'eggs', name: 'Eggs' },
+    'FISH_FREE': { categoryId: 'fish', name: 'Fish' },
+    'SHELLFISH_FREE': { categoryId: 'shellfish', name: 'Shellfish' },
+    'TREE_NUT_FREE': { categoryId: 'tree_nuts', name: 'Tree Nuts' },
+    'PEANUT_FREE': { categoryId: 'peanuts', name: 'Peanuts' },
+    'WHEAT_FREE': { categoryId: 'wheat', name: 'Wheat' },
+    'GLUTEN_FREE': { categoryId: 'wheat', name: 'Gluten' },
+    'SOY_FREE': { categoryId: 'soy', name: 'Soy' },
+    'SESAME_FREE': { categoryId: 'sesame', name: 'Sesame' },
+    'CRUSTACEAN_FREE': { categoryId: 'shellfish', name: 'Crustaceans' },
+    'MOLLUSK_FREE': { categoryId: 'shellfish', name: 'Mollusks' },
+    'CELERY_FREE': { categoryId: 'other', name: 'Celery' },
+    'MUSTARD_FREE': { categoryId: 'other', name: 'Mustard' },
+    'LUPINE_FREE': { categoryId: 'other', name: 'Lupine' }
+  };
+  
+  return allergenMap[healthLabel] || null;
+}
+
+/**
+ * Generates allergen statement for labels
+ * @param allergenData - The allergen data
+ * @returns Formatted allergen statement
+ */
+export function generateAllergenStatement(allergenData: AllergenData): string {
+  const allAllergens: string[] = [];
+  
+  // Collect all detected allergens from all categories
+  Object.values(allergenData.detected).forEach(categoryAllergens => {
+    categoryAllergens.forEach(allergen => {
+      if (!allAllergens.includes(allergen.name)) {
+        allAllergens.push(allergen.name);
+      }
+    });
+  });
+  
+  // Collect all manual allergens from all categories
+  Object.values(allergenData.manual).forEach(categoryAllergens => {
+    categoryAllergens.forEach(allergen => {
+      if (!allAllergens.includes(allergen.name)) {
+        allAllergens.push(allergen.name);
+      }
+    });
+  });
+  
+  if (allAllergens.length === 0) {
+    return '';
+  }
+  
+  // Remove duplicates and sort
+  const uniqueAllergens = [...new Set(allAllergens)].sort();
+  
+  if (uniqueAllergens.length === 1) {
+    return `Contains: ${uniqueAllergens[0]}`;
+  } else if (uniqueAllergens.length === 2) {
+    return `Contains: ${uniqueAllergens.join(' and ')}`;
+  } else {
+    const lastAllergen = uniqueAllergens.pop();
+    return `Contains: ${uniqueAllergens.join(', ')} and ${lastAllergen}`;
+  }
+}
+
+/**
  * Extracts specific nutrition data from Edamam API response
  * @param response - The Edamam nutrition API response
  * @returns Mapped nutrition data with only the required fields
@@ -211,6 +543,9 @@ export function extractNutritionData(response: EdamamNutritionResponse): Nutriti
     yield: yieldValue,
     calories: calories || 0,
     totalWeight: totalWeight || 0,
+    healthLabels: response.healthLabels || [],
+    cautions: response.cautions || [],
+    allergens: extractAllergenData(response),
     
     totalNutrients: {
       // Macronutrients
@@ -508,6 +843,26 @@ export function mapPerServingDataToFDAFormat(perServingData: PerServingNutrition
 }
 
 /**
+ * Returns empty allergen data structure
+ */
+export function getEmptyAllergenData(): AllergenData {
+  const detected: { [categoryId: string]: AllergenItem[] } = {};
+  const manual: { [categoryId: string]: AllergenItem[] } = {};
+  
+  // Initialize empty arrays for all categories
+  ALLERGEN_CATEGORIES.forEach(category => {
+    detected[category.id] = [];
+    manual[category.id] = [];
+  });
+  
+  return {
+    detected,
+    manual,
+    displayOnLabel: true
+  };
+}
+
+/**
  * Returns empty nutrition data structure for the new interface
  */
 export function getEmptyNutritionData(): NutritionData {
@@ -518,6 +873,9 @@ export function getEmptyNutritionData(): NutritionData {
     yield: 1,
     calories: 0,
     totalWeight: 0,
+    healthLabels: [],
+    cautions: [],
+    allergens: getEmptyAllergenData(),
     
     totalNutrients: {
       // Macronutrients

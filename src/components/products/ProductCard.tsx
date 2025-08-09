@@ -60,8 +60,9 @@ export function ProductCard({ product, selected, onSelect, variant = "default", 
     hasFetchedTags.current = false
     setProductTags([])
     setCurrentTagIndex(0)
-    console.log(`[ProductCard Debug] Product "${product.name}" original tags:`, product.tags)
-    console.log(`[ProductCard Debug] Product "${product.name}" will fetch specific tags via API`)
+    console.log(`[ProductCard Debug] Product "${product.name}" (ID: ${product.id}) original tags:`, product.tags)
+    console.log(`[ProductCard Debug] Product "${product.name}" (ID: ${product.id}) will fetch specific tags via API`)
+    console.log(`[ProductCard Debug] Product "${product.name}" (ID: ${product.id}) has nutrition data:`, !!product.nutritionData)
   }, [product.id]) // Reset when product changes
 
   // Fetch tags for this specific product (only once per product ID)
@@ -74,11 +75,36 @@ export function ProductCard({ product, selected, onSelect, variant = "default", 
         try {
           // Get tags specific to this product
           const response = await productsAPI.getProductTags(product.id)
-          const productSpecificTags = Array.isArray(response) ? response : []
-          console.log(`[ProductCard Debug] Product "${product.name}" specific tags:`, productSpecificTags)
+          console.log(`[ProductCard Debug] Raw API response for "${product.name}" (ID: ${product.id}):`, response)
+          console.log(`[ProductCard Debug] API response type:`, typeof response, 'Is array:', Array.isArray(response))
+          console.log(`[ProductCard Debug] API response.data:`, response?.data, 'Is array:', Array.isArray(response?.data))
+          
+          // Handle the API response structure - response.data contains the tags array
+          let productSpecificTags = Array.isArray(response?.data) ? response.data :
+                                   Array.isArray(response) ? response : []
+          
+          // Fallback: If API returns empty tags, try to extract from product's nutrition data
+          if (productSpecificTags.length === 0 && product.nutritionData) {
+            console.log(`[ProductCard Debug] API returned empty tags for "${product.name}", trying fallback from product nutrition data`)
+            console.log(`[ProductCard Debug] Product nutrition data structure:`, product.nutritionData)
+            const fallbackTags = []
+            if (product.nutritionData.health_labels && Array.isArray(product.nutritionData.health_labels)) {
+              fallbackTags.push(...product.nutritionData.health_labels)
+              console.log(`[ProductCard Debug] Found health_labels:`, product.nutritionData.health_labels)
+            }
+            if (product.nutritionData.diet_labels && Array.isArray(product.nutritionData.diet_labels)) {
+              fallbackTags.push(...product.nutritionData.diet_labels)
+              console.log(`[ProductCard Debug] Found diet_labels:`, product.nutritionData.diet_labels)
+            }
+            productSpecificTags = [...new Set(fallbackTags)] // Remove duplicates
+            console.log(`[ProductCard Debug] Fallback tags extracted for "${product.name}":`, productSpecificTags)
+          }
+          
+          console.log(`[ProductCard Debug] FINAL: Product "${product.name}" (ID: ${product.id}) specific tags:`, productSpecificTags)
+          console.log(`[ProductCard Debug] FINAL: Product "${product.name}" tags count:`, productSpecificTags.length)
           
           // Display product-specific tags from the API response
-          setProductTags(productSpecificTags) // Show product-specific tags
+          setProductTags(productSpecificTags) // Show product-specific tags only (no test data)
         } catch (error) {
           console.error('Error fetching product tags:', error)
           setProductTags([])
@@ -99,7 +125,7 @@ export function ProductCard({ product, selected, onSelect, variant = "default", 
         setCurrentTagIndex((prevIndex) => 
           (prevIndex + 1) % productTags.length
         )
-      }, 2000) // 2 seconds
+      }, 1500) // 1.5 seconds
 
       return () => clearInterval(interval)
     } else {
