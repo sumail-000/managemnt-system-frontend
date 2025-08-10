@@ -265,6 +265,38 @@ export default function Register() {
     }))
   }
 
+  // Function to format password validation errors
+  const formatPasswordError = (errorMessage: string) => {
+    if (!errorMessage) return errorMessage;
+    
+    // Check if it's a password validation error with multiple rules
+    if (errorMessage.includes('password field must contain')) {
+      const requirements = [];
+      
+      if (errorMessage.includes('at least one uppercase and one lowercase letter')) {
+        requirements.push('uppercase and lowercase letters');
+      }
+      if (errorMessage.includes('at least one letter') && !errorMessage.includes('uppercase and one lowercase')) {
+        requirements.push('at least one letter');
+      }
+      if (errorMessage.includes('at least one symbol')) {
+        requirements.push('at least one symbol');
+      }
+      if (errorMessage.includes('at least 8 characters')) {
+        requirements.push('at least 8 characters');
+      }
+      if (errorMessage.includes('at least one number')) {
+        requirements.push('at least one number');
+      }
+      
+      if (requirements.length > 0) {
+        return `Password must contain: ${requirements.join(', ')}.`;
+      }
+    }
+    
+    return errorMessage;
+  }
+
   return (
     <AuthLayout
       title="Create Account"
@@ -393,12 +425,9 @@ export default function Register() {
                   placeholder="Create a secure password"
                   value={formData.password}
                   onChange={handleChange}
-                  className={errors.password ? "border-red-500" : ""}
+                  className={errors.password ? "border-red-500 pr-12" : "pr-12"}
                   required
                 />
-                {errors.password && (
-                  <p className="text-sm text-red-500 mt-1">{errors.password}</p>
-                )}
                 <Button
                   type="button"
                   variant="ghost"
@@ -413,6 +442,9 @@ export default function Register() {
                   )}
                 </Button>
               </div>
+              {errors.password && (
+                <p className="text-sm text-red-500 mt-1">{formatPasswordError(errors.password)}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -425,12 +457,9 @@ export default function Register() {
                   placeholder="Confirm your password"
                   value={formData.confirmPassword}
                   onChange={handleChange}
-                  className={errors.confirmPassword ? "border-red-500" : ""}
+                  className={errors.confirmPassword ? "border-red-500 pr-12" : "pr-12"}
                   required
                 />
-                {errors.confirmPassword && (
-                  <p className="text-sm text-red-500 mt-1">{errors.confirmPassword}</p>
-                )}
                 <Button
                   type="button"
                   variant="ghost"
@@ -445,6 +474,9 @@ export default function Register() {
                   )}
                 </Button>
               </div>
+              {errors.confirmPassword && (
+                <p className="text-sm text-red-500 mt-1">{errors.confirmPassword}</p>
+              )}
             </div>
 
             <div className="flex items-center space-x-2">

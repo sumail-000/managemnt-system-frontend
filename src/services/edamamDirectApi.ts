@@ -1,6 +1,8 @@
 // Backend API service for ingredient search
 // Calls backend endpoints which proxy to Edamam APIs
 
+import { TokenManager } from '../utils/tokenManager';
+
 // EdamamIngredient interface removed - backend now returns simple strings
 
 export interface EdamamSearchResult {
@@ -23,10 +25,12 @@ class EdamamDirectApi {
   }
 
   /**
-   * Get authentication token from localStorage
+   * Get authentication token using TokenManager
    */
   private getAuthToken(): string | null {
-    return localStorage.getItem('auth_token');
+    const isAdminContext = TokenManager.isAdminContext();
+    const { token } = TokenManager.getToken(isAdminContext);
+    return token;
   }
 
   /**

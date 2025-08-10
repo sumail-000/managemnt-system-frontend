@@ -48,6 +48,8 @@ const Settings: React.FC = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isLogoutAllDialogOpen, setIsLogoutAllDialogOpen] = useState(false);
+  const [isEmailWarningDialogOpen, setIsEmailWarningDialogOpen] = useState(false);
+  const [pendingEmailSetting, setPendingEmailSetting] = useState<{key: string, value: boolean} | null>(null);
   const [deleteAccountPassword, setDeleteAccountPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
@@ -80,10 +82,15 @@ const Settings: React.FC = () => {
     productUpdates: true,
     // Preference settings
     language: 'english',
-    timezone: 'UTC',
     dateFormat: 'MM/DD/YYYY',
     currency: 'USD',
-    theme: 'light'
+    // Email notification preferences (enabled by default)
+    welcomeEmails: true,
+    subscriptionEmails: true,
+    usageWarningEmails: true,
+    securityEmailAlerts: true,
+    accountDeletionEmails: true,
+    passwordResetEmails: true
   });
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -151,13 +158,13 @@ const Settings: React.FC = () => {
       }
       
       // Only make API call if there are changes
-      if (formData.has('name') || formData.has('email') || formData.has('company') || 
+      if (formData.has('name') || formData.has('email') || formData.has('company') ||
           formData.has('contact_number') || formData.has('tax_id') || formData.has('avatar')) {
         console.log('Sending profile update request...');
         const response = await updateUser(formData);
         console.log('Profile update response:', response);
         
-        // Update profile data with the response
+        // Update profile data with the response - the AuthContext is automatically updated by updateUser
         if (response?.user) {
           console.log('Updated user data:', {
             avatar: response.user.avatar,
@@ -177,12 +184,17 @@ const Settings: React.FC = () => {
         // Clear the image file and preview after successful upload
         setProfileImageFile(null);
         setProfileImagePreview('');
+        
+        toast({
+          title: 'Profile Updated',
+          description: 'Your profile information has been saved successfully.',
+        });
+      } else {
+        toast({
+          title: 'No Changes',
+          description: 'No changes were made to your profile.',
+        });
       }
-      
-      toast({
-        title: 'Profile Updated',
-        description: 'Your profile information has been saved successfully.',
-      });
     } catch (error: any) {
       console.error('Profile update error:', error);
       toast({
@@ -298,6 +310,35 @@ const Settings: React.FC = () => {
     }
   };
 
+  // Handle email notification setting changes with security warning
+  const handleEmailSettingChange = (key: string, checked: boolean) => {
+    const securityEmailTypes = ['securityEmailAlerts', 'passwordResetEmails', 'accountDeletionEmails'];
+    
+    if (!checked && securityEmailTypes.includes(key)) {
+      // Show warning dialog for security-related emails
+      setPendingEmailSetting({ key, value: checked });
+      setIsEmailWarningDialogOpen(true);
+    } else {
+      // Direct update for non-security emails
+      setSettings(prev => ({ ...prev, [key]: checked }));
+    }
+  };
+
+  // Confirm disabling security emails
+  const confirmDisableSecurityEmail = () => {
+    if (pendingEmailSetting) {
+      setSettings(prev => ({ ...prev, [pendingEmailSetting.key]: pendingEmailSetting.value }));
+    }
+    setIsEmailWarningDialogOpen(false);
+    setPendingEmailSetting(null);
+  };
+
+  // Cancel disabling security emails
+  const cancelDisableSecurityEmail = () => {
+    setIsEmailWarningDialogOpen(false);
+    setPendingEmailSetting(null);
+  };
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto p-6">
       <div className="flex items-center justify-between">
@@ -343,24 +384,24 @@ const Settings: React.FC = () => {
             <Card className="card-elevated hover:shadow-glow transition-all duration-300 hover:scale-[1.02]">
               <CardHeader className="text-center">
                 <Avatar className="h-24 w-24 mx-auto mb-4">
-                  <AvatarImage 
-                    src={profileImagePreview || getAvatarUrl(profileData.avatar || user?.avatar)} 
+                  <AvatarImage
+                    src={profileImagePreview || (user?.avatar ? `${getAvatarUrl(user.avatar)}?t=${Date.now()}` : null)}
                     onError={(e) => {
                       console.error('Avatar image failed to load:', {
                         src: e.currentTarget.src,
                         profileImagePreview,
-                        profileDataAvatar: profileData.avatar,
-                        userAvatar: user?.avatar
+                        userAvatar: user?.avatar,
+                        constructedUrl: user?.avatar ? `${getAvatarUrl(user.avatar)}?t=${Date.now()}` : null
                       });
                     }}
                     onLoad={() => {
                       console.log('Avatar image loaded successfully:', {
-                        src: profileImagePreview || getAvatarUrl(profileData.avatar || user?.avatar)
+                        src: profileImagePreview || (user?.avatar ? `${getAvatarUrl(user.avatar)}?t=${Date.now()}` : null)
                       });
                     }}
                   />
                   <AvatarFallback className="text-2xl bg-gradient-primary text-primary-foreground">
-                    {(profileData.name || user?.name || 'U').charAt(0).toUpperCase()}
+                    {(user?.name || 'U').charAt(0).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
                 <CardTitle className="text-lg">Profile Picture</CardTitle>
@@ -467,7 +508,7 @@ const Settings: React.FC = () => {
                         {user?.membership_plan?.name || 'Basic'}
                       </Badge>
                       <Badge variant="outline">
-                        {user?.role || 'User'}
+                        User
                       </Badge>
                     </div>
                   </div>
@@ -742,127 +783,73 @@ const Settings: React.FC = () => {
           <Card className="card-elevated hover:shadow-glow transition-all duration-300 hover:scale-[1.02]">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Globe className="h-5 w-5" />
-                Language & Regional Settings
+                <Bell className="h-5 w-5 text-primary" />
+                Email Notification Preferences
               </CardTitle>
               <CardDescription>
-                Set your language, timezone, and regional preferences.
+                Control which email notifications you receive. Security-related emails are enabled by default for your protection.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Language</Label>
-                  <Select value={settings.language} onValueChange={(value) => 
-                    setSettings(prev => ({ 
-                      ...prev, 
-                      language: value
-                    }))
-                  }>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="english">English</SelectItem>
-                      <SelectItem value="arabic">العربية</SelectItem>
-                      <SelectItem value="french">Français</SelectItem>
-                      <SelectItem value="spanish">Español</SelectItem>
-                    </SelectContent>
-                  </Select>
+            <CardContent className="space-y-6">
+              {Object.entries({
+                welcomeEmails: {
+                  title: 'Welcome Emails',
+                  description: 'Receive welcome emails when you join or complete registration',
+                  isSecurityRelated: false
+                },
+                subscriptionEmails: {
+                  title: 'Subscription Emails',
+                  description: 'Get notified about subscription changes, renewals, and cancellations',
+                  isSecurityRelated: false
+                },
+                usageWarningEmails: {
+                  title: 'Usage Warning Emails',
+                  description: 'Receive alerts when approaching usage limits',
+                  isSecurityRelated: false
+                },
+                securityEmailAlerts: {
+                  title: 'Security Alert Emails',
+                  description: 'Critical security notifications and suspicious activity alerts',
+                  isSecurityRelated: true
+                },
+                accountDeletionEmails: {
+                  title: 'Account Deletion Emails',
+                  description: 'Notifications about account deletion requests and confirmations',
+                  isSecurityRelated: true
+                },
+                passwordResetEmails: {
+                  title: 'Password Reset Emails',
+                  description: 'Password reset confirmations and OTP codes',
+                  isSecurityRelated: true
+                }
+              }).map(([key, { title, description, isSecurityRelated }]) => (
+                <div key={key} className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <Label>{title}</Label>
+                      {isSecurityRelated && (
+                        <Badge variant="secondary" className="text-xs">
+                          <Shield className="h-3 w-3 mr-1" />
+                          Security
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground">{description}</p>
+                  </div>
+                  <Switch
+                    checked={settings[key as keyof typeof settings] as boolean}
+                    onCheckedChange={(checked) => handleEmailSettingChange(key, checked)}
+                  />
                 </div>
-
-                <div className="space-y-2">
-                  <Label>Timezone</Label>
-                  <Select value={settings.timezone} onValueChange={(value) => 
-                    setSettings(prev => ({ 
-                      ...prev, 
-                      timezone: value
-                    }))
-                  }>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="UTC">UTC</SelectItem>
-                      <SelectItem value="America/New_York">Eastern Time</SelectItem>
-                      <SelectItem value="America/Chicago">Central Time</SelectItem>
-                      <SelectItem value="America/Los_Angeles">Pacific Time</SelectItem>
-                      <SelectItem value="Europe/London">London</SelectItem>
-                      <SelectItem value="Asia/Dubai">Dubai</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Date Format</Label>
-                  <Select value={settings.dateFormat} onValueChange={(value) => 
-                    setSettings(prev => ({ 
-                      ...prev, 
-                      dateFormat: value
-                    }))
-                  }>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="MM/DD/YYYY">MM/DD/YYYY</SelectItem>
-                      <SelectItem value="DD/MM/YYYY">DD/MM/YYYY</SelectItem>
-                      <SelectItem value="YYYY-MM-DD">YYYY-MM-DD</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Currency</Label>
-                  <Select value={settings.currency} onValueChange={(value) => 
-                    setSettings(prev => ({ 
-                      ...prev, 
-                      currency: value
-                    }))
-                  }>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="USD">USD ($)</SelectItem>
-                      <SelectItem value="EUR">EUR (€)</SelectItem>
-                      <SelectItem value="GBP">GBP (£)</SelectItem>
-                      <SelectItem value="AED">AED (د.إ)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="card-elevated hover:shadow-glow transition-all duration-300 hover:scale-[1.02]">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Smartphone className="h-5 w-5 text-primary" />
-                Appearance</CardTitle>
-              <CardDescription>
-                Customize the look and feel of the application.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <Label>Theme</Label>
-                <Select value={settings.theme} onValueChange={(value) => 
-                  setSettings(prev => ({ 
-                    ...prev, 
-                    theme: value
-                  }))
-                }>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="light">Light</SelectItem>
-                    <SelectItem value="dark">Dark</SelectItem>
-                    <SelectItem value="system">System</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              ))}
+              
+              <Alert>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  Disabling security-related email notifications may compromise your account security.
+                  You will not receive important alerts about suspicious activities or password changes.
+                </AlertDescription>
+              </Alert>
             </CardContent>
           </Card>
 
@@ -944,6 +931,40 @@ const Settings: React.FC = () => {
               disabled={isLoading || !deleteAccountPassword}
             >
               {isLoading ? 'Deleting...' : 'Delete Account'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Email Security Warning Dialog */}
+      <Dialog open={isEmailWarningDialogOpen} onOpenChange={setIsEmailWarningDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Disable Security Email Notifications?
+            </DialogTitle>
+            <DialogDescription>
+              You are about to disable important security email notifications. This means you will not receive:
+              <ul className="list-disc list-inside mt-2 space-y-1">
+                <li>Security alerts about suspicious account activity</li>
+                <li>Password reset confirmations and OTP codes</li>
+                <li>Account deletion requests and confirmations</li>
+                <li>Login notifications from new devices</li>
+              </ul>
+              <br />
+              <strong>This may compromise your account security.</strong> Are you sure you want to continue?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={cancelDisableSecurityEmail}>
+              Keep Enabled (Recommended)
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDisableSecurityEmail}
+            >
+              Yes, Disable Security Emails
             </Button>
           </DialogFooter>
         </DialogContent>

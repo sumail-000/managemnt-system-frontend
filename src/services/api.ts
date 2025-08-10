@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { TokenManager } from '../utils/tokenManager';
 
 // Create axios instance with base configuration
 const api = axios.create({
@@ -12,7 +13,10 @@ const api = axios.create({
 // Request interceptor to add auth token and logging
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('auth_token');
+    // Determine which token to use based on the current path or request URL
+    const isAdminRequest = config.url?.includes('/admin') || TokenManager.isAdminContext();
+    const { token } = TokenManager.getToken(isAdminRequest);
+    
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -79,11 +83,17 @@ api.interceptors.response.use(
     
     if (newToken && tokenRefreshed === 'true') {
       console.log('[API] Token refreshed automatically, updating localStorage');
-      localStorage.setItem('auth_token', newToken);
+      
+      // Determine which token storage to update based on request context
+      const isAdminRequest = response.config.url?.includes('/admin') || TokenManager.isAdminContext();
+      
+      // Get current expiry for the refreshed token
+      const currentTokenInfo = TokenManager.getToken(isAdminRequest);
+      TokenManager.setToken(newToken, currentTokenInfo.expiresAt, isAdminRequest);
       
       // Dispatch custom event to notify components of token refresh
-      window.dispatchEvent(new CustomEvent('tokenRefreshed', { 
-        detail: { newToken } 
+      window.dispatchEvent(new CustomEvent('tokenRefreshed', {
+        detail: { newToken }
       }));
     }
     
@@ -102,8 +112,22 @@ api.interceptors.response.use(
       url: error.config?.url,
       method: error.config?.method?.toUpperCase(),
       message: error.response?.data?.message || error.message,
-      data: error.response?.data
+      data: error.response?.data,
+      errorCode: error.response?.data?.error_code
     });
+    
+    // Handle IP restriction violations for admin panel
+    if (error.response?.data?.error_code === 'IP_RESTRICTION_VIOLATION') {
+      console.warn('[API] IP restriction violation detected for admin panel');
+      const currentPath = window.location.pathname;
+      
+      // Only redirect if we're in the admin panel area
+      if (currentPath.startsWith('/admin')) {
+        console.warn('[API] Redirecting to IP restriction error page');
+        window.location.href = '/admin/ip-restricted';
+        return Promise.reject(error);
+      }
+    }
     
     if (error.response?.status === 401) {
       console.warn('[API] Unauthorized access detected');
@@ -116,7 +140,10 @@ api.interceptors.response.use(
       
       if (!isAuthPage && !isTokenValidation) {
         console.warn('[API] Auto-logout triggered - redirecting to login');
-        localStorage.removeItem('auth_token');
+        
+        // Clear appropriate tokens based on current context
+        const isAdminContext = TokenManager.isAdminContext();
+        TokenManager.clearToken(isAdminContext);
         
         // If user is on payment page, show a more helpful message
         if (isPaymentPage) {
@@ -660,6 +687,49 @@ export const collectionsAPI = {
     console.log('[COLLECTIONS_API] Get collection products request initiated', { collectionId, params });
     return api.get(`/collections/${collectionId}/products`, { params });
   }
+};
+
+// Admin API
+export const adminAPI = {
+  // Dashboard metrics
+  getDashboardMetrics: (params?: { month?: number; year?: number }) => {
+    console.log('[ADMIN_API] Get dashboard metrics request initiated', params);
+    return api.get('/admin/dashboard/metrics', { params });
+  },
+  
+  getSystemHealth: () => {
+    console.log('[ADMIN_API] Get system health request initiated');
+    return api.get('/admin/dashboard/system-health');
+  },
+  
+  // Profile management
+  getProfile: () => {
+    console.log('[ADMIN_API] Get admin profile request initiated');
+    return api.get('/admin/profile');
+  },
+  
+  updateProfile: (data: {
+    name?: string;
+    email?: string;
+    avatar?: File;
+  }) => {
+    console.log('[ADMIN_API] Update admin profile request initiated');
+    const formData = new FormData();
+    if (data.name) formData.append('name', data.name);
+    if (data.email) formData.append('email', data.email);
+    if (data.avatar) formData.append('avatar', data.avatar);
+    return api.post('/admin/profile', formData);
+  },
+  
+  // Security settings
+  updateSecuritySettings: (data: {
+    allowed_ips?: string[];
+    login_notifications_enabled?: boolean;
+    session_timeout?: number;
+  }) => {
+    console.log('[ADMIN_API] Update security settings request initiated');
+    return api.put('/admin/profile/security', data);
+  },
 };
 
 export default api;

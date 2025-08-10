@@ -386,7 +386,22 @@ export default function NutritionLabel() {
   };
 
   const handleGoBack = () => {
-    navigate(-1);
+    // Check if we have data indicating we came from ProductForm
+    if (passedData?.nutritionData && passedData?.recipeName) {
+      // Navigate back to ProductForm with proper state indicating we're returning from custom label
+      navigate('/product-form', {
+        state: {
+          returnFromCustomLabel: true,
+          recipeName: passedData.recipeName,
+          productId: passedData.productId,
+          preserveRecipeState: true
+        },
+        replace: true // Replace current history entry to prevent back button loops
+      });
+    } else {
+      // Fallback to browser back for non-recipe users (sample label users)
+      navigate(-1);
+    }
   };
 
   const handleBusinessInfoChange = (field: string, value: string) => {

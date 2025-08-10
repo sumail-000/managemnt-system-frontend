@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/contexts/AuthContext"
-import { Eye, EyeOff, Loader2, AlertCircle } from "lucide-react"
+import { Eye, EyeOff, Loader2, AlertCircle, Shield } from "lucide-react"
+import SecurityUtils from "@/utils/security"
 
 export default function Login() {
   const navigate = useNavigate()
@@ -22,20 +23,45 @@ export default function Login() {
   const [errors, setErrors] = useState<{[key: string]: string}>({})
   const [sessionExpired, setSessionExpired] = useState(false)
   const [fromPayment, setFromPayment] = useState(false)
+  const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({})
+  const [isSecureConnection, setIsSecureConnection] = useState(true)
+  
+  // Rate limiter for login attempts
+  const loginRateLimiter = SecurityUtils.createRateLimiter(5, 15 * 60 * 1000) // 5 attempts per 15 minutes
 
-  // Check for session expiration and registration success on component mount
+  // Check for session expiration, registration success, and security on component mount
   useEffect(() => {
+    // Check if connection is secure
+    setIsSecureConnection(SecurityUtils.isSecureConnection())
+    
+    if (!SecurityUtils.isSecureConnection() && window.location.hostname !== 'localhost') {
+      toast({
+        title: "Insecure Connection",
+        description: "Please use HTTPS for secure login.",
+        variant: "destructive",
+      })
+    }
     const urlParams = new URLSearchParams(location.search)
     const reason = urlParams.get('reason')
     const registrationSuccess = urlParams.get('registration')
     const redirect = urlParams.get('redirect')
     const sessionExpiredParam = urlParams.get('sessionExpired')
+    const message = urlParams.get('message')
     const paymentSessionExpired = localStorage.getItem('payment_session_expired')
     
     if (registrationSuccess === 'success') {
       toast({
         title: "Registration Successful!",
         description: "Your account has been created. Please log in to continue.",
+        variant: "default",
+      })
+    }
+    
+    // Handle admin panel access requirement
+    if (message === 'admin_access_required') {
+      toast({
+        title: "Admin Access Required",
+        description: "Please log in with an administrator account to access the admin panel.",
         variant: "default",
       })
     }
@@ -59,6 +85,15 @@ export default function Login() {
       }
     }
     
+    // Handle admin panel redirects
+    if (redirect === 'admin-panel') {
+      toast({
+        title: "Admin Authentication Required",
+        description: "Please log in with an administrator account to access the admin panel.",
+        variant: "default",
+      })
+    }
+    
     if (reason === 'session_expired' || paymentSessionExpired) {
       setSessionExpired(true)
       localStorage.removeItem('payment_session_expired')
@@ -71,17 +106,65 @@ export default function Login() {
     }
   }, [location.search, toast])
 
+  const validateForm = (): boolean => {
+    const newErrors: {[key: string]: string} = {}
+    
+    // Validate email
+    if (!formData.email) {
+      newErrors.email = "Email is required"
+    } else if (!SecurityUtils.validateEmail(formData.email)) {
+      newErrors.email = "Please enter a valid email address"
+    }
+    
+    // Validate password
+    if (!formData.password) {
+      newErrors.password = "Password is required"
+    } else if (formData.password.length < 1) {
+      newErrors.password = "Password cannot be empty"
+    }
+    
+    // Check for suspicious patterns
+    if (formData.email && formData.email !== SecurityUtils.sanitizeInput(formData.email)) {
+      newErrors.email = "Email contains invalid characters"
+    }
+    
+    setValidationErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setErrors({})
+    setValidationErrors({})
+    
+    // Client-side validation
+    if (!validateForm()) {
+      return
+    }
+    
+    // Rate limiting check
+    const clientId = `${formData.email}-${window.navigator.userAgent.slice(0, 50)}`
+    if (!loginRateLimiter(clientId)) {
+      toast({
+        title: "Too Many Attempts",
+        description: "Please wait 15 minutes before trying again.",
+        variant: "destructive",
+      })
+      return
+    }
     
     console.log('[LOGIN] Form submission started', {
       email: formData.email,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      secureConnection: isSecureConnection
     });
     
     try {
-      await login(formData.email, formData.password)
+      // Sanitize inputs before sending
+      const sanitizedEmail = SecurityUtils.sanitizeInput(formData.email)
+      const sanitizedPassword = formData.password // Don't sanitize password as it may contain special chars
+      
+      await login(sanitizedEmail, sanitizedPassword)
       
       console.log('[LOGIN] Login successful, showing success toast');
       
@@ -117,6 +200,21 @@ export default function Login() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     
+    // Clear validation errors when user starts typing
+    if (validationErrors[name]) {
+      setValidationErrors(prev => ({
+        ...prev,
+        [name]: ''
+      }))
+    }
+    
+    if (errors[name]) {
+      setErrors(prev => ({
+        ...prev,
+        [name]: ''
+      }))
+    }
+    
     setFormData(prev => ({
       ...prev,
       [name]: value
@@ -130,6 +228,12 @@ export default function Login() {
     >
       <Card className="card-elevated">
         <CardContent className="p-6">
+          {!isSecureConnection && window.location.hostname !== 'localhost' && (
+            <div className="flex items-center gap-2 p-3 mb-4 bg-red-50 border border-red-200 rounded-md text-red-800 text-sm">
+              <Shield className="h-4 w-4 flex-shrink-0" />
+              <span>Warning: This connection is not secure. Please use HTTPS.</span>
+            </div>
+          )}
           {sessionExpired && (
             <div className="flex items-center gap-2 p-3 mb-4 bg-orange-50 border border-orange-200 rounded-md text-orange-800 text-sm">
               <AlertCircle className="h-4 w-4 flex-shrink-0" />
@@ -152,11 +256,11 @@ export default function Login() {
                 placeholder="Enter your email"
                 value={formData.email}
                 onChange={handleChange}
-                className={errors.email ? "border-red-500" : ""}
+                className={errors.email || validationErrors.email ? "border-red-500" : ""}
                 required
               />
-              {errors.email && (
-                <p className="text-sm text-red-500 mt-1">{errors.email}</p>
+              {(errors.email || validationErrors.email) && (
+                <p className="text-sm text-red-500 mt-1">{errors.email || validationErrors.email}</p>
               )}
             </div>
 
@@ -170,11 +274,11 @@ export default function Login() {
                   placeholder="Enter your password"
                   value={formData.password}
                   onChange={handleChange}
-                  className={errors.password ? "border-red-500" : ""}
+                  className={errors.password || validationErrors.password ? "border-red-500" : ""}
                   required
                 />
-                {errors.password && (
-                  <p className="text-sm text-red-500 mt-1">{errors.password}</p>
+                {(errors.password || validationErrors.password) && (
+                  <p className="text-sm text-red-500 mt-1">{errors.password || validationErrors.password}</p>
                 )}
                 <Button
                   type="button"

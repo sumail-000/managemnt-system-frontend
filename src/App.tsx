@@ -39,7 +39,9 @@ import AdminProfile from "./pages/admin/AdminProfile";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminNotifications from "./pages/admin/AdminNotifications";
 import AdminMaintenance from "./pages/admin/AdminMaintenance";
+import IPRestrictionError from "./pages/admin/IPRestrictionError";
 import { AdminAuthGuard } from "./components/admin/AdminAuthGuard";
+import { UserAuthGuard } from "./components/UserAuthGuard";
 
 // Enterprise Components
 import { EnterpriseLayout } from "./components/enterprise/EnterpriseLayout";
@@ -75,49 +77,61 @@ const App = () => {
       {/* Protected Dashboard Routes */}
       <Route path="/dashboard" element={
         <ProtectedRoute>
-          <DashboardLayout>
-            <Dashboard />
-          </DashboardLayout>
+          <UserAuthGuard>
+            <DashboardLayout>
+              <Dashboard />
+            </DashboardLayout>
+          </UserAuthGuard>
         </ProtectedRoute>
       } />
       
       <Route path="/products" element={
         <ProtectedRoute>
-          <DashboardLayout>
-            <Products />
-          </DashboardLayout>
+          <UserAuthGuard>
+            <DashboardLayout>
+              <Products />
+            </DashboardLayout>
+          </UserAuthGuard>
         </ProtectedRoute>
       } />
       
       <Route path="/products/new" element={
         <ProtectedRoute>
-          <DashboardLayout>
-            <ProductForm />
-          </DashboardLayout>
+          <UserAuthGuard>
+            <DashboardLayout>
+              <ProductForm />
+            </DashboardLayout>
+          </UserAuthGuard>
         </ProtectedRoute>
       } />
 
       <Route path="/products/:id" element={
         <ProtectedRoute>
-          <DashboardLayout>
-            <ProductDetail />
-          </DashboardLayout>
+          <UserAuthGuard>
+            <DashboardLayout>
+              <ProductDetail />
+            </DashboardLayout>
+          </UserAuthGuard>
         </ProtectedRoute>
       } />
 
       <Route path="/products/:id/edit" element={
         <ProtectedRoute>
-          <DashboardLayout>
-            <ProductForm />
-          </DashboardLayout>
+          <UserAuthGuard>
+            <DashboardLayout>
+              <ProductForm />
+            </DashboardLayout>
+          </UserAuthGuard>
         </ProtectedRoute>
       } />
 
       <Route path="/products/trash" element={
         <ProtectedRoute>
-          <DashboardLayout>
-            <ProductTrash />
-          </DashboardLayout>
+          <UserAuthGuard>
+            <DashboardLayout>
+              <ProductTrash />
+            </DashboardLayout>
+          </UserAuthGuard>
         </ProtectedRoute>
       } />
       
@@ -130,49 +144,56 @@ const App = () => {
 
       <Route path="/categories" element={
         <ProtectedRoute>
-          <DashboardLayout>
-            <CategoryManagement />
-          </DashboardLayout>
+          <UserAuthGuard>
+            <DashboardLayout>
+              <CategoryManagement />
+            </DashboardLayout>
+          </UserAuthGuard>
         </ProtectedRoute>
       } />
-      
-
-      
       
       <Route path="/qr-codes" element={
         <ProtectedRoute requiredPlan="pro">
-          <DashboardLayout>
-            <QRCodes />
-          </DashboardLayout>
+          <UserAuthGuard>
+            <DashboardLayout>
+              <QRCodes />
+            </DashboardLayout>
+          </UserAuthGuard>
         </ProtectedRoute>
       } />
       
-      
-
-      
       <Route path="/favorites" element={
         <ProtectedRoute>
-          <DashboardLayout>
-            <Favorites />
-          </DashboardLayout>
+          <UserAuthGuard>
+            <DashboardLayout>
+              <Favorites />
+            </DashboardLayout>
+          </UserAuthGuard>
         </ProtectedRoute>
       } />
       
       <Route path="/billing" element={
         <ProtectedRoute>
-          <DashboardLayout>
-            <Billing />
-          </DashboardLayout>
+          <UserAuthGuard>
+            <DashboardLayout>
+              <Billing />
+            </DashboardLayout>
+          </UserAuthGuard>
         </ProtectedRoute>
       } />
       
       <Route path="/settings" element={
         <ProtectedRoute>
-          <DashboardLayout>
-            <Settings />
-          </DashboardLayout>
+          <UserAuthGuard>
+            <DashboardLayout>
+              <Settings />
+            </DashboardLayout>
+          </UserAuthGuard>
         </ProtectedRoute>
       } />
+      
+      {/* IP Restriction Error Route */}
+      <Route path="/admin/ip-restricted" element={<IPRestrictionError />} />
       
       {/* Admin Panel Routes */}
       <Route path="/admin-panel" element={

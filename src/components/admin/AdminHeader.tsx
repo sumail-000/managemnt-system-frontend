@@ -1,3 +1,5 @@
+import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -18,14 +20,46 @@ import {
   Settings,
   LogOut,
   Activity,
-  Shield
+  Shield,
+  Home,
+  Loader2
 } from "lucide-react"
+import { useAuth } from "@/contexts/AuthContext"
+import { useToast } from "@/hooks/use-toast"
+import { getAvatarUrl } from "@/utils/storage"
 
 interface AdminHeaderProps {
   onMenuClick: () => void
 }
 
 export function AdminHeader({ onMenuClick }: AdminHeaderProps) {
+  const { user, logout } = useAuth()
+  const { toast } = useToast()
+  const navigate = useNavigate()
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+
+  const handleLogout = async () => {
+    try {
+      setIsLoggingOut(true)
+      await logout()
+      toast({
+        title: "Logged out successfully",
+        description: "You have been logged out of the admin panel.",
+      })
+    } catch (error) {
+      toast({
+        title: "Logout failed",
+        description: "There was an error logging you out. Please try again.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsLoggingOut(false)
+    }
+  }
+
+  const handleReturnToDashboard = () => {
+    navigate('/dashboard')
+  }
   return (
     <header className="flex h-16 items-center justify-between border-b border-border bg-background px-6">
       {/* Left side */}
@@ -38,14 +72,6 @@ export function AdminHeader({ onMenuClick }: AdminHeaderProps) {
         >
           <Menu className="h-4 w-4" />
         </Button>
-        
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search users, products..."
-            className="w-64 pl-9"
-          />
-        </div>
       </div>
 
       {/* Right side */}
@@ -103,37 +129,58 @@ export function AdminHeader({ onMenuClick }: AdminHeaderProps) {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="relative h-8 w-8 rounded-full">
               <Avatar className="h-8 w-8">
-                <AvatarImage src="/avatars/admin.png" alt="Admin" />
-                <AvatarFallback>AD</AvatarFallback>
+                <AvatarImage
+                  src={user?.avatar ? `${getAvatarUrl(user.avatar)}?t=${Date.now()}` : undefined}
+                  alt={user?.name || 'Admin'}
+                />
+                <AvatarFallback className="bg-destructive text-destructive-foreground">
+                  {(user?.name || 'Admin').charAt(0).toUpperCase()}
+                </AvatarFallback>
               </Avatar>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-56" align="end" forceMount>
             <DropdownMenuLabel className="font-normal">
               <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium leading-none">Admin User</p>
+                <p className="text-sm font-medium leading-none">{user?.name || 'Admin User'}</p>
                 <p className="text-xs leading-none text-muted-foreground">
-                  admin@company.com
+                  {user?.email || 'admin@company.com'}
                 </p>
+                <div className="flex items-center gap-1 mt-1">
+                  <Shield className="h-3 w-3 text-destructive" />
+                  <span className="text-xs text-destructive font-medium">Administrator</span>
+                </div>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate('/admin-panel/profile')}>
               <User className="mr-2 h-4 w-4" />
-              <span>Profile</span>
+              <span>Admin Profile</span>
             </DropdownMenuItem>
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate('/admin-panel/settings')}>
               <Settings className="mr-2 h-4 w-4" />
-              <span>Settings</span>
+              <span>Admin Settings</span>
             </DropdownMenuItem>
-            <DropdownMenuItem>
-              <Activity className="mr-2 h-4 w-4" />
-              <span>Activity Log</span>
+            <DropdownMenuItem onClick={() => navigate('/settings')}>
+              <User className="mr-2 h-4 w-4" />
+              <span>Personal Settings</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-red-600">
-              <LogOut className="mr-2 h-4 w-4" />
-              <span>Log out</span>
+            <DropdownMenuItem onClick={handleReturnToDashboard}>
+              <Home className="mr-2 h-4 w-4" />
+              <span>Return to Dashboard</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="text-red-600 focus:text-red-600"
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+            >
+              {isLoggingOut ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <LogOut className="mr-2 h-4 w-4" />
+              )}
+              <span>{isLoggingOut ? 'Logging out...' : 'Log out'}</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

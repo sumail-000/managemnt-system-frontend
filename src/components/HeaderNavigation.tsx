@@ -62,6 +62,12 @@ const settingsNavItems = [
   { title: "Settings", href: "/settings", icon: Settings, description: "Account and preferences" },
 ]
 
+const getAdminNavItems = () => {
+  return [
+    { title: "Admin Panel", href: "/admin-panel", icon: Shield, description: "System administration and management" },
+  ]
+}
+
 export function HeaderNavigation() {
   const { user, logout } = useAuth()
   const { toast } = useToast()
@@ -235,6 +241,7 @@ export function HeaderNavigation() {
                   </NavLink>
                 </DropdownMenuItem>
               ))}
+              
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -319,10 +326,16 @@ export function HeaderNavigation() {
                 </div>
                 <div className="w-9 h-9 rounded-full overflow-hidden bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center ring-2 ring-primary/20 hover:ring-primary/40 transition-all duration-200">
                   {user?.avatar ? (
-                    <img 
-                      src={getAvatarUrl(user.avatar)} 
-                      alt={user.name || 'User'} 
+                    <img
+                      src={`${getAvatarUrl(user.avatar)}?t=${Date.now()}`}
+                      alt={user.name || 'User'}
                       className="w-full h-full object-cover"
+                      onError={(e) => {
+                        console.error('Header avatar failed to load:', {
+                          src: e.currentTarget.src,
+                          userAvatar: user.avatar
+                        });
+                      }}
                     />
                   ) : (
                     <User className="h-4 w-4 text-primary" />
