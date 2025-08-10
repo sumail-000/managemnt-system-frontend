@@ -2012,10 +2012,12 @@ export default function ProductForm() {
         description: 'Failed to create recipe: ' + (error.message || 'Unknown error'),
         variant: "destructive"
       });
-      // Reset states on error
-      setCurrentRecipe(null);
-      setRecipeProgress(null);
-      setIsRecipeCreated(false);
+      // Reset states on error - batch updates to prevent context issues
+      React.startTransition(() => {
+        setCurrentRecipe(null);
+        setRecipeProgress(null);
+        setIsRecipeCreated(false);
+      });
     } finally {
       setIsCreatingRecipe(false);
     }

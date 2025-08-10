@@ -105,80 +105,88 @@ export const processSearchIngredient = async (ingredientName: string): Promise<A
  * Convert custom ingredient data to AddedIngredient format
  */
 export const processCustomIngredient = (ingredientData: CustomIngredientData): AddedIngredient => {
+  // Handle both camelCase and snake_case properties for compatibility
+  const servingUnit = (ingredientData as any).servingUnit || (ingredientData as any).serving_unit || 'g';
+  const servingSize = (ingredientData as any).servingSize || (ingredientData as any).serving_size || 100;
+  const allergens = (ingredientData as any).allergens?.contains ||
+                   (ingredientData as any).allergens_data?.contains ||
+                   [];
+  const nutrition = (ingredientData as any).nutrition || (ingredientData as any).nutrition_data || {};
+  
   return {
     id: `custom-${Date.now()}`,
     name: ingredientData.name,
     quantity: 1,
-    unit: ingredientData.servingUnit,
+    unit: servingUnit,
     waste: 0.0,
-    grams: Number(ingredientData.servingSize),
+    grams: Number(servingSize),
     availableMeasures: [
       {
-        uri: `custom-measure-${ingredientData.servingUnit}`,
-        label: ingredientData.servingUnit,
-        weight: ingredientData.servingSize
+        uri: `custom-measure-${servingUnit}`,
+        label: servingUnit,
+        weight: servingSize
       }
     ],
-    allergens: ingredientData.allergens.contains || [],
+    allergens: allergens,
     // Add nutrition proportion based on custom ingredient data
     nutritionProportion: {
-      calories: ingredientData.nutrition.calories,
+      calories: nutrition.calories || 0,
       // Macronutrients
-      totalFat: ingredientData.nutrition.fat,
-      saturatedFat: ingredientData.nutrition.saturatedFat,
-      transFat: ingredientData.nutrition.transFat,
+      totalFat: nutrition.fat || 0,
+      saturatedFat: nutrition.saturatedFat || nutrition.saturated_fat || 0,
+      transFat: nutrition.transFat || nutrition.trans_fat || 0,
       monounsaturatedFat: 0, // Not available in custom ingredient form
       polyunsaturatedFat: 0, // Not available in custom ingredient form
-      cholesterol: ingredientData.nutrition.cholesterol,
-      sodium: ingredientData.nutrition.sodium,
-      totalCarbohydrate: ingredientData.nutrition.carbohydrates,
-      dietaryFiber: ingredientData.nutrition.fiber,
-      totalSugars: ingredientData.nutrition.sugars,
-      addedSugars: ingredientData.nutrition.addedSugars,
+      cholesterol: nutrition.cholesterol || 0,
+      sodium: nutrition.sodium || 0,
+      totalCarbohydrate: nutrition.carbohydrates || nutrition.total_carbohydrate || 0,
+      dietaryFiber: nutrition.fiber || nutrition.dietary_fiber || 0,
+      totalSugars: nutrition.sugars || nutrition.total_sugars || 0,
+      addedSugars: nutrition.addedSugars || nutrition.added_sugars || 0,
       sugarAlcohol: 0, // Not available in custom ingredient form
-      protein: ingredientData.nutrition.protein,
+      protein: nutrition.protein || 0,
       
       // Comprehensive Vitamins - Use custom ingredient data or default to 0
-      vitaminA: ingredientData.nutrition.vitaminA || 0,
-      vitaminC: ingredientData.nutrition.vitaminC || 0,
-      vitaminD: ingredientData.nutrition.vitaminD || 0,
+      vitaminA: nutrition.vitaminA || nutrition.vitamin_a || 0,
+      vitaminC: nutrition.vitaminC || nutrition.vitamin_c || 0,
+      vitaminD: nutrition.vitaminD || nutrition.vitamin_d || 0,
       vitaminE: 0, // Not available in custom ingredient form
       vitaminK: 0, // Not available in custom ingredient form
-      thiamin: ingredientData.nutrition.thiamine || 0, // Note: thiamine with 'e'
-      riboflavin: ingredientData.nutrition.riboflavin || 0,
-      niacin: ingredientData.nutrition.niacin || 0,
-      vitaminB6: ingredientData.nutrition.vitaminB6 || 0,
-      folate: ingredientData.nutrition.folate || 0,
-      vitaminB12: ingredientData.nutrition.vitaminB12 || 0,
-      pantothenicAcid: ingredientData.nutrition.pantothenicAcid || 0,
+      thiamin: nutrition.thiamine || nutrition.thiamin || 0, // Note: both spellings
+      riboflavin: nutrition.riboflavin || 0,
+      niacin: nutrition.niacin || 0,
+      vitaminB6: nutrition.vitaminB6 || nutrition.vitamin_b6 || 0,
+      folate: nutrition.folate || 0,
+      vitaminB12: nutrition.vitaminB12 || nutrition.vitamin_b12 || 0,
+      pantothenicAcid: nutrition.pantothenicAcid || nutrition.pantothenic_acid || 0,
       
       // Comprehensive Minerals - Use custom ingredient data or default to 0
-      calcium: ingredientData.nutrition.calcium,
-      iron: ingredientData.nutrition.iron,
-      potassium: ingredientData.nutrition.potassium || 0,
-      phosphorus: ingredientData.nutrition.phosphorus || 0,
-      magnesium: ingredientData.nutrition.magnesium || 0,
-      zinc: ingredientData.nutrition.zinc || 0,
-      selenium: ingredientData.nutrition.selenium || 0,
-      copper: ingredientData.nutrition.copper || 0,
-      manganese: ingredientData.nutrition.manganese || 0,
+      calcium: nutrition.calcium || 0,
+      iron: nutrition.iron || 0,
+      potassium: nutrition.potassium || 0,
+      phosphorus: nutrition.phosphorus || 0,
+      magnesium: nutrition.magnesium || 0,
+      zinc: nutrition.zinc || 0,
+      selenium: nutrition.selenium || 0,
+      copper: nutrition.copper || 0,
+      manganese: nutrition.manganese || 0,
       
       // Daily values - calculate based on standard daily values
-      totalFatDV: (ingredientData.nutrition.fat / 65) * 100,
-      saturatedFatDV: (ingredientData.nutrition.saturatedFat / 20) * 100,
+      totalFatDV: ((nutrition.fat || 0) / 65) * 100,
+      saturatedFatDV: ((nutrition.saturatedFat || nutrition.saturated_fat || 0) / 20) * 100,
       monounsaturatedFatDV: 0, // No DV established for monounsaturated fats
       polyunsaturatedFatDV: 0, // No DV established for polyunsaturated fats
-      cholesterolDV: (ingredientData.nutrition.cholesterol / 300) * 100,
-      sodiumDV: (ingredientData.nutrition.sodium / 2300) * 100,
-      totalCarbohydrateDV: (ingredientData.nutrition.carbohydrates / 300) * 100,
-      dietaryFiberDV: (ingredientData.nutrition.fiber / 25) * 100,
-      addedSugarsDV: (ingredientData.nutrition.addedSugars / 50) * 100,
+      cholesterolDV: ((nutrition.cholesterol || 0) / 300) * 100,
+      sodiumDV: ((nutrition.sodium || 0) / 2300) * 100,
+      totalCarbohydrateDV: ((nutrition.carbohydrates || nutrition.total_carbohydrate || 0) / 300) * 100,
+      dietaryFiberDV: ((nutrition.fiber || nutrition.dietary_fiber || 0) / 25) * 100,
+      addedSugarsDV: ((nutrition.addedSugars || nutrition.added_sugars || 0) / 50) * 100,
       sugarAlcoholDV: 0, // No DV established for sugar alcohols
-      proteinDV: (ingredientData.nutrition.protein / 50) * 100,
-      vitaminDDV: ((ingredientData.nutrition.vitaminD || 0) / 20) * 100,
-      calciumDV: (ingredientData.nutrition.calcium / 1000) * 100,
-      ironDV: (ingredientData.nutrition.iron / 18) * 100,
-      potassiumDV: ((ingredientData.nutrition.potassium || 0) / 3500) * 100
+      proteinDV: ((nutrition.protein || 0) / 50) * 100,
+      vitaminDDV: ((nutrition.vitaminD || nutrition.vitamin_d || 0) / 20) * 100,
+      calciumDV: ((nutrition.calcium || 0) / 1000) * 100,
+      ironDV: ((nutrition.iron || 0) / 18) * 100,
+      potassiumDV: ((nutrition.potassium || 0) / 3500) * 100
     }
   };
 };
@@ -201,66 +209,70 @@ export const processCustomIngredientFromDB = (customIngredientData: any): AddedI
         weight: customIngredientData.serving_size || 100
       }
     ],
-    allergens: customIngredientData.allergens?.contains || [],
+    allergens: customIngredientData.allergens_data?.contains ||
+               customIngredientData.allergens?.contains ||
+               [],
     // Add nutrition proportion based on custom ingredient data
     nutritionProportion: {
-      calories: customIngredientData.nutrition?.calories || 0,
+      calories: customIngredientData.nutrition_data?.calories ||
+                customIngredientData.nutrition?.calories ||
+                0,
       // Macronutrients
-      totalFat: customIngredientData.nutrition?.fat || 0,
-      saturatedFat: customIngredientData.nutrition?.saturated_fat || 0,
-      transFat: customIngredientData.nutrition?.trans_fat || 0,
+      totalFat: customIngredientData.nutrition_data?.fat || customIngredientData.nutrition?.fat || 0,
+      saturatedFat: customIngredientData.nutrition_data?.saturated_fat || customIngredientData.nutrition?.saturated_fat || 0,
+      transFat: customIngredientData.nutrition_data?.trans_fat || customIngredientData.nutrition?.trans_fat || 0,
       monounsaturatedFat: 0, // Not available in custom ingredient form
       polyunsaturatedFat: 0, // Not available in custom ingredient form
-      cholesterol: customIngredientData.nutrition?.cholesterol || 0,
-      sodium: customIngredientData.nutrition?.sodium || 0,
-      totalCarbohydrate: customIngredientData.nutrition?.carbohydrates || 0,
-      dietaryFiber: customIngredientData.nutrition?.fiber || 0,
-      totalSugars: customIngredientData.nutrition?.sugars || 0,
-      addedSugars: customIngredientData.nutrition?.added_sugars || 0,
+      cholesterol: customIngredientData.nutrition_data?.cholesterol || customIngredientData.nutrition?.cholesterol || 0,
+      sodium: customIngredientData.nutrition_data?.sodium || customIngredientData.nutrition?.sodium || 0,
+      totalCarbohydrate: customIngredientData.nutrition_data?.carbohydrates || customIngredientData.nutrition?.carbohydrates || 0,
+      dietaryFiber: customIngredientData.nutrition_data?.fiber || customIngredientData.nutrition?.fiber || 0,
+      totalSugars: customIngredientData.nutrition_data?.sugars || customIngredientData.nutrition?.sugars || 0,
+      addedSugars: customIngredientData.nutrition_data?.added_sugars || customIngredientData.nutrition?.added_sugars || 0,
       sugarAlcohol: 0, // Not available in custom ingredient form
-      protein: customIngredientData.nutrition?.protein || 0,
+      protein: customIngredientData.nutrition_data?.protein || customIngredientData.nutrition?.protein || 0,
       
       // Comprehensive Vitamins - Use custom ingredient data or default to 0
-      vitaminA: customIngredientData.nutrition?.vitamin_a || 0,
-      vitaminC: customIngredientData.nutrition?.vitamin_c || 0,
-      vitaminD: customIngredientData.nutrition?.vitamin_d || 0,
+      vitaminA: customIngredientData.nutrition_data?.vitamin_a || customIngredientData.nutrition?.vitamin_a || 0,
+      vitaminC: customIngredientData.nutrition_data?.vitamin_c || customIngredientData.nutrition?.vitamin_c || 0,
+      vitaminD: customIngredientData.nutrition_data?.vitamin_d || customIngredientData.nutrition?.vitamin_d || 0,
       vitaminE: 0, // Not available in custom ingredient form
       vitaminK: 0, // Not available in custom ingredient form
-      thiamin: customIngredientData.nutrition?.thiamine || 0, // Note: thiamine with 'e'
-      riboflavin: customIngredientData.nutrition?.riboflavin || 0,
-      niacin: customIngredientData.nutrition?.niacin || 0,
-      vitaminB6: customIngredientData.nutrition?.vitamin_b6 || 0,
-      folate: customIngredientData.nutrition?.folate || 0,
-      vitaminB12: customIngredientData.nutrition?.vitamin_b12 || 0,
-      pantothenicAcid: customIngredientData.nutrition?.pantothenic_acid || 0,
+      thiamin: customIngredientData.nutrition_data?.thiamine || customIngredientData.nutrition?.thiamine || 0,
+      riboflavin: customIngredientData.nutrition_data?.riboflavin || customIngredientData.nutrition?.riboflavin || 0,
+      niacin: customIngredientData.nutrition_data?.niacin || customIngredientData.nutrition?.niacin || 0,
+      vitaminB6: customIngredientData.nutrition_data?.vitamin_b6 || customIngredientData.nutrition?.vitamin_b6 || 0,
+      folate: customIngredientData.nutrition_data?.folate || customIngredientData.nutrition?.folate || 0,
+      vitaminB12: customIngredientData.nutrition_data?.vitamin_b12 || customIngredientData.nutrition?.vitamin_b12 || 0,
+      pantothenicAcid: customIngredientData.nutrition_data?.pantothenic_acid || customIngredientData.nutrition?.pantothenic_acid || 0,
       
       // Comprehensive Minerals - Use custom ingredient data or default to 0
-      calcium: customIngredientData.nutrition?.calcium || 0,
-      iron: customIngredientData.nutrition?.iron || 0,
-      potassium: customIngredientData.nutrition?.potassium || 0,
-      phosphorus: customIngredientData.nutrition?.phosphorus || 0,
-      magnesium: customIngredientData.nutrition?.magnesium || 0,
-      zinc: customIngredientData.nutrition?.zinc || 0,
-      selenium: customIngredientData.nutrition?.selenium || 0,
-      copper: customIngredientData.nutrition?.copper || 0,
-      manganese: customIngredientData.nutrition?.manganese || 0,
+      calcium: customIngredientData.nutrition_data?.calcium || customIngredientData.nutrition?.calcium || 0,
+      iron: customIngredientData.nutrition_data?.iron || customIngredientData.nutrition?.iron || 0,
+      potassium: customIngredientData.nutrition_data?.potassium || customIngredientData.nutrition?.potassium || 0,
+      phosphorus: customIngredientData.nutrition_data?.phosphorus || customIngredientData.nutrition?.phosphorus || 0,
+      magnesium: customIngredientData.nutrition_data?.magnesium || customIngredientData.nutrition?.magnesium || 0,
+      zinc: customIngredientData.nutrition_data?.zinc || customIngredientData.nutrition?.zinc || 0,
+      selenium: customIngredientData.nutrition_data?.selenium || customIngredientData.nutrition?.selenium || 0,
+      copper: customIngredientData.nutrition_data?.copper || customIngredientData.nutrition?.copper || 0,
+      manganese: customIngredientData.nutrition_data?.manganese || customIngredientData.nutrition?.manganese || 0,
       
       // Daily values - calculate based on standard daily values
-      totalFatDV: ((customIngredientData.nutrition?.fat || 0) / 65) * 100,
-      saturatedFatDV: ((customIngredientData.nutrition?.saturated_fat || 0) / 20) * 100,
+      totalFatDV: ((customIngredientData.nutrition_data?.fat || customIngredientData.nutrition?.fat || 0) / 65) * 100,
+      saturatedFatDV: ((customIngredientData.nutrition_data?.saturated_fat || customIngredientData.nutrition?.saturated_fat || 0) / 20) * 100,
       monounsaturatedFatDV: 0, // No DV established for monounsaturated fats
       polyunsaturatedFatDV: 0, // No DV established for polyunsaturated fats
-      cholesterolDV: ((customIngredientData.nutrition?.cholesterol || 0) / 300) * 100,
-      sodiumDV: ((customIngredientData.nutrition?.sodium || 0) / 2300) * 100,
-      totalCarbohydrateDV: ((customIngredientData.nutrition?.carbohydrates || 0) / 300) * 100,
-      dietaryFiberDV: ((customIngredientData.nutrition?.fiber || 0) / 25) * 100,
-      addedSugarsDV: ((customIngredientData.nutrition?.added_sugars || 0) / 50) * 100,
+      cholesterolDV: ((customIngredientData.nutrition_data?.cholesterol || customIngredientData.nutrition?.cholesterol || 0) / 300) * 100,
+      sodiumDV: ((customIngredientData.nutrition_data?.sodium || customIngredientData.nutrition?.sodium || 0) / 2300) * 100,
+      totalCarbohydrateDV: ((customIngredientData.nutrition_data?.carbohydrates || customIngredientData.nutrition?.carbohydrates || 0) / 300) * 100,
+      dietaryFiberDV: ((customIngredientData.nutrition_data?.fiber || customIngredientData.nutrition?.fiber || 0) / 25) * 100,
+      addedSugarsDV: ((customIngredientData.nutrition_data?.added_sugars || customIngredientData.nutrition?.added_sugars || 0) / 50) * 100,
       sugarAlcoholDV: 0, // No DV established for sugar alcohols
-      proteinDV: ((customIngredientData.nutrition?.protein || 0) / 50) * 100,
-      vitaminDDV: ((customIngredientData.nutrition?.vitamin_d || 0) / 20) * 100,
-      calciumDV: ((customIngredientData.nutrition?.calcium || 0) / 1000) * 100,
-      ironDV: ((customIngredientData.nutrition?.iron || 0) / 18) * 100,
-      potassiumDV: ((customIngredientData.nutrition?.potassium || 0) / 3500) * 100
+      proteinDV: ((customIngredientData.nutrition_data?.protein || customIngredientData.nutrition?.protein || 0) / 50) * 100,
+      vitaminDDV: ((customIngredientData.nutrition_data?.vitamin_d || customIngredientData.nutrition?.vitamin_d || 0) / 20) * 100,
+      calciumDV: ((customIngredientData.nutrition_data?.calcium || customIngredientData.nutrition?.calcium || 0) / 1000) * 100,
+      ironDV: ((customIngredientData.nutrition_data?.iron || customIngredientData.nutrition?.iron || 0) / 18) * 100,
+      potassiumDV: ((customIngredientData.nutrition_data?.potassium || customIngredientData.nutrition?.potassium || 0) / 3500) * 100
     }
   };
 };
