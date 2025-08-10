@@ -717,9 +717,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       throw new Error('Failed to logout from all devices');
     } finally {
       console.log('[AUTH] Local logout completed after logout from all devices');
-      // Clear all tokens and remember me preference
+      // Clear all tokens and remembered credentials
       TokenManager.clearAllTokens();
-      TokenManager.setRememberMe(false);
+      TokenManager.clearRememberMeCredentials();
       
       setToken(null);
       setTokenExpiresAt(null);

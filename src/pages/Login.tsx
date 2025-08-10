@@ -108,6 +108,24 @@ export default function Login() {
     }
   }, [location.search, toast])
 
+  // Prefill remembered credentials and auto-redirect if already authenticated
+  useEffect(() => {
+    const creds = TokenManager.getRememberedCredentials()
+    if (creds) {
+      setFormData({ email: creds.email, password: creds.password })
+      setRememberMe(true)
+    }
+
+    // If a valid session token exists, redirect away from login
+    const hasAdmin = TokenManager.hasValidAdminSession()
+    const hasUser = TokenManager.hasValidUserSession()
+    if (hasAdmin) {
+      navigate('/admin-panel', { replace: true })
+    } else if (hasUser) {
+      navigate('/dashboard', { replace: true })
+    }
+  }, [navigate])
+
   const validateForm = (): boolean => {
     const newErrors: {[key: string]: string} = {}
     
@@ -166,8 +184,12 @@ export default function Login() {
       const sanitizedEmail = SecurityUtils.sanitizeInput(formData.email)
       const sanitizedPassword = formData.password // Don't sanitize password as it may contain special chars
       
-      // Set "Remember Me" preference before login
-      TokenManager.setRememberMe(rememberMe)
+      // Handle Remember Me: store or clear credentials for pre-fill (not for token persistence)
+      if (rememberMe) {
+        TokenManager.setRememberMeCredentials(sanitizedEmail, sanitizedPassword)
+      } else {
+        TokenManager.clearRememberMeCredentials()
+      }
       
       await login(sanitizedEmail, sanitizedPassword)
       

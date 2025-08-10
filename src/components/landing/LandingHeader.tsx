@@ -12,15 +12,21 @@ export function LandingHeader() {
 
   const handleSignInClick = (e: React.MouseEvent) => {
     e.preventDefault()
-    
-    // Check if user should be automatically logged in
-    if (TokenManager.shouldStayLoggedIn(false)) {
-      console.log('[LANDING_HEADER] User has valid token with remember me, redirecting to dashboard')
-      navigate('/dashboard')
-    } else {
-      console.log('[LANDING_HEADER] No valid remembered session, redirecting to login')
-      navigate('/login')
+
+    // Default behavior: if a valid token exists, go directly to dashboard/admin; else go to login
+    if (TokenManager.hasValidAdminSession()) {
+      console.log('[LANDING_HEADER] Valid admin session found, redirecting to admin panel')
+      navigate('/admin-panel')
+      return
     }
+    if (TokenManager.hasValidUserSession()) {
+      console.log('[LANDING_HEADER] Valid user session found, redirecting to dashboard')
+      navigate('/dashboard')
+      return
+    }
+
+    console.log('[LANDING_HEADER] No valid session, redirecting to login')
+    navigate('/login')
   }
 
   const navigation = [
