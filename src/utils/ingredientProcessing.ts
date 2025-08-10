@@ -12,7 +12,7 @@ export const processSearchIngredient = async (ingredientName: string): Promise<A
     
     if (!parseResponse) {
       console.error('API call failed or no food data:', parseResponse);
-      return null;
+      throw new Error('EDAMAM_NO_DATA');
     }
     
     const foodData = parseResponse;
@@ -21,7 +21,7 @@ export const processSearchIngredient = async (ingredientName: string): Promise<A
     const hints = foodData.hints;
     if (!hints || hints.length === 0) {
       console.error('No hints available for measures');
-      return null;
+      throw new Error('EDAMAM_NO_DATA');
     }
     
     const hint = hints[0];
@@ -33,7 +33,7 @@ export const processSearchIngredient = async (ingredientName: string): Promise<A
     
     if (measures.length === 0) {
       console.error('No valid measures available');
-      return null;
+      throw new Error('EDAMAM_NO_DATA');
     }
     
     let actualQuantity = 1; // Default quantity
@@ -120,9 +120,23 @@ export const processSearchIngredient = async (ingredientName: string): Promise<A
     
     return newIngredient;
     
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error processing ingredient:', error);
-    return null;
+    
+    // Check for specific Edamam API errors
+    if (error.response?.status === 404 ||
+        error.message?.includes('No food data found') ||
+        error.response?.data?.message?.includes('No food data found')) {
+      throw new Error('EDAMAM_NO_DATA');
+    }
+    
+    // Check for network errors
+    if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
+      throw new Error('NETWORK_ERROR');
+    }
+    
+    // Generic error
+    throw new Error('PROCESSING_ERROR');
   }
 };
 

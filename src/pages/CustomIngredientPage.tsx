@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -106,12 +106,17 @@ export function CustomIngredientPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const returnTo = searchParams.get('returnTo') || '/products/create';
+  const returnTo = searchParams.get('returnTo') || '/custom-ingredients';
   const { toast } = useToast();
+  
+  // Check if we're in edit mode
+  const isEditMode = location.pathname.includes('/edit/');
+  const ingredientId = isEditMode ? location.pathname.split('/').pop() : null;
   
   const [formData, setFormData] = useState<CustomIngredientData>(initialFormData);
   const [errors, setErrors] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingIngredient, setIsLoadingIngredient] = useState(isEditMode);
 
   const handleInputChange = (field: string, value: any) => {
     setFormData(prev => ({
@@ -183,6 +188,65 @@ export function CustomIngredientPage() {
     return newErrors.length === 0;
   };
 
+  // Load ingredient data for edit mode
+  useEffect(() => {
+    const loadIngredient = async () => {
+      if (isEditMode && ingredientId) {
+        setIsLoadingIngredient(true);
+        try {
+          const response = await CustomIngredientApi.getCustomIngredient(parseInt(ingredientId));
+          
+          // Handle both wrapped format {success: true, data: ...} and direct data format
+          let ingredient;
+          if (response && typeof response === 'object') {
+            if (response.success && response.data) {
+              // Wrapped format
+              ingredient = Array.isArray(response.data) ? response.data[0] : response.data;
+            } else if ((response as any).name || (response as any).id) {
+              // Direct data format (from API interceptor)
+              ingredient = response as any;
+            } else {
+              throw new Error('Invalid response format');
+            }
+          } else {
+            throw new Error('No data received');
+          }
+          
+          if (ingredient) {
+            
+            // Transform API data back to form format
+            setFormData({
+              name: ingredient.name || '',
+              brand: ingredient.brand || '',
+              category: ingredient.category || '',
+              description: ingredient.description || '',
+              ingredientList: ingredient.ingredient_list || '',
+              servingSize: ingredient.serving_size || 100,
+              servingUnit: ingredient.serving_unit || 'g',
+              nutrition: ingredient.nutrition_data || initialFormData.nutrition,
+              vitaminsAndMinerals: ingredient.vitamins_minerals || initialFormData.vitaminsAndMinerals,
+              additionalNutrients: ingredient.additional_nutrients || initialFormData.additionalNutrients,
+              allergens: ingredient.allergens_data || initialFormData.allergens,
+              nutritionNotes: ingredient.nutrition_notes || ''
+            });
+          }
+        } catch (error: any) {
+          console.error('Error loading ingredient:', error);
+          toast({
+            title: "Error",
+            description: "Failed to load ingredient data",
+            variant: "destructive"
+          });
+          navigate('/custom-ingredients');
+        } finally {
+          setIsLoadingIngredient(false);
+        }
+      }
+    };
+
+    loadIngredient();
+  }, [isEditMode, ingredientId, navigate, toast]);
+
   const handleSubmit = async (saveOnly: boolean = false) => {
     if (!validateForm()) {
       return;
@@ -192,41 +256,54 @@ export function CustomIngredientPage() {
     try {
       console.log('🔄 Processing custom ingredient:', formData);
       
-      if (saveOnly) {
-        // Save ingredient to database using API
-        console.log('💾 Saving ingredient to database:', formData);
-        
-        const apiData = {
-          name: formData.name,
-          brand: formData.brand,
-          category: formData.category,
-          description: formData.description,
-          ingredient_list: formData.ingredientList,
-          serving_size: formData.servingSize,
-          serving_unit: formData.servingUnit,
-          nutrition_data: formData.nutrition,
-          vitamins_minerals: formData.vitaminsAndMinerals,
-          additional_nutrients: formData.additionalNutrients,
-          allergens_data: formData.allergens,
-          nutrition_notes: formData.nutritionNotes,
-          is_public: false, // Default to private
-        };
-        
-        console.log('🔄 API data being sent:', apiData);
-        
-        const response = await CustomIngredientApi.createCustomIngredient(apiData);
-        
-        console.log('📡 Full API response:', response);
+      // Prepare API data for saving to database
+      const apiData = {
+        name: formData.name,
+        brand: formData.brand,
+        category: formData.category,
+        description: formData.description,
+        ingredient_list: formData.ingredientList,
+        serving_size: formData.servingSize,
+        serving_unit: formData.servingUnit,
+        nutrition_data: formData.nutrition,
+        vitamins_minerals: formData.vitaminsAndMinerals,
+        additional_nutrients: formData.additionalNutrients,
+        allergens_data: formData.allergens,
+        nutrition_notes: formData.nutritionNotes,
+        is_public: false, // Default to private
+      };
+      
+      console.log('🔄 API data being sent:', apiData);
+      
+      let response;
+      if (isEditMode && ingredientId) {
+        // Update existing ingredient
+        response = await CustomIngredientApi.updateCustomIngredient(parseInt(ingredientId), apiData);
+      } else {
+        // Create new ingredient - ALWAYS save to database first (for both "Save Ingredient" and "Add to Recipe")
+        response = await CustomIngredientApi.createCustomIngredient(apiData);
+      }
+      
+      console.log('📡 Full API response:', response);
 
-        // Check if response has success property (wrapped format) or is direct data
-        const isSuccess = response?.success === true ||
-                         (response && typeof response === 'object' && (response as any).user_id);
+      // Check if response has success property (wrapped format) or is direct data
+      const isSuccess = response?.success === true ||
+                       (response && typeof response === 'object' && (response as any).user_id);
 
-        if (isSuccess) {
-          const ingredientData = response.success ? response.data : response;
-          console.log('✅ Ingredient saved successfully:', ingredientData);
-          setErrors([]);
-          
+      if (isSuccess) {
+        const ingredientData = response.success ? response.data : response;
+        console.log('✅ Ingredient processed successfully:', ingredientData);
+        setErrors([]);
+        
+        if (isEditMode) {
+          // Edit mode: Show success and navigate back
+          toast({
+            title: "✅ Updated!",
+            description: "Custom ingredient updated successfully!",
+          });
+          navigate(returnTo);
+        } else if (saveOnly) {
+          // Create mode - Save Only: Show success message and reset form
           toast({
             title: "✅ Success!",
             description: "Custom ingredient saved successfully!",
@@ -235,21 +312,31 @@ export function CustomIngredientPage() {
           // Reset form
           setFormData(initialFormData);
           
-          // Navigate back or to ingredients list
-          // navigate('/ingredients'); // Uncomment when ingredients list page exists
+          // Navigate back to ingredients list
+          navigate('/custom-ingredients');
         } else {
-          console.error('❌ API response indicates failure:', response);
-          throw new Error(response?.message || 'Failed to save ingredient - API returned unsuccessful response');
+          // Create mode - Add to Recipe: Save ingredient AND add it to recipe automatically
+          toast({
+            title: "✅ Ingredient Created & Added!",
+            description: `"${formData.name}" has been saved and added to your recipe!`,
+          });
+          
+          console.log('➕ Adding ingredient to recipe with saved data:', {
+            formData,
+            savedIngredientData: ingredientData
+          });
+          
+          // Pass both the form data AND the saved ingredient data back to recipe form
+          navigate(returnTo, {
+            state: {
+              customIngredient: formData,
+              savedIngredientData: ingredientData // Include the saved data with ID
+            }
+          });
         }
       } else {
-        // Add to recipe - pass data back to the calling page
-        console.log('➕ Adding ingredient to recipe:', formData);
-        
-        // For adding to recipe, we don't need to save to database yet
-        // Just pass the data back to the recipe form
-        navigate(returnTo, {
-          state: { customIngredient: formData }
-        });
+        console.error('❌ API response indicates failure:', response);
+        throw new Error(response?.message || 'Failed to save ingredient - API returned unsuccessful response');
       }
     } catch (error: any) {
       console.error('❌ Error processing ingredient:', error);
@@ -289,8 +376,15 @@ export function CustomIngredientPage() {
                 Back
               </Button>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Create Custom Ingredient</h1>
-                <p className="text-sm text-gray-500">Add detailed nutrition information for your custom ingredient</p>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  {isEditMode ? 'Edit Custom Ingredient' : 'Create Custom Ingredient'}
+                </h1>
+                <p className="text-sm text-gray-500">
+                  {isEditMode
+                    ? 'Update the nutrition information for your custom ingredient'
+                    : 'Add detailed nutrition information for your custom ingredient'
+                  }
+                </p>
               </div>
             </div>
           </div>
@@ -313,7 +407,19 @@ export function CustomIngredientPage() {
           </Alert>
         )}
 
+        {/* Loading State for Edit Mode */}
+        {isLoadingIngredient && (
+          <Card className="p-12">
+            <div className="flex flex-col items-center justify-center text-center">
+              <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+              <h3 className="text-lg font-medium mb-2">Loading ingredient...</h3>
+              <p className="text-muted-foreground">Please wait while we fetch the ingredient data</p>
+            </div>
+          </Card>
+        )}
+
         {/* Single Scrollable Form */}
+        {!isLoadingIngredient && (
         <div className="space-y-8">
           {/* General Information Section */}
           <Card>
@@ -357,8 +463,10 @@ export function CustomIngredientPage() {
             </CardContent>
           </Card>
         </div>
+        )}
 
         {/* Action Buttons */}
+        {!isLoadingIngredient && (
         <div className="flex justify-end items-center mt-8 bg-white p-6 rounded-lg border border-gray-200">
           <div className="flex gap-3">
             <Button
@@ -368,37 +476,59 @@ export function CustomIngredientPage() {
             >
               Cancel
             </Button>
-            <Button
-              variant="outline"
-              onClick={() => handleSubmit(true)}
-              disabled={isLoading || !isFormValid()}
-              className={!isFormValid() ? 'opacity-50 cursor-not-allowed' : ''}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                'Save Ingredient'
-              )}
-            </Button>
-            <Button
-              onClick={() => handleSubmit(false)}
-              disabled={isLoading || !isFormValid()}
-              className={!isFormValid() ? 'opacity-50 cursor-not-allowed' : ''}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Adding...
-                </>
-              ) : (
-                'Add to Recipe'
-              )}
-            </Button>
+            {isEditMode ? (
+              // Edit mode: Only show Update button
+              <Button
+                onClick={() => handleSubmit(true)}
+                disabled={isLoading || !isFormValid()}
+                className={!isFormValid() ? 'opacity-50 cursor-not-allowed' : ''}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Updating...
+                  </>
+                ) : (
+                  'Update Ingredient'
+                )}
+              </Button>
+            ) : (
+              // Create mode: Show both Save and Add to Recipe buttons
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => handleSubmit(true)}
+                  disabled={isLoading || !isFormValid()}
+                  className={!isFormValid() ? 'opacity-50 cursor-not-allowed' : ''}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    'Save Ingredient'
+                  )}
+                </Button>
+                <Button
+                  onClick={() => handleSubmit(false)}
+                  disabled={isLoading || !isFormValid()}
+                  className={!isFormValid() ? 'opacity-50 cursor-not-allowed' : ''}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Adding...
+                    </>
+                  ) : (
+                    'Add to Recipe'
+                  )}
+                </Button>
+              </>
+            )}
           </div>
         </div>
+        )}
       </div>
     </div>
   );

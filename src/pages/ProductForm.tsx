@@ -1328,6 +1328,12 @@ export default function ProductForm() {
       
       if (!newIngredient) {
         console.error('❌ Failed to process ingredient:', ingredient.name);
+        // Remove from tracking set since addition failed
+        setAddedIngredientNames(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(ingredientKey);
+          return newSet;
+        });
         return;
       }
       
@@ -1347,8 +1353,43 @@ export default function ProductForm() {
         return updated;
       });
       
-    } catch (error) {
+      // Show success message
+      toast({
+        title: "✅ Ingredient Added",
+        description: `"${newIngredient.name}" has been added to your recipe`,
+      });
+      
+    } catch (error: any) {
       console.error('💥 Error adding ingredient:', error);
+      
+      // Remove from tracking set since addition failed
+      const ingredientKey = ingredient.name.toLowerCase().trim();
+      setAddedIngredientNames(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(ingredientKey);
+        return newSet;
+      });
+      
+      // Handle specific error types with user-friendly messages
+      if (error.message === 'EDAMAM_NO_DATA') {
+        toast({
+          title: "❌ Ingredient Not Found",
+          description: `Edamam database doesn't have nutrition data for "${ingredient.name}". Try a simpler ingredient name or create a custom ingredient instead.`,
+          variant: "destructive"
+        });
+      } else if (error.message === 'NETWORK_ERROR') {
+        toast({
+          title: "❌ Network Error",
+          description: "Unable to connect to nutrition database. Please check your internet connection and try again.",
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "❌ Failed to Add Ingredient",
+          description: `Unable to add "${ingredient.name}" to your recipe. Please try again or create a custom ingredient.`,
+          variant: "destructive"
+        });
+      }
     } finally {
       setLoadingIngredientName(null);
     }
@@ -2231,7 +2272,16 @@ export default function ProductForm() {
       const customIngredient = processCustomIngredient(ingredientData);
 
       // Add the custom ingredient to the recipe
-      setAddedIngredients(prev => [...prev, customIngredient]);
+      setAddedIngredients(prev => {
+        const updated = [...prev, customIngredient];
+        
+        // Save ingredients to backend progressively
+        if (currentRecipe?.id) {
+          saveIngredientsToBackend(updated, currentRecipe, setRecipeProgress, toast);
+        }
+        
+        return updated;
+      });
       
       // Add to tracking set
       const ingredientKey = ingredientData.name.toLowerCase().trim();
@@ -2240,6 +2290,17 @@ export default function ProductForm() {
         newSet.add(ingredientKey);
         return newSet;
       });
+
+      // Increment usage count if the ingredient has an ID (was saved to database)
+      if ((ingredientData as any).id) {
+        try {
+          await CustomIngredientApi.incrementUsage((ingredientData as any).id);
+          console.log('✅ Usage count incremented for new custom ingredient:', ingredientData.name);
+        } catch (error) {
+          console.error('❌ Failed to increment usage count:', error);
+          // Don't block the ingredient addition if usage tracking fails
+        }
+      }
       
     } catch (error) {
       console.error('Error adding custom ingredient:', error);
@@ -2279,6 +2340,15 @@ export default function ProductForm() {
         newSet.add(ingredientKey);
         return newSet;
       });
+
+      // Increment usage count for the custom ingredient
+      try {
+        await CustomIngredientApi.incrementUsage(customIngredientData.id);
+        console.log('✅ Usage count incremented for custom ingredient:', customIngredientData.name);
+      } catch (error) {
+        console.error('❌ Failed to increment usage count:', error);
+        // Don't block the ingredient addition if usage tracking fails
+      }
       
     } catch (error) {
       console.error('Error adding custom ingredient:', error);

@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/contexts/AuthContext"
 import { Eye, EyeOff, Loader2, AlertCircle, Shield } from "lucide-react"
 import SecurityUtils from "@/utils/security"
+import { TokenManager } from "@/utils/tokenManager"
 
 export default function Login() {
   const navigate = useNavigate()
@@ -20,6 +21,7 @@ export default function Login() {
     email: "",
     password: ""
   })
+  const [rememberMe, setRememberMe] = useState(false)
   const [errors, setErrors] = useState<{[key: string]: string}>({})
   const [sessionExpired, setSessionExpired] = useState(false)
   const [fromPayment, setFromPayment] = useState(false)
@@ -164,6 +166,9 @@ export default function Login() {
       const sanitizedEmail = SecurityUtils.sanitizeInput(formData.email)
       const sanitizedPassword = formData.password // Don't sanitize password as it may contain special chars
       
+      // Set "Remember Me" preference before login
+      TokenManager.setRememberMe(rememberMe)
+      
       await login(sanitizedEmail, sanitizedPassword)
       
       console.log('[LOGIN] Login successful, showing success toast');
@@ -301,6 +306,8 @@ export default function Login() {
                 <input
                   id="remember"
                   type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
                   className="rounded border-border text-primary focus:ring-primary"
                 />
                 <Label htmlFor="remember" className="text-sm">

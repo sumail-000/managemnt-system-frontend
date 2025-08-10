@@ -24,6 +24,7 @@ import QRCodes from "./pages/QRCodes";
 import Favorites from "./pages/Favorites";
 import Settings from "./pages/Settings";
 import { CustomIngredientPage } from "./pages/CustomIngredientPage";
+import CustomIngredients from "./pages/CustomIngredients";
 
 import PaymentForm from "./components/payment/PaymentForm";
 
@@ -136,7 +137,23 @@ const App = () => {
       } />
       
       {/* Custom Ingredient Routes */}
+      <Route path="/custom-ingredients" element={
+        <ProtectedRoute>
+          <UserAuthGuard>
+            <DashboardLayout>
+              <CustomIngredients />
+            </DashboardLayout>
+          </UserAuthGuard>
+        </ProtectedRoute>
+      } />
+      
       <Route path="/ingredients/create" element={
+        <ProtectedRoute>
+          <CustomIngredientPage />
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/ingredients/edit/:id" element={
         <ProtectedRoute>
           <CustomIngredientPage />
         </ProtectedRoute>

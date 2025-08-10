@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react"
 import { Link } from "react-router-dom"
-import { 
-  Package, 
-  Plus, 
-  Search, 
-  Filter, 
-  Grid3X3, 
-  List, 
+import {
+  Package,
+  Plus,
+  Search,
+  Filter,
+  Grid3X3,
+  List,
   MoreHorizontal,
   Pin,
   Edit,
@@ -17,7 +17,8 @@ import {
   AlignJustify,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  ChefHat
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -65,6 +66,7 @@ import { productsAPI } from "@/services/api"
 import { useToast } from "@/hooks/use-toast"
 import { usePaginatedProducts } from "@/hooks/usePaginatedProducts"
 import { Product } from "@/types/product"
+import CustomIngredients from "./CustomIngredients"
 
 // Remove mock data - will be loaded from API
 
@@ -79,6 +81,7 @@ const sortOptions = [
 
 export default function Products() {
   const { toast } = useToast()
+  const [activeTab, setActiveTab] = useState<"products" | "ingredients">("products")
   const [viewMode, setViewMode] = useState<"grid" | "table" | "compact">("grid")
   const [selectedProducts, setSelectedProducts] = useState<string[]>([])
   const [showFilters, setShowFilters] = useState(false)
@@ -264,29 +267,76 @@ export default function Products() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Products</h1>
+          <h1 className="text-3xl font-bold text-foreground">
+            {activeTab === "products" ? "Products" : "Custom Ingredients"}
+          </h1>
           <p className="text-muted-foreground">
-            Manage your food products and track inventory
+            {activeTab === "products"
+              ? "Manage your food products and track inventory"
+              : "Manage your custom ingredients and track their usage in recipes"
+            }
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/products/trash">
-              <Trash2 className="w-4 h-4 mr-2" />
-              Trash
-            </Link>
-          </Button>
-          <Button variant="gradient" asChild>
-            <Link to="/products/new">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Product
-            </Link>
-          </Button>
+          {activeTab === "products" ? (
+            <>
+              <Button variant="outline" size="sm" asChild>
+                <Link to="/products/trash">
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Trash
+                </Link>
+              </Button>
+              <Button variant="gradient" asChild>
+                <Link to="/products/new">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Product
+                </Link>
+              </Button>
+            </>
+          ) : (
+            <Button variant="gradient" asChild>
+              <Link to="/ingredients/create">
+                <Plus className="w-4 h-4 mr-2" />
+                Add Custom Ingredient
+              </Link>
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* Search and Filter Bar */}
-      <div className="flex flex-col lg:flex-row gap-4">
+      {/* Tab Navigation */}
+      <div className="border-b border-gray-200">
+        <nav className="flex space-x-8">
+          <button
+            onClick={() => setActiveTab("products")}
+            className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === "products"
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <Package className="w-4 h-4 mr-2 inline" />
+            Products
+          </button>
+          <button
+            onClick={() => setActiveTab("ingredients")}
+            className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === "ingredients"
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <ChefHat className="w-4 h-4 mr-2 inline" />
+            Custom Ingredients
+          </button>
+        </nav>
+      </div>
+
+      {/* Content based on active tab */}
+      {activeTab === "products" && (
+        <>
+          {/* Search and Filter Bar */}
+          <div className="flex flex-col lg:flex-row gap-4">
         <div className="flex-1 flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -714,6 +764,15 @@ export default function Products() {
             </Button>
           </div>
         </Card>
+      )}
+        </>
+      )}
+
+      {/* Custom Ingredients Tab Content */}
+      {activeTab === "ingredients" && (
+        <div className="mt-6">
+          <CustomIngredients />
+        </div>
       )}
     </div>
   )

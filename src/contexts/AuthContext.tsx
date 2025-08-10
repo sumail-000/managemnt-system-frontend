@@ -681,8 +681,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.error('[AUTH] Server logout error:', error);
     } finally {
       console.log('[AUTH] Local logout completed');
-      // Clear all tokens to ensure clean logout
-      TokenManager.clearAllTokens();
+      // Clear tokens using TokenManager (respects manual logout)
+      const isAdminContext = TokenManager.isAdminContext();
+      TokenManager.clearTokensOnLogout(isAdminContext);
+      
       setToken(null);
       setTokenExpiresAt(null);
       setUser(null);
@@ -715,8 +717,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       throw new Error('Failed to logout from all devices');
     } finally {
       console.log('[AUTH] Local logout completed after logout from all devices');
-      // Clear all tokens to ensure clean logout
+      // Clear all tokens and remember me preference
       TokenManager.clearAllTokens();
+      TokenManager.setRememberMe(false);
+      
       setToken(null);
       setTokenExpiresAt(null);
       setUser(null);

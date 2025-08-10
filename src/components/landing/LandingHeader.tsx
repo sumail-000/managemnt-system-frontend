@@ -1,10 +1,27 @@
 import { Button } from "@/components/ui/button"
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import { Menu, X } from "lucide-react"
 import { useState } from "react"
+import { TokenManager } from "@/utils/tokenManager"
+import { useAuth } from "@/contexts/AuthContext"
 
 export function LandingHeader() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const navigate = useNavigate()
+  const { user } = useAuth()
+
+  const handleSignInClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    
+    // Check if user should be automatically logged in
+    if (TokenManager.shouldStayLoggedIn(false)) {
+      console.log('[LANDING_HEADER] User has valid token with remember me, redirecting to dashboard')
+      navigate('/dashboard')
+    } else {
+      console.log('[LANDING_HEADER] No valid remembered session, redirecting to login')
+      navigate('/login')
+    }
+  }
 
   const navigation = [
     { name: "Features", href: "#features" },
@@ -53,8 +70,8 @@ export function LandingHeader() {
 
           {/* Desktop Auth Buttons */}
           <div className="hidden md:flex items-center space-x-4">
-            <Button variant="ghost" asChild>
-              <Link to="/login">Sign In</Link>
+            <Button variant="ghost" onClick={handleSignInClick}>
+              Sign In
             </Button>
             <Button variant="gradient" asChild>
               <Link to="/register" state={{ selectedPlan: "basic" }}>Get Started</Link>
@@ -99,8 +116,8 @@ export function LandingHeader() {
                 )
               ))}
               <div className="flex flex-col space-y-2 pt-4 border-t border-border">
-                <Button variant="ghost" asChild>
-                  <Link to="/login">Sign In</Link>
+                <Button variant="ghost" onClick={(e) => { handleSignInClick(e); setIsMenuOpen(false); }}>
+                  Sign In
                 </Button>
                 <Button variant="gradient" asChild>
                   <Link to="/register" state={{ selectedPlan: "basic" }}>Get Started</Link>

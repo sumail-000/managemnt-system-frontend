@@ -204,6 +204,36 @@ export class CustomIngredientApi {
       throw new Error(error.response?.data?.message || 'Failed to fetch categories');
     }
   }
+
+  /**
+   * Get recipe usage count for a custom ingredient
+   */
+  static async getIngredientUsage(id: number): Promise<CustomIngredientResponse> {
+    try {
+      console.log('🔄 Fetching ingredient usage:', id);
+      const response = await api.get(`/custom-ingredients/${id}/usage`);
+      console.log('📡 Ingredient usage response:', response);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Error fetching ingredient usage:', error);
+      throw new Error(error.response?.data?.message || 'Failed to fetch ingredient usage');
+    }
+  }
+
+  /**
+   * Increment usage count when ingredient is used in a recipe
+   */
+  static async incrementUsage(id: number): Promise<CustomIngredientResponse> {
+    try {
+      console.log('🔄 Incrementing ingredient usage:', id);
+      const response = await api.post(`/custom-ingredients/${id}/increment-usage`);
+      console.log('📡 Increment usage response:', response);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Error incrementing ingredient usage:', error);
+      throw new Error(error.response?.data?.message || 'Failed to increment ingredient usage');
+    }
+  }
 }
 
 export default CustomIngredientApi;
