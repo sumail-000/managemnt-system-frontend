@@ -106,15 +106,27 @@ api.interceptors.response.use(
     return response.data;
   },
   (error) => {
-    // Log API error
+    // Log API error with more detailed information
     console.error('[API] Response error:', {
       status: error.response?.status,
       url: error.config?.url,
       method: error.config?.method?.toUpperCase(),
       message: error.response?.data?.message || error.message,
       data: error.response?.data,
-      errorCode: error.response?.data?.error_code
+      errors: error.response?.data?.errors,
+      errorCode: error.response?.data?.error_code,
+      fullResponse: error.response
     });
+    
+    // Special logging for registration errors
+    if (error.config?.url?.includes('/auth/register')) {
+      console.error('[API] Registration error details:', {
+        validationErrors: error.response?.data?.errors,
+        emailError: error.response?.data?.errors?.email,
+        statusCode: error.response?.status,
+        responseData: error.response?.data
+      });
+    }
     
     // Handle IP restriction violations for admin panel
     if (error.response?.data?.error_code === 'IP_RESTRICTION_VIOLATION') {

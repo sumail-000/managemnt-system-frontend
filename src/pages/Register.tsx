@@ -211,10 +211,13 @@ export default function Register() {
       logService.error('Registration failed', {
         email: formData.email,
         error: errorMessage,
-        validationErrors: validationErrors
+        validationErrors: validationErrors,
+        fullErrorResponse: error.response?.data
       }, 'Register');
       
-      // Check for specific email validation error
+      // Check for specific email validation error - improved logic
+      let emailErrorHandled = false;
+      
       if (validationErrors?.email) {
         const emailError = Array.isArray(validationErrors.email)
           ? validationErrors.email[0]
@@ -226,15 +229,34 @@ export default function Register() {
             description: "This email address is already registered. Please use a different email or try logging in.",
             variant: "destructive",
           });
+          emailErrorHandled = true;
         } else {
           toast({
             title: "Invalid Email",
             description: emailError,
             variant: "destructive",
           });
+          emailErrorHandled = true;
         }
-      } else {
-        // Generic error message for other types of errors
+      }
+      
+      // Check if the error message itself contains email duplication info
+      if (!emailErrorHandled && (
+        errorMessage.toLowerCase().includes('email') &&
+        (errorMessage.toLowerCase().includes('taken') ||
+         errorMessage.toLowerCase().includes('exists') ||
+         errorMessage.toLowerCase().includes('duplicate'))
+      )) {
+        toast({
+          title: "Email Already Exists",
+          description: "This email address is already registered. Please use a different email or try logging in.",
+          variant: "destructive",
+        });
+        emailErrorHandled = true;
+      }
+      
+      // Generic error message for other types of errors
+      if (!emailErrorHandled) {
         toast({
           title: "Registration Failed",
           description: errorMessage,

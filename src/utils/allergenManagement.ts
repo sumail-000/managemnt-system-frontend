@@ -231,21 +231,14 @@ export const transformFlatToCategories = (flatAllergenData: any): AllergenData =
 
 /**
  * Extract unique allergens from ingredients
+ * DISABLED: We only want allergens from nutrition API response, not from individual ingredients
  */
 export const extractAllergensFromIngredients = (ingredients: AddedIngredient[]): string[] => {
-  const allergenSet = new Set<string>();
+  console.log('⚠️ extractAllergensFromIngredients called but disabled - only using nutrition API response for allergen detection');
   
-  ingredients.forEach(ingredient => {
-    if (ingredient.allergens && Array.isArray(ingredient.allergens)) {
-      ingredient.allergens.forEach(allergen => {
-        if (allergen && typeof allergen === 'string') {
-          allergenSet.add(allergen.trim());
-        }
-      });
-    }
-  });
-  
-  return Array.from(allergenSet).sort();
+  // Return empty array - we don't want to extract allergens from individual ingredients
+  // Only the nutrition API response (cautions field) should be used for auto-detection
+  return [];
 };
 
 /**

@@ -17,83 +17,108 @@ export const processSearchIngredient = async (ingredientName: string): Promise<A
     
     const foodData = parseResponse;
     
-    // Check if we have parsed data
+    // Get hints for available measures - this is always available
+    const hints = foodData.hints;
+    if (!hints || hints.length === 0) {
+      console.error('No hints available for measures');
+      return null;
+    }
+    
+    const hint = hints[0];
+    const ingredientNameProcessed = hint.food.label;
+    
+    // Filter out measures without labels
+    const allMeasures = hint.measures || [];
+    let measures = allMeasures.filter(measure => measure.label && measure.label.trim() !== '');
+    
+    if (measures.length === 0) {
+      console.error('No valid measures available');
+      return null;
+    }
+    
+    let actualQuantity = 1; // Default quantity
+    let finalMeasure = measures[0]; // Default to first available measure
+    
+    // Check if we have parsed data with quantity and measure
     if (foodData.parsed && foodData.parsed.length > 0) {
       const parsed = foodData.parsed[0];
       
-      // Get hints for available measures
-      const hints = foodData.hints;
-      if (!hints || hints.length === 0) {
-        console.error('No hints available for measures');
-        return null;
-      }
-      
-      const hint = hints[0];
-      
-      // Filter out measures without labels
-      const allMeasures = hint.measures || [];
-      let measures = allMeasures.filter(measure => measure.label && measure.label.trim() !== '');
-      
-      // Use actual parsed values - NO FALLBACKS
-      if (!parsed.quantity) {
-        console.error('No quantity in parsed data');
-        return null;
-      }
-      
-      if (!parsed.measure) {
-        console.error('No measure in parsed data');
-        return null;
-      }
-      
-      const actualQuantity = parsed.quantity;
-      const actualMeasure = parsed.measure;
-      const ingredientNameProcessed = hint.food.label;
-      
-      // Find the corresponding measure in availableMeasures to ensure consistency
-      let correspondingMeasure = measures.find(m => m.label === actualMeasure.label);
-      
-      // CRITICAL FIX: If parsed measure is not in available measures, add it
-      if (!correspondingMeasure && actualMeasure.label && actualMeasure.weight) {
-        const parsedMeasureToAdd = {
-          uri: actualMeasure.uri || `http://www.edamam.com/ontologies/edamam.owl#Measure_${actualMeasure.label.toLowerCase()}`,
-          label: actualMeasure.label,
-          weight: actualMeasure.weight
-        };
+      // Use parsed values if available
+      if (parsed.quantity && parsed.measure) {
+        actualQuantity = parsed.quantity;
         
-        // Add the parsed measure to the beginning of measures array for priority
-        measures = [parsedMeasureToAdd, ...measures];
-        correspondingMeasure = parsedMeasureToAdd;
+        // Find the corresponding measure in availableMeasures to ensure consistency
+        let correspondingMeasure = measures.find(m => m.label === parsed.measure.label);
+        
+        // If parsed measure is not in available measures, add it
+        if (!correspondingMeasure && parsed.measure.label && parsed.measure.weight) {
+          const parsedMeasureToAdd = {
+            uri: parsed.measure.uri || `http://www.edamam.com/ontologies/edamam.owl#Measure_${parsed.measure.label.toLowerCase()}`,
+            label: parsed.measure.label,
+            weight: parsed.measure.weight
+          };
+          
+          // Add the parsed measure to the beginning of measures array for priority
+          measures = [parsedMeasureToAdd, ...measures];
+          correspondingMeasure = parsedMeasureToAdd;
+        }
+        
+        // Use the corresponding measure if found
+        if (correspondingMeasure) {
+          finalMeasure = correspondingMeasure;
+        }
+      } else {
+        // Parsed data exists but missing quantity/measure - use intelligent defaults
+        console.log(`Using default quantity (1) and measure (${measures[0].label}) for ingredient: ${ingredientNameProcessed}`);
+        
+        // Try to find a more appropriate measure for garnish-type ingredients
+        const preferredMeasures = ['Piece', 'Whole', 'Unit', 'Twist', 'Strip', 'Slice', 'Serving'];
+        const preferredMeasure = measures.find(m =>
+          preferredMeasures.some(preferred =>
+            m.label.toLowerCase().includes(preferred.toLowerCase())
+          )
+        );
+        
+        if (preferredMeasure) {
+          finalMeasure = preferredMeasure;
+          console.log(`Selected preferred measure: ${preferredMeasure.label} for ${ingredientNameProcessed}`);
+        }
       }
-      
-      if (measures.length === 0) {
-        console.error('No valid measures available');
-        return null;
-      }
-      
-      // Use the corresponding measure (either found or added) or fallback to first available
-      const finalMeasure = correspondingMeasure || measures[0];
-      const measureWeight = finalMeasure.weight;
-      
-      // Calculate grams using the weight from availableMeasures for consistency
-      const baseGrams = Math.round((actualQuantity * measureWeight) * 10) / 10;
-      
-      const newIngredient: AddedIngredient = {
-        id: `${ingredientName}-${Date.now()}`,
-        name: ingredientNameProcessed,
-        quantity: actualQuantity,
-        unit: finalMeasure.label,
-        waste: 0.0,
-        grams: Number(baseGrams),
-        availableMeasures: measures,
-        allergens: []
-      };
-      
-      return newIngredient;
-      
     } else {
-      console.error('No parsed data available in response');
-      return null;
+      // No parsed data at all - use defaults with intelligent measure selection
+      console.log(`No parsed data available. Using defaults for ingredient: ${ingredientNameProcessed}`);
+      
+      // Try to find a more appropriate measure
+      const preferredMeasures = ['Piece', 'Whole', 'Unit', 'Serving', 'Gram'];
+      const preferredMeasure = measures.find(m =>
+        preferredMeasures.some(preferred =>
+          m.label.toLowerCase().includes(preferred.toLowerCase())
+        )
+      );
+      
+      if (preferredMeasure) {
+        finalMeasure = preferredMeasure;
+        console.log(`Selected preferred measure: ${preferredMeasure.label} for ${ingredientNameProcessed}`);
+      }
     }
+    
+    const measureWeight = finalMeasure.weight;
+    
+    // Calculate grams using the weight from availableMeasures for consistency
+    const baseGrams = Math.round((actualQuantity * measureWeight) * 10) / 10;
+    
+    const newIngredient: AddedIngredient = {
+      id: `${ingredientName}-${Date.now()}`,
+      name: ingredientNameProcessed,
+      quantity: actualQuantity,
+      unit: finalMeasure.label,
+      waste: 0.0,
+      grams: Number(baseGrams),
+      availableMeasures: measures,
+      allergens: []
+    };
+    
+    return newIngredient;
     
   } catch (error) {
     console.error('Error processing ingredient:', error);

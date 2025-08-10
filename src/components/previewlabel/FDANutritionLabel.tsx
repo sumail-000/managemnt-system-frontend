@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { Languages, Download, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { generateNutritionLabelPDF } from '@/utils/pdfGenerator';
+import { getStorageUrl } from '@/utils/storage';
 
 interface NutritionData {
   servings?: number;
@@ -114,7 +115,7 @@ interface FDANutritionLabelProps {
   customization?: LabelCustomization;
   selectedVitamins?: string[];
   selectedOptionalNutrients?: string[];
-  realIngredients?: Array<{name: string; allergens: string[]; customStatement?: string}>;
+  realIngredients?: Array<{name: string; allergens: string[]; customStatement?: string; custom_statement?: string}>;
   realAllergens?: string[];
   allergenData?: any; // Add allergen data from allergen management system
   businessInfo?: {
@@ -250,6 +251,18 @@ export function FDANutritionLabel({
 }: FDANutritionLabelProps): JSX.Element {
   const [language, setLanguage] = useState<Language>('en');
   const navigate = useNavigate();
+  
+  // Add state for QR code image error handling
+  const [qrImageError, setQrImageError] = React.useState(false);
+  const [arabicQrImageError, setArabicQrImageError] = React.useState(false);
+  
+  // Reset error state when QR code data changes
+  React.useEffect(() => {
+    if (qrCodeData?.qr_code_url) {
+      setQrImageError(false);
+      setArabicQrImageError(false);
+    }
+  }, [qrCodeData?.qr_code_url]);
 
   // Use actual data if provided, otherwise fallback to zeros
   const nutritionData: NutritionData = data || {
@@ -489,12 +502,21 @@ export function FDANutritionLabel({
     if (realIngredients.length === 0) {
       return "Sample ingredient list would appear here";
     }
-    return realIngredients.map(ing => {
+    
+    const result = realIngredients.map((ing, index) => {
       // Use custom statement if available, otherwise use ingredient name
-      return ing.customStatement && ing.customStatement.trim()
-        ? ing.customStatement.trim()
+      // Check for both customStatement and custom_statement for compatibility
+      const customStatement = ing.customStatement || ing.custom_statement;
+      
+      // CLEAR LOGIC: If custom statement exists and is not empty, use it. Otherwise use ingredient name.
+      const finalText = customStatement && customStatement.trim()
+        ? customStatement.trim()
         : ing.name;
+      
+      return finalText;
     }).join(', ');
+    
+    return result;
   };
 
   // Helper function to render business info
@@ -515,28 +537,34 @@ export function FDANutritionLabel({
 
   // Helper function to render QR code
   const renderQRCode = (colors: any) => {
-    if (qrCodeData && qrCodeData.qr_code_url) {
-      // Display actual QR code image
+    if (qrCodeData && qrCodeData.qr_code_url && !qrImageError) {
+      // Display actual QR code image with error handling
       return (
         <div className="pt-2 flex justify-center">
           <img
-            src={qrCodeData.qr_code_url}
+            src={getStorageUrl(qrCodeData.qr_code_url) || qrCodeData.qr_code_url}
             alt="QR Code"
-            className="w-16 h-16 object-contain"
+            className="w-24 h-24 object-contain"
             style={{
               filter: colors.textColor !== 'black' ? `invert(1)` : 'none'
+            }}
+            onError={() => {
+              setQrImageError(true);
+            }}
+            onLoad={() => {
+              setQrImageError(false);
             }}
           />
         </div>
       );
     } else {
-      // Display placeholder QR code
+      // Display placeholder QR code (either no data or image failed to load)
       return (
         <div className="pt-2 flex justify-center">
-          <div className="w-16 h-16 bg-black flex items-center justify-center text-white text-xs" style={{ backgroundColor: colors.textColor }}>
+          <div className="w-24 h-24 bg-black flex items-center justify-center text-white text-sm" style={{ backgroundColor: colors.textColor }}>
             <div className="text-center leading-tight">
               <div>QR</div>
-              <div className="text-[6px]">Scan me</div>
+              <div className="text-[8px]">Scan me</div>
             </div>
           </div>
         </div>
@@ -546,28 +574,34 @@ export function FDANutritionLabel({
 
   // Helper function to render Arabic QR code
   const renderArabicQRCode = (colors: any) => {
-    if (qrCodeData && qrCodeData.qr_code_url) {
-      // Display actual QR code image
+    if (qrCodeData && qrCodeData.qr_code_url && !arabicQrImageError) {
+      // Display actual QR code image with error handling
       return (
         <div className="pt-2 flex justify-center">
           <img
-            src={qrCodeData.qr_code_url}
+            src={getStorageUrl(qrCodeData.qr_code_url) || qrCodeData.qr_code_url}
             alt="QR Code"
-            className="w-16 h-16 object-contain"
+            className="w-24 h-24 object-contain"
             style={{
               filter: colors.textColor !== 'black' ? `invert(1)` : 'none'
+            }}
+            onError={() => {
+              setArabicQrImageError(true);
+            }}
+            onLoad={() => {
+              setArabicQrImageError(false);
             }}
           />
         </div>
       );
     } else {
-      // Display placeholder QR code with Arabic text
+      // Display placeholder QR code with Arabic text (either no data or image failed to load)
       return (
         <div className="pt-2 flex justify-center">
-          <div className="w-16 h-16 bg-black flex items-center justify-center text-white text-xs" style={{ backgroundColor: colors.textColor }}>
+          <div className="w-24 h-24 bg-black flex items-center justify-center text-white text-sm" style={{ backgroundColor: colors.textColor }}>
             <div className="text-center leading-tight">
               <div>QR</div>
-              <div className="text-[6px]">امسح</div>
+              <div className="text-[8px]">امسح</div>
             </div>
           </div>
         </div>

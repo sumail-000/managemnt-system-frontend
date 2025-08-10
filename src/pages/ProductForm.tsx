@@ -50,7 +50,6 @@ import {
 } from '@/utils/ingredientProcessing';
 import {
   transformFlatToCategories,
-  extractAllergensFromIngredients,
   generateAllergenStatement,
   hasAllergens,
   getActiveAllergenCategories
@@ -175,13 +174,29 @@ export default function ProductForm() {
       return;
     }
 
+    console.log('🔍 DEBUG: updateIngredientStatementPreview called with:', {
+      addedIngredients: addedIngredients.map(ing => ({ id: ing.id, name: ing.name })),
+      ingredientStatements,
+      statementsCount: Object.keys(ingredientStatements).length
+    });
+
     const preview = addedIngredients.map((ingredient) => {
       const customStatement = ingredientStatements[ingredient.id];
-      return customStatement && customStatement.trim()
-        ? customStatement.trim()
-        : ingredient.name;
+      const willUseCustom = customStatement && customStatement.trim();
+      const finalText = willUseCustom ? customStatement.trim() : ingredient.name;
+      
+      console.log(`🔍 DEBUG: Ingredient ${ingredient.name} (${ingredient.id}):`, {
+        hasCustomStatement: !!customStatement,
+        customStatementValue: customStatement,
+        customStatementTrimmed: customStatement?.trim(),
+        willUseCustom,
+        finalText
+      });
+      
+      return finalText;
     }).join(', ');
 
+    console.log('🔍 DEBUG: Final preview:', preview);
     setIngredientStatementPreview(preview);
   }, [addedIngredients, ingredientStatements]);
 
@@ -1064,6 +1079,12 @@ export default function ProductForm() {
     setIsLoadingNutrition(true);
     setNutritionError(null);
     
+    // Show user feedback for nutrition analysis start
+    toast({
+      title: "⚗️ Analyzing Nutrition...",
+      description: `Processing ${addedIngredients.length} ingredients for nutrition data`,
+    });
+    
     try {
       const result = await analyzeNutrition(addedIngredients, recipeName || 'Custom Recipe');
       
@@ -1080,8 +1101,29 @@ export default function ProductForm() {
       const fdaNutritionData = mapPerServingDataToFDAFormat(perServingNutrition);
       setNutritionData(fdaNutritionData);
       
-      // Update allergen data
-      setAllergenData(result.allergenData);
+      // Update allergen data from nutrition API response
+      // This should replace any existing allergen data with fresh data from the API
+      if (result.allergenData) {
+        setAllergenData(result.allergenData);
+        
+        // Save the updated allergen data to backend
+        if (currentRecipe?.id) {
+          try {
+            await ProgressiveRecipeApi.saveAllergens(currentRecipe.id, result.allergenData);
+          } catch (error) {
+            console.error('Failed to save allergen data:', error);
+          }
+        }
+      }
+      
+      // Force progress update after nutrition analysis
+      forceProgressUpdate();
+      
+      // Show success feedback
+      toast({
+        title: "✅ Nutrition Analysis Complete",
+        description: `Successfully analyzed ${addedIngredients.length} ingredients`,
+      });
       
       // Save to backend if recipe exists
       if (currentRecipe?.id) {
@@ -1091,6 +1133,13 @@ export default function ProductForm() {
     } catch (error: any) {
       console.error('❌ Nutrition analysis failed:', error);
       setNutritionError(error.message || 'Failed to analyze nutrition');
+      
+      // Show error feedback
+      toast({
+        title: "❌ Nutrition Analysis Failed",
+        description: error.message || 'Failed to analyze nutrition data',
+        variant: "destructive"
+      });
     } finally {
       setIsLoadingNutrition(false);
     }
@@ -1098,6 +1147,12 @@ export default function ProductForm() {
   
   const performCustomNutritionCalculationLocal = () => {
     try {
+      // Show user feedback for custom nutrition calculation
+      toast({
+        title: "🧮 Calculating Nutrition...",
+        description: "Processing custom ingredient nutrition data",
+      });
+      
       const customNutritionData = calculateNutritionFromCustomIngredients(addedIngredients);
       
       // Update states with calculated data
@@ -1115,6 +1170,15 @@ export default function ProductForm() {
       // Clear any previous errors
       setNutritionError(null);
       
+      // Force progress update after calculation
+      forceProgressUpdate();
+      
+      // Show success feedback
+      toast({
+        title: "✅ Nutrition Calculated",
+        description: "Custom ingredient nutrition data processed successfully",
+      });
+      
       // Save to backend if recipe exists
       if (currentRecipe?.id) {
         saveNutritionToBackendLocal(customNutritionData, servingsPerContainer, perServingNutrition);
@@ -1123,6 +1187,13 @@ export default function ProductForm() {
     } catch (error: any) {
       console.error('❌ Custom nutrition calculation failed:', error);
       setNutritionError(error.message || 'Failed to calculate nutrition from custom ingredients');
+      
+      // Show error feedback
+      toast({
+        title: "❌ Calculation Failed",
+        description: error.message || 'Failed to calculate nutrition from custom ingredients',
+        variant: "destructive"
+      });
     }
   };
   
@@ -1508,6 +1579,7 @@ export default function ProductForm() {
   const [publicationStatus, setPublicationStatus] = useState<'draft' | 'published'>('draft');
   const [isPublic, setIsPublic] = useState<boolean>(false);
   const [showPublicationSettings, setShowPublicationSettings] = useState<boolean>(false);
+  const [isUpdatingPublicationStatus, setIsUpdatingPublicationStatus] = useState<boolean>(false);
 
   // Step 5: Complete recipe creation with publication settings
   const completeRecipe = async (publishSettings?: { status: 'draft' | 'published', is_public: boolean }) => {
@@ -1585,42 +1657,158 @@ export default function ProductForm() {
     }
   };
 
-  // Handle publication settings change
-  const handlePublicationSettingsChange = async (status: 'draft' | 'published', isPublicFlag: boolean) => {
+  // Handle publication settings change (local state only)
+  const handlePublicationSettingsChange = (status: 'draft' | 'published', isPublicFlag: boolean) => {
+    // Update local state only - no API call
     setPublicationStatus(status);
     setIsPublic(isPublicFlag);
+  };
+
+  // Handle saving as draft
+  const handleSaveAsDraft = async () => {
+    console.log('🔍 DEBUG: handleSaveAsDraft called');
+    console.log('🔍 DEBUG: currentRecipe?.id:', currentRecipe?.id);
+    console.log('🔍 DEBUG: isPublic:', isPublic);
     
-    // If recipe is already created, update it immediately
-    if (currentRecipe?.id) {
-      try {
-        console.log('🔄 Updating publication settings:', { status, is_public: isPublicFlag });
+    if (!currentRecipe?.id) {
+      console.log('❌ DEBUG: No currentRecipe.id, returning early');
+      toast({
+        title: "Error",
+        description: "No recipe found. Please create a recipe first.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    console.log('🔄 DEBUG: Setting loading state...');
+    setIsUpdatingPublicationStatus(true);
+    
+    toast({
+      title: "Saving Draft...",
+      description: `Saving recipe as draft ${isPublic ? 'and making public' : 'as private'}...`,
+    });
+    
+    try {
+      console.log('🔄 Saving as draft:', { status: 'draft', is_public: isPublic });
+      
+      const response = await ProgressiveRecipeApi.updateRecipe(currentRecipe.id, {
+        status: 'draft',
+        is_public: isPublic
+      });
+      
+      console.log('📡 DEBUG: API response:', response);
+      
+      // Handle both wrapped and direct response formats
+      const isSuccess = response && (
+        response.success === true ||
+        (typeof response === 'object' && (response as any).id)
+      );
+      
+      if (isSuccess) {
+        console.log('✅ Draft saved successfully');
+        setCurrentRecipe(prev => prev ? {
+          ...prev,
+          status: 'draft',
+          is_public: isPublic
+        } : null);
+        setPublicationStatus('draft');
         
-        const response = await ProgressiveRecipeApi.updateRecipe(currentRecipe.id, {
-          status: status,
-          is_public: isPublicFlag
-        });
-        
-        if (response.success) {
-          console.log('✅ Publication settings updated successfully');
-          setCurrentRecipe(prev => prev ? {
-            ...prev,
-            status: status,
-            is_public: isPublicFlag
-          } : null);
-          
-          toast({
-            title: "Settings Updated",
-            description: `Recipe ${status === 'published' ? 'published' : 'saved as draft'} ${isPublicFlag ? 'and made public' : 'as private'}.`,
-          });
-        }
-      } catch (error: any) {
-        console.error('❌ Error updating publication settings:', error);
         toast({
-          title: "Update Error",
-          description: 'Failed to update publication settings: ' + error.message,
+          title: "✅ Draft Saved",
+          description: `Recipe saved as draft ${isPublic ? 'and made public' : 'as private'}.`,
+        });
+      } else {
+        console.log('❌ DEBUG: API response not successful:', response);
+        toast({
+          title: "Save Failed",
+          description: (response as any)?.message || 'Failed to save draft',
           variant: "destructive"
         });
       }
+    } catch (error: any) {
+      console.error('❌ Error saving draft:', error);
+      toast({
+        title: "Save Error",
+        description: 'Failed to save draft: ' + error.message,
+        variant: "destructive"
+      });
+    } finally {
+      console.log('🔄 DEBUG: Clearing loading state...');
+      setIsUpdatingPublicationStatus(false);
+    }
+  };
+
+  // Handle publishing recipe
+  const handlePublishRecipe = async () => {
+    console.log('🔍 DEBUG: handlePublishRecipe called');
+    console.log('🔍 DEBUG: currentRecipe?.id:', currentRecipe?.id);
+    console.log('🔍 DEBUG: isPublic:', isPublic);
+    
+    if (!currentRecipe?.id) {
+      console.log('❌ DEBUG: No currentRecipe.id, returning early');
+      toast({
+        title: "Error",
+        description: "No recipe found. Please create a recipe first.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    console.log('🔄 DEBUG: Setting loading state...');
+    setIsUpdatingPublicationStatus(true);
+    
+    toast({
+      title: "Publishing Recipe...",
+      description: `Publishing recipe ${isPublic ? 'and making public' : 'as private'}...`,
+    });
+    
+    try {
+      console.log('🔄 Publishing recipe:', { status: 'published', is_public: isPublic });
+      
+      const response = await ProgressiveRecipeApi.updateRecipe(currentRecipe.id, {
+        status: 'published',
+        is_public: isPublic
+      });
+      
+      console.log('📡 DEBUG: API response:', response);
+      
+      // Handle both wrapped and direct response formats
+      const isSuccess = response && (
+        response.success === true ||
+        (typeof response === 'object' && (response as any).id)
+      );
+      
+      if (isSuccess) {
+        console.log('✅ Recipe published successfully');
+        setCurrentRecipe(prev => prev ? {
+          ...prev,
+          status: 'published',
+          is_public: isPublic
+        } : null);
+        setPublicationStatus('published');
+        
+        toast({
+          title: "✅ Recipe Published",
+          description: `Recipe published ${isPublic ? 'and made public' : 'as private'}.`,
+        });
+      } else {
+        console.log('❌ DEBUG: API response not successful:', response);
+        toast({
+          title: "Publish Failed",
+          description: (response as any)?.message || 'Failed to publish recipe',
+          variant: "destructive"
+        });
+      }
+    } catch (error: any) {
+      console.error('❌ Error publishing recipe:', error);
+      toast({
+        title: "Publish Error",
+        description: 'Failed to publish recipe: ' + error.message,
+        variant: "destructive"
+      });
+    } finally {
+      console.log('🔄 DEBUG: Clearing loading state...');
+      setIsUpdatingPublicationStatus(false);
     }
   };
 
@@ -2126,6 +2314,20 @@ export default function ProductForm() {
   const handleExtractImageUrl = async () => {
     if (!productImageUrl.trim()) return;
     
+    // Auto-create recipe if it doesn't exist
+    if (!currentRecipe?.id && recipeName.trim() && !isCreatingRecipe) {
+      console.log('🔄 Auto-creating recipe before extracting image URL');
+      setIsCreatingRecipe(true);
+      try {
+        await handleCreateNewRecipe();
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (error) {
+        console.error('❌ Failed to auto-create recipe:', error);
+        setIsCreatingRecipe(false);
+        return;
+      }
+    }
+    
     setIsExtractingImageUrl(true);
     setImageUrlError(null);
     
@@ -2135,10 +2337,20 @@ export default function ProductForm() {
         // Set the processed image URL for preview (this was missing!)
         setProductImageUrl(response.data.image_url);
         
-        // Image URL is valid, save it immediately
-        await saveProductDetailsToBackend({
-          image_url: response.data.image_url
-        });
+        // Image URL is valid, save it immediately (with retry if recipe was just created)
+        let retryCount = 0;
+        while (retryCount < 3) {
+          if (currentRecipe?.id) {
+            await saveProductDetailsToBackend({
+              image_url: response.data.image_url
+            });
+            break;
+          } else {
+            console.log(`⏳ Waiting for recipe creation... (attempt ${retryCount + 1})`);
+            await new Promise(resolve => setTimeout(resolve, 500));
+            retryCount++;
+          }
+        }
       }
     } catch (error: any) {
       setImageUrlError(error.message || 'Failed to process image URL');
@@ -2374,6 +2586,14 @@ export default function ProductForm() {
     const numericCategoryId = categoryId === 'none' ? null : parseInt(categoryId);
     setSelectedCategoryId(numericCategoryId);
     
+    // Auto-create recipe if it doesn't exist and user is selecting a category
+    if (!currentRecipe?.id && recipeName.trim() && !isCreatingRecipe) {
+      console.log('🔄 Auto-creating recipe before saving category');
+      await handleCreateNewRecipe();
+      // Wait a moment for recipe creation to complete
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
     // Save category selection immediately
     await saveProductDetailsToBackend({
       category_id: numericCategoryId
@@ -2561,11 +2781,18 @@ export default function ProductForm() {
                 </Button>
               </div>
               <div className="text-sm text-blue-600">
-                {isSavingImage ? '💾 Saving Image...' :
+                {isUpdatingPublicationStatus ? '🔄 Updating Publication Status...' :
+                 isSavingImage ? '💾 Saving Image...' :
                  isSavingAllergens ? '🛡️ Saving Allergens...' :
                  isSavingStatements ? '💾 Saving Statements...' :
+                 isLoadingNutrition ? '⚗️ Analyzing Nutrition...' :
+                 isCreatingRecipe ? '🔄 Creating Recipe...' :
                  recipeProgress?.current_step === 'completed' ? '✅ Recipe Complete' :
-                 'In Progress...'}
+                 (currentRecipe?.status === 'published' || currentRecipe?.status === 'draft') && nutritionData && addedIngredients.length > 0 ? '✅ Recipe Ready' :
+                 nutritionData && addedIngredients.length > 0 && !isLoadingNutrition ? '🎯 Ready to Publish' :
+                 addedIngredients.length > 0 && !nutritionData ? '⏳ Processing...' :
+                 recipeName && recipeName.trim() ? '📝 Recipe Created' :
+                 'Getting Started...'}
               </div>
             </div>
 
@@ -2582,100 +2809,151 @@ export default function ProductForm() {
                 <div className="flex items-center space-x-4">
                   {/* Step 1: Recipe Name */}
                   <div className="flex items-center">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all duration-300 ${
                       recipeName && recipeName.trim()
-                        ? 'bg-green-500 text-white'
+                        ? 'bg-green-500 text-white shadow-lg transform scale-105'
                         : 'bg-gray-300 text-gray-600'
                     }`}>
                       {recipeName && recipeName.trim() ? '✓' : '1'}
                     </div>
-                    <span className="ml-2 text-sm text-gray-600">Name</span>
+                    <span className={`ml-2 text-sm transition-colors duration-300 ${
+                      recipeName && recipeName.trim() ? 'text-green-600 font-medium' : 'text-gray-600'
+                    }`}>Name</span>
                   </div>
 
-                  <div className={`flex-1 h-1 ${
+                  <div className={`flex-1 h-1 transition-all duration-500 ${
                     addedIngredients.length > 0 ? 'bg-green-500' : 'bg-gray-300'
                   }`}></div>
 
                   {/* Step 2: Ingredients */}
                   <div className="flex items-center">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all duration-300 ${
                       addedIngredients.length > 0
-                        ? 'bg-green-500 text-white'
-                        : recipeProgress.current_step === 'ingredients_added'
-                        ? 'bg-blue-500 text-white'
+                        ? 'bg-green-500 text-white shadow-lg transform scale-105'
+                        : recipeProgress?.current_step === 'ingredients_added'
+                        ? 'bg-blue-500 text-white animate-pulse'
                         : 'bg-gray-300 text-gray-600'
                     }`}>
                       {addedIngredients.length > 0 ? '✓' : '2'}
                     </div>
-                    <span className="ml-2 text-sm text-gray-600">Ingredients</span>
+                    <span className={`ml-2 text-sm transition-colors duration-300 ${
+                      addedIngredients.length > 0 ? 'text-green-600 font-medium' : 'text-gray-600'
+                    }`}>Ingredients ({addedIngredients.length})</span>
                   </div>
 
-                  <div className={`flex-1 h-1 ${
-                    nutritionData && !isLoadingNutrition ? 'bg-green-500' : 'bg-gray-300'
+                  <div className={`flex-1 h-1 transition-all duration-500 ${
+                    nutritionData && !isLoadingNutrition && addedIngredients.length > 0 ? 'bg-green-500' :
+                    isLoadingNutrition ? 'bg-blue-500 animate-pulse' : 'bg-gray-300'
                   }`}></div>
 
                   {/* Step 3: Nutrition */}
                   <div className="flex items-center">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                      nutritionData && !isLoadingNutrition
-                        ? 'bg-green-500 text-white'
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all duration-300 ${
+                      nutritionData && !isLoadingNutrition && addedIngredients.length > 0
+                        ? 'bg-green-500 text-white shadow-lg transform scale-105'
                         : isLoadingNutrition
-                        ? 'bg-blue-500 text-white'
+                        ? 'bg-blue-500 text-white animate-pulse'
                         : 'bg-gray-300 text-gray-600'
                     }`}>
-                      {nutritionData && !isLoadingNutrition ? '✓' : isLoadingNutrition ? '⏳' : '3'}
+                      {nutritionData && !isLoadingNutrition && addedIngredients.length > 0 ? '✓' : isLoadingNutrition ? '⏳' : '3'}
                     </div>
-                    <span className="ml-2 text-sm text-gray-600">Nutrition</span>
+                    <span className={`ml-2 text-sm transition-colors duration-300 ${
+                      nutritionData && !isLoadingNutrition && addedIngredients.length > 0 ? 'text-green-600 font-medium' :
+                      isLoadingNutrition ? 'text-blue-600 font-medium' : 'text-gray-600'
+                    }`}>
+                      {isLoadingNutrition ? 'Analyzing...' : 'Nutrition'}
+                    </span>
                   </div>
 
-                  <div className={`flex-1 h-1 ${
+                  <div className={`flex-1 h-1 transition-all duration-500 ${
                     (nutritionData && addedIngredients.length > 0 && !isLoadingNutrition) ? 'bg-green-500' : 'bg-gray-300'
                   }`}></div>
 
                   {/* Step 4: Serving */}
                   <div className="flex items-center">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all duration-300 ${
                       (nutritionData && addedIngredients.length > 0 && !isLoadingNutrition)
-                        ? 'bg-green-500 text-white'
-                        : recipeProgress.current_step === 'serving_configured'
-                        ? 'bg-blue-500 text-white'
+                        ? 'bg-green-500 text-white shadow-lg transform scale-105'
+                        : recipeProgress?.current_step === 'serving_configured'
+                        ? 'bg-blue-500 text-white animate-pulse'
                         : 'bg-gray-300 text-gray-600'
                     }`}>
                       {(nutritionData && addedIngredients.length > 0 && !isLoadingNutrition) ? '✓' : '4'}
                     </div>
-                    <span className="ml-2 text-sm text-gray-600">Serving</span>
+                    <span className={`ml-2 text-sm transition-colors duration-300 ${
+                      (nutritionData && addedIngredients.length > 0 && !isLoadingNutrition) ? 'text-green-600 font-medium' : 'text-gray-600'
+                    }`}>Serving</span>
                   </div>
 
-                  <div className={`flex-1 h-1 ${
-                    (currentRecipe?.status === 'published' || currentRecipe?.status === 'draft') && nutritionData && addedIngredients.length > 0 ? 'bg-green-500' : 'bg-gray-300'
+                  <div className={`flex-1 h-1 transition-all duration-500 ${
+                    (currentRecipe?.status === 'published' || currentRecipe?.status === 'draft') && nutritionData && addedIngredients.length > 0 && !isLoadingNutrition ? 'bg-green-500' : 'bg-gray-300'
                   }`}></div>
 
                   {/* Step 5: Complete */}
                   <div className="flex items-center">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                      (currentRecipe?.status === 'published' || currentRecipe?.status === 'draft') && nutritionData && addedIngredients.length > 0
-                        ? 'bg-green-500 text-white'
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all duration-300 ${
+                      (currentRecipe?.status === 'published' || currentRecipe?.status === 'draft') && nutritionData && addedIngredients.length > 0 && !isLoadingNutrition
+                        ? 'bg-green-500 text-white shadow-lg transform scale-105'
+                        : isUpdatingPublicationStatus
+                        ? 'bg-blue-500 text-white animate-pulse'
                         : 'bg-gray-300 text-gray-600'
                     }`}>
-                      {(currentRecipe?.status === 'published' || currentRecipe?.status === 'draft') && nutritionData && addedIngredients.length > 0 ? '✓' : '5'}
+                      {(currentRecipe?.status === 'published' || currentRecipe?.status === 'draft') && nutritionData && addedIngredients.length > 0 && !isLoadingNutrition ? '✓' :
+                       isUpdatingPublicationStatus ? '⏳' : '5'}
                     </div>
-                    <span className="ml-2 text-sm text-gray-600">Complete</span>
+                    <span className={`ml-2 text-sm transition-colors duration-300 ${
+                      (currentRecipe?.status === 'published' || currentRecipe?.status === 'draft') && nutritionData && addedIngredients.length > 0 && !isLoadingNutrition ? 'text-green-600 font-medium' :
+                      isUpdatingPublicationStatus ? 'text-blue-600 font-medium' : 'text-gray-600'
+                    }`}>
+                      {isUpdatingPublicationStatus ? 'Publishing...' :
+                       (currentRecipe?.status === 'published' || currentRecipe?.status === 'draft') ? 'Complete' : 'Publish'}
+                    </span>
                   </div>
                 </div>
 
                 {/* Current Step Description */}
-                <div className="mt-3 text-sm text-gray-600">
-                  {addedIngredients.length === 0 && (
-                    <span>👆 Next: Add ingredients to your recipe</span>
-                  )}
-                  {addedIngredients.length > 0 && isLoadingNutrition && (
-                    <span>⚗️ Analyzing nutrition data...</span>
-                  )}
-                  {addedIngredients.length > 0 && nutritionData && !isLoadingNutrition && !(currentRecipe?.status === 'published' || currentRecipe?.status === 'draft') && (
-                    <span>✅ Ready to complete! Use the Publication tab to finalize your recipe.</span>
-                  )}
-                  {(currentRecipe?.status === 'published' || currentRecipe?.status === 'draft') && nutritionData && addedIngredients.length > 0 && (
-                    <span>🎉 Recipe complete! Your nutrition label is ready.</span>
+                <div className="mt-3 text-sm">
+                  {!recipeName || !recipeName.trim() ? (
+                    <div className="text-blue-600 font-medium flex items-center">
+                      <span className="inline-block w-2 h-2 bg-blue-500 rounded-full mr-2 animate-pulse"></span>
+                      <span>Enter a recipe name to get started</span>
+                      <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Step 1/5</span>
+                    </div>
+                  ) : addedIngredients.length === 0 ? (
+                    <div className="text-blue-600 font-medium flex items-center">
+                      <span className="inline-block w-2 h-2 bg-blue-500 rounded-full mr-2 animate-pulse"></span>
+                      <span>Next: Add ingredients to your recipe</span>
+                      <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Step 2/5</span>
+                    </div>
+                  ) : isLoadingNutrition ? (
+                    <div className="text-blue-600 font-medium flex items-center">
+                      <span className="inline-block w-2 h-2 bg-blue-500 rounded-full mr-2 animate-pulse"></span>
+                      <span>Analyzing nutrition data for {addedIngredients.length} ingredients...</span>
+                      <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Step 3/5</span>
+                    </div>
+                  ) : isUpdatingPublicationStatus ? (
+                    <div className="text-blue-600 font-medium flex items-center">
+                      <span className="inline-block w-2 h-2 bg-blue-500 rounded-full mr-2 animate-pulse"></span>
+                      <span>Updating publication status...</span>
+                      <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Step 5/5</span>
+                    </div>
+                  ) : addedIngredients.length > 0 && nutritionData && !isLoadingNutrition && !(currentRecipe?.status === 'published' || currentRecipe?.status === 'draft') ? (
+                    <div className="text-green-600 font-medium flex items-center">
+                      <span className="inline-block w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                      <span>Ready to publish! Use the Publication tab to finalize your recipe.</span>
+                      <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Step 4/5</span>
+                    </div>
+                  ) : (currentRecipe?.status === 'published' || currentRecipe?.status === 'draft') && nutritionData && addedIngredients.length > 0 && !isLoadingNutrition ? (
+                    <div className="text-green-600 font-medium flex items-center">
+                      <span className="inline-block w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                      <span>🎉 Recipe complete! Your nutrition label is ready.</span>
+                      <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Complete</span>
+                    </div>
+                  ) : (
+                    <div className="text-gray-600 flex items-center">
+                      <span className="inline-block w-2 h-2 bg-gray-400 rounded-full mr-2"></span>
+                      <span>Continue building your recipe...</span>
+                    </div>
                   )}
                 </div>
               </div>
@@ -2707,6 +2985,8 @@ export default function ProductForm() {
                             })),
                             allergenData: allergenData,
                             recipeName: recipeName,
+                            // CRITICAL FIX: Pass productId for edit mode
+                            productId: currentRecipe?.id || productId,
                             // Add return navigation info
                             returnTo: location.pathname,
                             currentRecipe: currentRecipe,
@@ -2768,7 +3048,7 @@ export default function ProductForm() {
                           const newName = e.target.value;
                           setRecipeName(newName);
                           
-                          // Auto-save recipe name with debounce
+                          // Auto-save recipe name with debounce and user feedback
                          if (currentRecipe?.id) {
                            // Clear existing timeout
                            if ((window as any).recipeNameSaveTimeout) {
@@ -2778,15 +3058,37 @@ export default function ProductForm() {
                            // Set new timeout for auto-save
                            (window as any).recipeNameSaveTimeout = setTimeout(async () => {
                               try {
+                                toast({
+                                  title: "💾 Saving Recipe Name...",
+                                  description: "Auto-saving changes",
+                                });
+                                
                                 const response = await ProgressiveRecipeApi.updateRecipe(currentRecipe.id!, {
                                   name: newName.trim()
                                 });
                                 
                                 if (response.success) {
                                   setCurrentRecipe(prev => prev ? { ...prev, name: newName.trim() } : null);
+                                  forceProgressUpdate(); // Update progress indicators
+                                  
+                                  toast({
+                                    title: "✅ Recipe Name Saved",
+                                    description: "Changes saved successfully",
+                                  });
+                                } else {
+                                  toast({
+                                    title: "❌ Save Failed",
+                                    description: "Failed to save recipe name",
+                                    variant: "destructive"
+                                  });
                                 }
                               } catch (error: any) {
                                 console.error('Failed to auto-save recipe name:', error);
+                                toast({
+                                  title: "❌ Save Error",
+                                  description: "Network error while saving",
+                                  variant: "destructive"
+                                });
                               }
                             }, 1000); // 1 second debounce
                           }
@@ -2809,7 +3111,59 @@ export default function ProductForm() {
                           const newDescription = e.target.value;
                           setRecipeDescription(newDescription);
                           
-                          // Auto-save recipe description with debounce
+                          // Reset auto-create timer when description changes (to include description in auto-creation)
+                          if (!currentRecipe?.id && recipeName.trim() && !isCreatingRecipe) {
+                            // Clear existing timeout
+                            if ((window as any).autoCreateRecipeTimeout) {
+                              clearTimeout((window as any).autoCreateRecipeTimeout);
+                            }
+                            
+                            // Auto-create recipe after user stops typing description
+                            (window as any).autoCreateRecipeTimeout = setTimeout(async () => {
+                              if (!currentRecipe?.id && recipeName.trim() && !isCreatingRecipe) {
+                                console.log('🔄 Auto-creating recipe with description:', newDescription);
+                                setIsCreatingRecipe(true);
+                                try {
+                                  const response = await ProgressiveRecipeApi.createRecipe({
+                                    name: recipeName.trim(),
+                                    description: newDescription || '', // Use current description
+                                    is_public: false
+                                  });
+
+                                  // Handle response
+                                  let responseData: any;
+                                  let recipeData: any;
+                                  
+                                  if ('success' in response) {
+                                    responseData = response;
+                                    recipeData = responseData.data || responseData;
+                                  } else {
+                                    responseData = { success: true, data: response };
+                                    recipeData = response;
+                                  }
+                                  
+                                  if (responseData.success !== false && recipeData && recipeData.id) {
+                                    setCurrentRecipe(recipeData);
+                                    setIsRecipeCreated(true);
+                                    console.log('✅ Recipe auto-created with description:', newDescription);
+                                    
+                                    toast({
+                                      title: "✅ Recipe Created",
+                                      description: `"${recipeName.trim()}" recipe created with description`,
+                                    });
+                                    
+                                    forceProgressUpdate();
+                                  }
+                                } catch (error) {
+                                  console.error('❌ Auto-create failed:', error);
+                                } finally {
+                                  setIsCreatingRecipe(false);
+                                }
+                              }
+                            }, 2000); // 2 second delay for description
+                          }
+                          
+                          // Auto-save recipe description with debounce (if recipe exists)
                           if (currentRecipe?.id) {
                             // Clear existing timeout
                             if ((window as any).recipeDescriptionSaveTimeout) {
@@ -2819,9 +3173,18 @@ export default function ProductForm() {
                             // Set new timeout for auto-save
                             (window as any).recipeDescriptionSaveTimeout = setTimeout(async () => {
                               try {
+                                toast({
+                                  title: "💾 Saving Description...",
+                                  description: "Auto-saving changes",
+                                });
                                 await saveRecipeDescriptionToBackend(newDescription);
                               } catch (error) {
                                 console.error('Auto-save description error:', error);
+                                toast({
+                                  title: "❌ Save Error",
+                                  description: "Failed to save description",
+                                  variant: "destructive"
+                                });
                               }
                             }, 1500); // 1.5 second debounce for longer text
                           }
@@ -2888,7 +3251,19 @@ export default function ProductForm() {
                           type="url"
                           placeholder="https://example.com/image.jpg or Google Images URL"
                           value={productImageUrl}
-                          onChange={(e) => handleImageUrlChange(e.target.value)}
+                          onChange={(e) => {
+                            const newUrl = e.target.value;
+                            
+                            // Show processing feedback for non-empty URLs
+                            if (newUrl.trim() && newUrl !== productImageUrl) {
+                              toast({
+                                title: "🖼️ Processing Image URL...",
+                                description: "Analyzing and saving image URL",
+                              });
+                            }
+                            
+                            handleImageUrlChange(newUrl);
+                          }}
                           className="flex-1"
                           disabled={isExtractingImageUrl}
                         />
@@ -2928,7 +3303,16 @@ export default function ProductForm() {
                         id="imageFile"
                         type="file"
                         accept="image/*"
-                        onChange={handleImageFileUpload}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            toast({
+                              title: "📤 Uploading Image...",
+                              description: `Processing ${file.name}`,
+                            });
+                          }
+                          handleImageFileUpload(e);
+                        }}
                         className="cursor-pointer"
                       />
                       <div className="text-xs text-gray-500">
@@ -2948,7 +3332,18 @@ export default function ProductForm() {
                       <Label htmlFor="category">Select Category</Label>
                       <Select
                         value={selectedCategoryId?.toString() || 'none'}
-                        onValueChange={handleCategoryChange}
+                        onValueChange={(value) => {
+                          // Show saving feedback
+                          const categoryName = value === 'none' ? 'No category' :
+                            categories.find(cat => cat.id.toString() === value)?.name || 'Selected category';
+                          
+                          toast({
+                            title: "📂 Saving Category...",
+                            description: `Setting category to: ${categoryName}`,
+                          });
+                          
+                          handleCategoryChange(value);
+                        }}
                         disabled={isLoadingCategories}
                       >
                         <SelectTrigger>
@@ -2969,7 +3364,13 @@ export default function ProductForm() {
                     <div className="space-y-2">
                       <Button
                         variant="outline"
-                        onClick={() => setShowCreateCategory(true)}
+                        onClick={() => {
+                          toast({
+                            title: "📂 Opening Category Creator...",
+                            description: "Create a new category for your recipe",
+                          });
+                          setShowCreateCategory(true);
+                        }}
                         className="w-full"
                       >
                         <PlusCircle className="h-4 w-4 mr-2" />
@@ -3030,12 +3431,18 @@ export default function ProductForm() {
                         </div>
                       </div>
                       <div className="col-span-2">
-                        <Input 
+                        <Input
                           key={`quantity-${ingredient.id}`}
-                          type="number" 
+                          type="number"
                           value={ingredient.quantity}
                           onChange={(e) => {
                             const newValue = parseFloat(e.target.value) || 0;
+                            
+                            // Show saving feedback
+                            toast({
+                              title: "💾 Updating Ingredient...",
+                              description: `Saving quantity change for ${ingredient.name}`,
+                            });
 
                             handleUpdateIngredient(ingredient.id, 'quantity', newValue);
                           }}
@@ -3048,6 +3455,11 @@ export default function ProductForm() {
                           key={`select-${ingredient.id}`}
                           value={ingredient.unit}
                           onValueChange={(value) => {
+                            // Show saving feedback
+                            toast({
+                              title: "💾 Updating Ingredient...",
+                              description: `Changing unit for ${ingredient.name} to ${value}`,
+                            });
 
                             handleUpdateIngredient(ingredient.id, 'unit', value);
                           }}
@@ -3068,7 +3480,17 @@ export default function ProductForm() {
                         <Input 
                           type="number" 
                           value={ingredient.waste}
-                          onChange={(e) => handleUpdateIngredient(ingredient.id, 'waste', parseFloat(e.target.value) || 0)}
+                          onChange={(e) => {
+                            const newWaste = parseFloat(e.target.value) || 0;
+                            
+                            // Show saving feedback
+                            toast({
+                              title: "💾 Updating Waste %...",
+                              description: `Setting waste to ${newWaste}% for ${ingredient.name}`,
+                            });
+                            
+                            handleUpdateIngredient(ingredient.id, 'waste', newWaste);
+                          }}
                           className="h-8 text-sm"
                           step="0.1"
                         />
@@ -3080,7 +3502,15 @@ export default function ProductForm() {
                         <Button 
                           variant="ghost" 
                           size="sm" 
-                          onClick={() => handleRemoveIngredient(ingredient.id)}
+                          onClick={() => {
+                            // Show removal feedback
+                            toast({
+                              title: "🗑️ Removing Ingredient...",
+                              description: `Removing ${ingredient.name} from recipe`,
+                            });
+                            
+                            handleRemoveIngredient(ingredient.id);
+                          }}
                           className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -3195,6 +3625,12 @@ export default function ProductForm() {
                         if (value && customIngredients.length > 0) {
                           const selectedCustomIngredient = customIngredients.find(ing => ing.id.toString() === value);
                           if (selectedCustomIngredient) {
+                            // Show adding feedback
+                            toast({
+                              title: "🏠 Adding Custom Ingredient...",
+                              description: `Adding ${selectedCustomIngredient.name} to your recipe`,
+                            });
+                            
                             handleAddCustomIngredient(selectedCustomIngredient);
                           }
                         }
@@ -3315,6 +3751,12 @@ export default function ProductForm() {
                             <Button
                               size="sm"
                               onClick={() => {
+                                // Show adding feedback
+                                toast({
+                                  title: "➕ Adding Ingredient...",
+                                  description: `Adding ${ingredient.name} to your recipe`,
+                                });
+                                
                                 if ((ingredient as any).isCustom) {
                                   handleAddCustomIngredient((ingredient as any).customData);
                                 } else {
@@ -3404,7 +3846,15 @@ export default function ProductForm() {
                 {isRecipeCreated && addedIngredients.length > 0 && (
                   <Card className="mt-6">
                     <CardHeader>
-                      <CardTitle className="text-lg">Package Configuration</CardTitle>
+                      <CardTitle className="text-lg flex items-center justify-between">
+                        Package Configuration
+                        {(isSavingImage || isLoadingNutrition) && (
+                          <div className="flex items-center text-sm text-blue-600">
+                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                            {isSavingImage ? 'Saving Configuration...' : 'Updating Nutrition...'}
+                          </div>
+                        )}
+                      </CardTitle>
                     </CardHeader>
                     <CardContent>
                       {/* Label Setup Selection */}
@@ -3418,7 +3868,13 @@ export default function ProductForm() {
                               name="labelSetup"
                               value="package"
                               checked={labelSetupMode === 'package'}
-                              onChange={(e) => setLabelSetupMode('package')}
+                              onChange={(e) => {
+                                setLabelSetupMode('package');
+                                toast({
+                                  title: "💾 Saving Configuration...",
+                                  description: "Switching to package-based setup",
+                                });
+                              }}
                               className="w-4 h-4 text-blue-600"
                             />
                             <Label htmlFor="byPackageSize" className="text-sm">By package size</Label>
@@ -3430,11 +3886,20 @@ export default function ProductForm() {
                               name="labelSetup"
                               value="serving"
                               checked={labelSetupMode === 'serving'}
-                              onChange={(e) => setLabelSetupMode('serving')}
+                              onChange={(e) => {
+                                setLabelSetupMode('serving');
+                                toast({
+                                  title: "💾 Saving Configuration...",
+                                  description: "Switching to serving-based setup",
+                                });
+                              }}
                               className="w-4 h-4 text-blue-600"
                             />
                             <Label htmlFor="byServingSize" className="text-sm">By serving size</Label>
                           </div>
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          Configuration changes are saved automatically
                         </div>
                       </div>
 
@@ -3454,6 +3919,13 @@ export default function ProductForm() {
                                 onChange={(e) => {
                                   const newWeight = Number(e.target.value);
                                   setNetWeightPerPackage(newWeight);
+                                  
+                                  // Show saving feedback
+                                  toast({
+                                    title: "💾 Saving Package Weight...",
+                                    description: `Updating to ${newWeight}g per package`,
+                                  });
+                                  
                                   handlePackageConfigChange(newWeight, servingsPerPackage);
                                 }}
                                 className="flex-1"
@@ -3488,6 +3960,13 @@ export default function ProductForm() {
                               onChange={(e) => {
                                 const newServings = Number(e.target.value);
                                 setServingsPerPackage(newServings);
+                                
+                                // Show saving feedback
+                                toast({
+                                  title: "💾 Saving Servings Config...",
+                                  description: `Updating to ${newServings} servings per package`,
+                                });
+                                
                                 handlePackageConfigChange(netWeightPerPackage, newServings);
                               }}
                               min="0.1"
@@ -3508,7 +3987,14 @@ export default function ProductForm() {
                                 id="servingWeight"
                                 type="number"
                                 value={servingSizeWeight}
-                                onChange={(e) => handleServingSizeWeightChange(Number(e.target.value))}
+                                onChange={(e) => {
+                                  const newWeight = Number(e.target.value);
+                                  toast({
+                                    title: "💾 Saving Serving Size...",
+                                    description: `Updating serving size to ${newWeight}g`,
+                                  });
+                                  handleServingSizeWeightChange(newWeight);
+                                }}
                                 className="flex-1"
                                 min="0"
                                 step="0.1"
@@ -3538,7 +4024,14 @@ export default function ProductForm() {
                               id="servingNumber"
                               type="number"
                               value={servingSizeNumber}
-                              onChange={(e) => handleServingSizeNumberChange(Number(e.target.value))}
+                              onChange={(e) => {
+                                const newNumber = Number(e.target.value);
+                                toast({
+                                  title: "💾 Saving Serving Number...",
+                                  description: `Updating to ${newNumber} servings`,
+                                });
+                                handleServingSizeNumberChange(newNumber);
+                              }}
                               min="0.1"
                               step="0.1"
                             />
@@ -3596,10 +4089,20 @@ export default function ProductForm() {
                                   placeholder={`Enter custom statement for ${ingredient.name} (leave empty to use default name)`}
                                   value={ingredientStatements[ingredient.id] || ''}
                                   onChange={(e) => {
+                                    const newValue = e.target.value;
                                     const newStatements = {
                                       ...ingredientStatements,
-                                      [ingredient.id]: e.target.value
+                                      [ingredient.id]: newValue
                                     };
+                                    
+                                    console.log('🔍 DEBUG: Ingredient statement changed:', {
+                                      ingredientId: ingredient.id,
+                                      ingredientName: ingredient.name,
+                                      newValue,
+                                      newStatements,
+                                      hasValue: !!(newValue && newValue.trim())
+                                    });
+                                    
                                     setIngredientStatements(newStatements);
                                     
                                     // Debounced auto-save to backend
@@ -3608,6 +4111,7 @@ export default function ProductForm() {
                                         clearTimeout(ingredientStatementSaveTimeoutRef.current);
                                       }
                                       ingredientStatementSaveTimeoutRef.current = setTimeout(() => {
+                                        console.log('🔍 DEBUG: Saving ingredient statements to backend:', newStatements);
                                         saveIngredientStatementsToBackend(newStatements);
                                       }, 1000); // 1 second debounce
                                     }
@@ -3693,12 +4197,18 @@ export default function ProductForm() {
                     <CardTitle className="text-lg flex items-center justify-between">
                       Publication Settings
                       <div className="flex items-center space-x-2">
-                        {currentRecipe?.status === 'published' && (
+                        {isUpdatingPublicationStatus && (
+                          <div className="flex items-center space-x-1 text-blue-600">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span className="text-sm">Updating...</span>
+                          </div>
+                        )}
+                        {!isUpdatingPublicationStatus && currentRecipe?.status === 'published' && (
                           <Badge variant="default" className="bg-green-500">
                             Published
                           </Badge>
                         )}
-                        {currentRecipe?.is_public && (
+                        {!isUpdatingPublicationStatus && currentRecipe?.is_public && (
                           <Badge variant="outline" className="border-blue-500 text-blue-700">
                             Public
                           </Badge>
@@ -3707,6 +4217,9 @@ export default function ProductForm() {
                     </CardTitle>
                     <p className="text-sm text-gray-600">
                       Choose how you want to publish your recipe and nutrition label.
+                      {isUpdatingPublicationStatus && (
+                        <span className="text-blue-600 font-medium"> Saving changes...</span>
+                      )}
                     </p>
                   </CardHeader>
                   <CardContent>
@@ -3816,7 +4329,7 @@ export default function ProductForm() {
                         </div>
 
                         {/* Action Buttons */}
-                        <div className="flex items-center justify-between pt-4 border-t">
+                        <div className="pt-4 border-t space-y-4">
                           <div className="text-sm text-gray-500">
                             {publicationStatus === 'published' && isPublic && (
                               <span className="text-green-600">✅ Recipe will be published and publicly accessible</span>
@@ -3829,20 +4342,136 @@ export default function ProductForm() {
                             )}
                           </div>
                           
-                          <Button
-                            onClick={() => completeRecipe({ status: publicationStatus, is_public: isPublic })}
-                            className="bg-green-600 hover:bg-green-700"
-                          >
-                            {publicationStatus === 'published' ? (
-                              <>
-                                🚀 Publish Recipe
-                              </>
-                            ) : (
-                              <>
-                                💾 Save as Draft
-                              </>
-                            )}
-                          </Button>
+                          <div className="flex items-center gap-3">
+                            <Button
+                              onClick={() => {
+                                console.log('🔍 DEBUG: Save as Draft button clicked!');
+                                handleSaveAsDraft();
+                              }}
+                              disabled={isUpdatingPublicationStatus}
+                              variant="outline"
+                              className={`flex-1 ${isUpdatingPublicationStatus ? 'opacity-60 cursor-not-allowed' : ''}`}
+                            >
+                              {isUpdatingPublicationStatus ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  Saving Draft...
+                                </>
+                              ) : (
+                                <>
+                                  📝 Save as Draft
+                                </>
+                              )}
+                            </Button>
+                            
+                            <Button
+                              onClick={() => {
+                                console.log('🔍 DEBUG: Publish Recipe button clicked!');
+                                handlePublishRecipe();
+                              }}
+                              disabled={isUpdatingPublicationStatus}
+                              className={`flex-1 bg-green-600 hover:bg-green-700 ${isUpdatingPublicationStatus ? 'opacity-60 cursor-not-allowed' : ''}`}
+                            >
+                              {isUpdatingPublicationStatus ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  Publishing...
+                                </>
+                              ) : (
+                                <>
+                                  🚀 {isPublic ? 'Publish & Make Public' : 'Publish Recipe'}
+                                </>
+                              )}
+                            </Button>
+                          </div>
+
+                          {/* QR Code Management Section */}
+                          {publicationStatus === 'published' && isPublic && currentRecipe?.id && (
+                            <div className="pt-4 border-t space-y-4">
+                              <div className="space-y-3">
+                                <Label className="text-sm font-medium flex items-center gap-2">
+                                  <span>📱</span>
+                                  QR Code Management
+                                </Label>
+                                <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <span className="text-green-600 font-medium">✅ Ready for QR Code Generation</span>
+                                      </div>
+                                      <p className="text-sm text-green-700 mb-3">
+                                        Your recipe is published and public. You can now generate QR codes that link to your nutrition label.
+                                      </p>
+                                      <div className="text-xs text-green-600 bg-green-100 p-2 rounded border">
+                                        <div className="font-medium mb-1">Public URL:</div>
+                                        <div className="font-mono break-all">
+                                          {window.location.origin}/public/product/{currentRecipe.id}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="mt-4">
+                                    <Button
+                                      onClick={() => {
+                                        // Navigate to QR code page with current recipe auto-selected
+                                        console.log('🔍 Navigation Debug - Navigating to QR codes page with productId:', currentRecipe?.id || productId);
+                                        navigate('/qr-codes', {
+                                          state: {
+                                            productId: currentRecipe?.id || productId,
+                                            productName: recipeName,
+                                            publicUrl: `${window.location.origin}/public/product/${currentRecipe?.id || productId}`,
+                                            fromProductForm: true
+                                          }
+                                        });
+                                      }}
+                                      className="bg-green-600 hover:bg-green-700 text-white"
+                                    >
+                                      <span className="mr-2">📱</span>
+                                      Manage QR Code
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Warning for Draft/Private Recipes */}
+                          {(publicationStatus === 'draft' || !isPublic) && (
+                            <div className="pt-4 border-t space-y-4">
+                              <div className="space-y-3">
+                                <Label className="text-sm font-medium flex items-center gap-2">
+                                  <span>📱</span>
+                                  QR Code Management
+                                </Label>
+                                <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                                  <div className="flex items-start gap-3">
+                                    <span className="text-orange-500 text-lg">⚠️</span>
+                                    <div className="flex-1">
+                                      <div className="font-medium text-orange-800 mb-1">
+                                        QR Code Generation Not Available
+                                      </div>
+                                      <p className="text-sm text-orange-700 mb-3">
+                                        {publicationStatus === 'draft' && !isPublic
+                                          ? 'Your recipe must be published and made public to generate QR codes.'
+                                          : publicationStatus === 'draft'
+                                          ? 'Your recipe must be published to generate QR codes.'
+                                          : 'Your recipe must be made public to generate QR codes.'
+                                        }
+                                      </p>
+                                      <div className="text-xs text-orange-600">
+                                        💡 Tip: {publicationStatus === 'draft' && !isPublic
+                                          ? 'Select "Publish Recipe" and check "Make publicly accessible" above.'
+                                          : publicationStatus === 'draft'
+                                          ? 'Select "Publish Recipe" above.'
+                                          : 'Check "Make publicly accessible" above.'
+                                        }
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -3883,18 +4512,54 @@ export default function ProductForm() {
                     
                     {/* FDA Nutrition Label - Uses actual nutrition data or fallback to zeros */}
                     <div>
-                      <FDANutritionLabel
-                        data={nutritionData}
-                        showActionButtons={true}
-                        realIngredients={addedIngredients.map(ing => ({
-                          name: ing.name,
-                          allergens: ing.allergens,
-                          customStatement: ingredientStatements[ing.id]
-                        }))}
-                        realAllergens={[...new Set(addedIngredients.flatMap(ing => ing.allergens))]}
-                        allergenData={allergenData}
-                        recipeName={recipeName}
-                      />
+                      {(() => {
+                        // Debug logging for ingredient statements
+                        const realIngredientsData = addedIngredients.map(ing => {
+                          const customStatement = ingredientStatements[ing.id];
+                          const finalData = {
+                            name: ing.name,
+                            allergens: ing.allergens,
+                            customStatement: customStatement,
+                            custom_statement: customStatement // Add both for compatibility
+                          };
+                          
+                          console.log(`🔍 DEBUG: ProductForm mapping ingredient ${ing.name} (${ing.id}):`, {
+                            originalName: ing.name,
+                            customStatement: customStatement,
+                            hasCustomStatement: !!(customStatement && customStatement.trim()),
+                            finalData
+                          });
+                          
+                          return finalData;
+                        });
+                        
+                        console.log('🔍 DEBUG: ProductForm FINAL DATA passing to FDANutritionLabel:', {
+                          addedIngredients: addedIngredients.map(ing => ({ id: ing.id, name: ing.name })),
+                          ingredientStatements,
+                          realIngredientsData,
+                          hasCustomStatements: Object.keys(ingredientStatements).length > 0,
+                          detailedMapping: addedIngredients.map(ing => ({
+                            id: ing.id,
+                            name: ing.name,
+                            hasCustomStatement: !!(ingredientStatements[ing.id] && ingredientStatements[ing.id].trim()),
+                            customStatementValue: ingredientStatements[ing.id]
+                          }))
+                        });
+                        
+                        console.log('🔍 DEBUG: ProductForm EXACT realIngredientsData being passed:', JSON.stringify(realIngredientsData, null, 2));
+                        
+                        return (
+                          <FDANutritionLabel
+                            key={`nutrition-label-${Object.keys(ingredientStatements).length}-${JSON.stringify(ingredientStatements)}`}
+                            data={nutritionData}
+                            showActionButtons={true}
+                            realIngredients={realIngredientsData}
+                            realAllergens={[...new Set(addedIngredients.flatMap(ing => ing.allergens))]}
+                            allergenData={allergenData}
+                            recipeName={recipeName}
+                          />
+                        );
+                      })()}
                     </div>
                   </div>
                 </CardContent>
@@ -3962,6 +4627,15 @@ export default function ProductForm() {
                     )}
                   </Button>
                 </div>
+                
+                {/* Auto-create recipe when user starts typing (for better UX) */}
+                {!isRecipeCreated && recipeName.trim() && !isCreatingRecipe && (
+                  <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="text-sm text-blue-700 text-center">
+                      💡 Tip: Click "Create Recipe" to start adding ingredients and building your nutrition label
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

@@ -367,44 +367,44 @@ export interface FDANutritionData {
 export function extractAllergenData(response: EdamamNutritionResponse): AllergenData {
   const detected: { [categoryId: string]: AllergenItem[] } = {};
   
-  // Initialize empty arrays for all categories
-  ALLERGEN_CATEGORIES.forEach(category => {
-    detected[category.id] = [];
+  console.log('Extracting allergen data from API response:', {
+    cautions: response.cautions,
+    healthLabels: response.healthLabels
   });
+  
+  // Only initialize categories that actually have detected allergens
+  let hasDetectedAllergens = false;
   
   // Extract from cautions array (high confidence)
   if (response.cautions && response.cautions.length > 0) {
+    console.log('Processing cautions:', response.cautions);
     response.cautions.forEach(caution => {
       const categoryId = mapAllergenToCategory(caution);
       if (categoryId) {
+        if (!detected[categoryId]) {
+          detected[categoryId] = [];
+        }
         detected[categoryId].push({
           name: caution,
           source: 'cautions',
           confidence: 'high',
           details: 'Detected from Edamam cautions'
         });
+        hasDetectedAllergens = true;
+        console.log(`Added allergen from cautions: ${caution} -> ${categoryId}`);
       }
     });
+  } else {
+    console.log('No cautions found in API response');
   }
   
-  // Extract from healthLabels (medium confidence)
+  // DISABLED: Health labels processing - these indicate what allergens are NOT present (e.g., DAIRY_FREE means no dairy)
+  // Only use cautions array for allergen detection as it indicates what allergens ARE present
+  console.log('Health labels processing disabled - only using cautions array for allergen detection');
   if (response.healthLabels && response.healthLabels.length > 0) {
-    const allergenHealthLabels = response.healthLabels.filter(label =>
+    console.log('Health labels found but ignored:', response.healthLabels.filter(label =>
       label.includes('_FREE') && !['ALCOHOL_FREE', 'NO_SUGAR_ADDED', 'SULPHITE_FREE'].includes(label)
-    );
-    
-    allergenHealthLabels.forEach(label => {
-      // Convert health labels to allergen names and categories
-      const allergenInfo = convertHealthLabelToAllergen(label);
-      if (allergenInfo) {
-        detected[allergenInfo.categoryId].push({
-          name: allergenInfo.name,
-          source: 'healthLabels',
-          confidence: 'medium',
-          details: `Inferred from health label: ${label}`
-        });
-      }
-    });
+    ));
   }
   
   // Initialize empty manual arrays for all categories
@@ -413,11 +413,19 @@ export function extractAllergenData(response: EdamamNutritionResponse): Allergen
     manual[category.id] = [];
   });
   
-  return {
+  const allergenData = {
     detected,
     manual,
     displayOnLabel: true
   };
+  
+  console.log('Final allergen data extracted:', {
+    hasDetectedAllergens,
+    detectedCategories: Object.keys(detected),
+    allergenData
+  });
+  
+  return allergenData;
 }
 
 /**
@@ -849,9 +857,8 @@ export function getEmptyAllergenData(): AllergenData {
   const detected: { [categoryId: string]: AllergenItem[] } = {};
   const manual: { [categoryId: string]: AllergenItem[] } = {};
   
-  // Initialize empty arrays for all categories
+  // Only initialize manual arrays for all categories, detected will be empty
   ALLERGEN_CATEGORIES.forEach(category => {
-    detected[category.id] = [];
     manual[category.id] = [];
   });
   

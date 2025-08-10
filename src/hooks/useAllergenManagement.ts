@@ -1,8 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { AllergenData, getEmptyAllergenData } from '@/utils/nutritionDataMapper';
 import { 
-  transformFlatToCategories, 
-  extractAllergensFromIngredients,
+  transformFlatToCategories,
   generateAllergenStatement,
   hasAllergens,
   getActiveAllergenCategories,
@@ -185,50 +184,13 @@ export const useAllergenManagement = ({
   }, []);
   
   // Extract allergens from ingredients
+  // DISABLED: We only want allergens from nutrition API response, not from individual ingredients
   const extractFromIngredients = useCallback(() => {
-    if (!ingredients || ingredients.length === 0) return;
+    console.log('⚠️ extractFromIngredients called but disabled - only using nutrition API response for allergen detection');
     
-    setIsLoadingAllergens(true);
-    setAllergenError(null);
-    
-    try {
-      const extractedAllergens = extractAllergensFromIngredients(ingredients);
-      
-      setAllergenData(prev => {
-        const updated = { ...prev };
-        
-        // Add extracted allergens as detected allergens
-        extractedAllergens.forEach(allergenName => {
-          // Try to categorize the allergen
-          const category = 'other'; // Default category, could be improved with mapping
-          
-          if (!updated.detected[category]) {
-            updated.detected[category] = [];
-          }
-          
-          // Check if allergen already exists
-          const exists = updated.detected[category].some(allergen => 
-            allergen.name.toLowerCase() === allergenName.toLowerCase()
-          );
-          
-          if (!exists) {
-            updated.detected[category].push({
-              name: allergenName,
-              source: 'ingredients',
-              confidence: 'medium'
-            });
-          }
-        });
-        
-        return updated;
-      });
-      
-    } catch (error) {
-      setAllergenError('Failed to extract allergens from ingredients');
-      console.error('Error extracting allergens:', error);
-    } finally {
-      setIsLoadingAllergens(false);
-    }
+    // Do nothing - we don't want to extract allergens from individual ingredients
+    // Only the nutrition API response (cautions field) should be used for auto-detection
+    return;
   }, [ingredients]);
   
   // Reset allergen data

@@ -432,6 +432,18 @@ export default function NutritionLabel() {
   const handleManageQRCode = async () => {
     if (!passedData?.productId) {
       console.error('No product ID available for QR code generation');
+      
+      // For users without productId (sample label users), navigate to QR codes page
+      if (!isLoggedUserWithData) {
+        // Show a message and redirect to QR codes page for sample users
+        alert('QR code generation requires a saved recipe. Please create and save a recipe first, then return to generate QR codes.');
+        navigate('/qr-codes');
+        return;
+      }
+      
+      // For logged users without productId, show helpful message
+      alert('Unable to generate QR code. Please save your recipe first, then return to the label customization page.');
+      setShowQRCodeManagement(false);
       return;
     }
 
@@ -452,8 +464,23 @@ export default function NutritionLabel() {
 
       if (response.success && response.qr_code) {
         // Set the QR code data for display
+        const imageUrl = response.image_url || response.qr_code.image_url;
+        
+        // Fix URL if it's relative - ensure it has the full domain
+        const fullImageUrl = imageUrl?.startsWith('http')
+          ? imageUrl
+          : `${window.location.origin}${imageUrl}`;
+        
+        console.log('🔧 QR Code generation response:', {
+          success: response.success,
+          image_url: response.image_url,
+          qr_code_image_url: response.qr_code.image_url,
+          original_image_url: imageUrl,
+          full_image_url: fullImageUrl
+        });
+        
         setQrCodeData({
-          qr_code_url: response.image_url || response.qr_code.image_url,
+          qr_code_url: fullImageUrl,
           name: response.qr_code.product?.name || 'Product QR Code',
           public_url: response.public_url || response.qr_code.public_url
         });
@@ -473,11 +500,12 @@ export default function NutritionLabel() {
         console.log('QR code generated successfully:', response.qr_code);
       } else {
         console.error('QR code generation failed:', response.message);
-        // Still close the management interface
+        alert('Failed to generate QR code. Please try again or contact support if the issue persists.');
         setShowQRCodeManagement(false);
       }
     } catch (error) {
       console.error('Error generating QR code:', error);
+      alert('An error occurred while generating the QR code. Please try again.');
       setShowQRCodeManagement(false);
     } finally {
       setIsLoadingQRCode(false);
@@ -533,12 +561,28 @@ export default function NutritionLabel() {
       if (response.success && response.data && response.data.length > 0) {
         // Use the first QR code found for this product
         const qrCode = response.data[0];
+        
+        // Fix URL if it's relative - ensure it has the full domain
+        const fullImageUrl = qrCode.image_url?.startsWith('http')
+          ? qrCode.image_url
+          : `${window.location.origin}${qrCode.image_url}`;
+        
+        console.log('🔧 Loading existing QR code:', {
+          qr_code_id: qrCode.id,
+          original_image_url: qrCode.image_url,
+          full_image_url: fullImageUrl,
+          product_name: qrCode.product?.name || qrCode.product_name,
+          public_url: qrCode.public_url,
+          full_qr_code_object: qrCode
+        });
+        
         setQrCodeData({
-          qr_code_url: qrCode.image_url,
+          qr_code_url: fullImageUrl,
           name: qrCode.product?.name || qrCode.product_name || 'Product QR Code',
           public_url: qrCode.public_url
         });
         console.log('QR code data loaded:', qrCode);
+        console.log('QR code image URL:', fullImageUrl);
       } else {
         setQrCodeData(null);
         console.log('No QR codes found for product');
@@ -791,17 +835,22 @@ export default function NutritionLabel() {
                           ) : (
                             <div className="space-y-2">
                               <div className="text-xs text-blue-700">
-                                {isLoadingQRCode ? 'Loading QR code...' : 'No QR code found for this recipe.'}
+                                {isLoadingQRCode
+                                  ? 'Loading QR code...'
+                                  : !passedData?.productId
+                                    ? 'QR code generation requires a saved recipe.'
+                                    : 'No QR code found for this recipe.'
+                                }
                               </div>
                               <div className="flex gap-2">
                                 <Button
                                   size="sm"
                                   onClick={handleManageQRCode}
-                                  disabled={isLoadingQRCode}
-                                  className="text-xs px-2 py-1 h-6 bg-blue-600 hover:bg-blue-700 text-white"
+                                  disabled={isLoadingQRCode || !passedData?.productId}
+                                  className="text-xs px-2 py-1 h-6 bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-400 disabled:cursor-not-allowed"
                                 >
                                   <QrCode className="h-3 w-3 mr-1" />
-                                  Generate QR Code
+                                  {!passedData?.productId ? 'Save Recipe First' : 'Generate QR Code'}
                                 </Button>
                                 <Button
                                   size="sm"

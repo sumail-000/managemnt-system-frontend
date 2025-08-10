@@ -647,12 +647,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.error('[AUTH] Registration failed', {
         email: userData.email,
         error: error.response?.data?.message || error.message,
-        validationErrors: error.response?.data?.errors
+        validationErrors: error.response?.data?.errors,
+        fullResponse: error.response?.data
       });
       
       // Create a more detailed error object that includes validation errors
+      // Preserve the original error structure to avoid losing validation details
       const errorObj = new Error(error.response?.data?.message || 'Registration failed');
       (errorObj as any).response = error.response;
+      
+      // Ensure validation errors are properly passed through
+      if (error.response?.data?.errors) {
+        console.log('[AUTH] Validation errors detected, preserving structure:', error.response.data.errors);
+      }
+      
       throw errorObj;
     } finally {
       setIsLoading(false);

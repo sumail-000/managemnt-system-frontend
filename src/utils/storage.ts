@@ -10,33 +10,32 @@ const STORAGE_BASE_URL = import.meta.env.VITE_STORAGE_URL || 'http://localhost:8
  * @returns The full storage URL or null if path is invalid
  */
 export function getStorageUrl(path: string | null | undefined): string | null {
-  console.log('🔧 getStorageUrl called with path:', path);
-  console.log('🌐 STORAGE_BASE_URL:', STORAGE_BASE_URL);
-  
   if (!path || typeof path !== 'string') {
-    console.log('❌ Invalid path provided');
     return null;
   }
   
-  // If it's already a full URL, return as is
+  // If it's already a full URL, check if it needs to be transformed
   if (path.startsWith('http://') || path.startsWith('https://')) {
-    console.log('🌐 Already a full URL, returning as is');
+    // Check if this is a Laravel backend storage URL that needs frontend transformation
+    const storagePathMatch = path.match(/https?:\/\/[^\/]+\/storage\/(.+)$/);
+    if (storagePathMatch) {
+      const relativePath = storagePathMatch[1]; // Extract path after /storage/
+      const transformedUrl = `${STORAGE_BASE_URL}/${relativePath}`;
+      return transformedUrl;
+    }
+    
     return path;
   }
   
   // Remove leading slash if present
   let cleanPath = path.startsWith('/') ? path.slice(1) : path;
-  console.log('🧹 After removing leading slash:', cleanPath);
   
   // Check if path already starts with 'storage/' and remove it to avoid duplication
   if (cleanPath.startsWith('storage/')) {
     cleanPath = cleanPath.substring(8); // Remove 'storage/' prefix
-    console.log('🔄 Removed duplicate storage prefix:', cleanPath);
   }
   
   const finalUrl = `${STORAGE_BASE_URL}/${cleanPath}`;
-  console.log('🎯 Final constructed URL:', finalUrl);
-  
   return finalUrl;
 }
 

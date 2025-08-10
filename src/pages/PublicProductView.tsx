@@ -31,6 +31,7 @@ import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { productsAPI, edamamAPI } from "@/services/api"
 import { Product, transformProductFromAPI } from "@/types/product"
+import { getStorageUrl } from "@/utils/storage"
 
 export default function PublicProductView() {
   const { id } = useParams()
@@ -268,7 +269,7 @@ export default function PublicProductView() {
               {/* Description */}
               {product.description && (
                 <div>
-                  <h2 className="text-xl font-semibold text-gray-900 mb-3">{t('about')}</h2>
+                  <h2 className="text-xl font-semibold text-gray-900 mb-3">About</h2>
                   <p className="text-gray-700 leading-relaxed text-lg">
                     {product.description}
                   </p>
@@ -278,7 +279,7 @@ export default function PublicProductView() {
               {/* Ingredients Section */}
               {ingredients.length > 0 && (
                 <div>
-                  <h2 className="text-xl font-semibold text-gray-900 mb-4">{t('ingredients')}</h2>
+                  <h2 className="text-xl font-semibold text-gray-900 mb-4">Ingredients</h2>
                   <ul className="space-y-2">
                     {ingredients.map((ingredient, index) => (
                       <li key={index} className="flex items-start gap-3 text-gray-700">
@@ -332,7 +333,7 @@ export default function PublicProductView() {
                   <div className="text-center space-y-4">
                     {product.qrCodes[0].image_url ? (
                       <img
-                        src={product.qrCodes[0].image_url}
+                        src={getStorageUrl(product.qrCodes[0].image_url)}
                         alt="QR Code for this recipe"
                         className="w-32 h-32 mx-auto border border-gray-200 rounded"
                       />
@@ -357,7 +358,7 @@ export default function PublicProductView() {
               <div className={`bg-white border border-gray-200 rounded-lg p-6 ${isPrintMode ? 'print:hidden' : ''}`}>
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                   <Share2 className="h-5 w-5" />
-                  {t('share_recipe')}
+                  Share Recipe
                 </h3>
                 <div className="space-y-3">
                   <Button
@@ -392,7 +393,7 @@ export default function PublicProductView() {
                 <div className="bg-white border border-gray-200 rounded-lg p-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                     <Download className="h-5 w-5" />
-                    {t('download_label')}
+                    Download Label
                   </h3>
                   <Button
                     variant="outline"

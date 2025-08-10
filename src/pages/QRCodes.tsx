@@ -166,9 +166,11 @@ export default function QRCodes() {
   // Handle preset data from navigation state
   useEffect(() => {
     if (location.state) {
-      const { presetContent } = location.state
+      const { presetContent, publicUrl } = location.state
       if (presetContent) {
         setQrContent(presetContent)
+      } else if (publicUrl) {
+        setQrContent(publicUrl)
       }
     }
   }, [location.state])
@@ -1000,7 +1002,7 @@ export default function QRCodes() {
                             setSelectedProduct(product)
                             // Auto-fill content with product's public URL if available
                             if (product.is_public) {
-                              const publicUrl = `${window.location.origin}/products/public/${product.id}`
+                              const publicUrl = `${window.location.origin}/public/product/${product.id}`
                               setQrContent(publicUrl)
                             }
                           }
@@ -1047,7 +1049,7 @@ export default function QRCodes() {
                     </Label>
                     <Input
                       type="url"
-                      placeholder="Enter URL for your QR code..."
+                      placeholder="Make sure your recipe is public to get its URL for QR code generation..."
                       value={qrContent}
                       onChange={(e) => setQrContent(e.target.value)}
                     />

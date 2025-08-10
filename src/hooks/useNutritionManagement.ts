@@ -193,6 +193,7 @@ export const useNutritionManagement = ({
         await saveNutritionToBackend(result.nutritionData, defaultServings);
       }
       
+      // Return the allergen data from API response (this should replace any existing allergen data)
       return result.allergenData;
       
     } catch (error: any) {

@@ -189,7 +189,7 @@ export const AllergenManagement: React.FC<AllergenManagementProps> = ({
                   {/* Auto-detected allergens */}
                   {allergenData.detected[category.id] && allergenData.detected[category.id].length > 0 && (
                     <div className="mb-3">
-                      <p className="text-xs text-orange-600 mb-2">Auto-detected from ingredients:</p>
+                      <p className="text-xs text-orange-600 mb-2">Auto-detected from nutrition API:</p>
                       <div className="flex flex-wrap gap-1">
                         {allergenData.detected[category.id].map((allergen, idx) => (
                           <Badge key={idx} variant="outline" className="text-xs border-orange-200 text-orange-700">
