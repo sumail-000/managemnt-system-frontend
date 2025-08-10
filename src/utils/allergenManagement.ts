@@ -1,12 +1,49 @@
 import { getEmptyAllergenData, AllergenData } from '@/utils/nutritionDataMapper';
 import { AddedIngredient } from '@/utils/nutritionCalculations';
 
+// Import the correct mapAllergenToCategory function from nutritionDataMapper
+// This function uses the correct category IDs that match ALLERGEN_CATEGORIES
+const mapAllergenToCategoryCorrect = (allergenName: string): string | null => {
+  const lowerName = allergenName.toLowerCase();
+  
+  // Use the same ALLERGEN_CATEGORIES from nutritionDataMapper
+  const ALLERGEN_CATEGORIES = [
+    { id: 'milk', name: 'Milk & Dairy', subcategories: ['Cow Milk', 'Goat Milk', 'Sheep Milk', 'Cheese', 'Butter', 'Cream', 'Yogurt', 'Lactose'] },
+    { id: 'eggs', name: 'Eggs', subcategories: ['Chicken Eggs', 'Duck Eggs', 'Quail Eggs', 'Egg Whites', 'Egg Yolks'] },
+    { id: 'fish', name: 'Fish', subcategories: ['Salmon', 'Tuna', 'Cod', 'Mackerel', 'Sardines', 'Anchovies', 'Other Fish'] },
+    { id: 'shellfish', name: 'Shellfish', subcategories: ['Crustaceans', 'Shrimp', 'Crab', 'Lobster', 'Mollusks', 'Oysters', 'Mussels', 'Clams', 'Scallops'] },
+    { id: 'tree_nuts', name: 'Tree Nuts', subcategories: ['Almonds', 'Walnuts', 'Cashews', 'Pistachios', 'Pecans', 'Hazelnuts', 'Brazil Nuts', 'Macadamia Nuts', 'Pine Nuts'] },
+    { id: 'peanuts', name: 'Peanuts', subcategories: ['Peanuts', 'Peanut Oil', 'Peanut Butter', 'Peanut Flour'] },
+    { id: 'wheat', name: 'Wheat & Gluten', subcategories: ['Wheat', 'Gluten', 'Barley', 'Rye', 'Oats (may contain gluten)', 'Spelt', 'Kamut'] },
+    { id: 'soy', name: 'Soy', subcategories: ['Soybeans', 'Soy Sauce', 'Tofu', 'Tempeh', 'Soy Oil', 'Soy Lecithin'] },
+    { id: 'sesame', name: 'Sesame', subcategories: ['Sesame Seeds', 'Sesame Oil', 'Tahini'] },
+    { id: 'sulfites', name: 'Sulfites', subcategories: ['Sulfur Dioxide', 'Sodium Sulfite', 'Potassium Sulfite'] },
+    { id: 'other', name: 'Other Allergens', subcategories: ['Celery', 'Mustard', 'Lupine', 'Alcohol', 'MSG', 'Artificial Colors', 'Artificial Flavors'] }
+  ];
+  
+  for (const category of ALLERGEN_CATEGORIES) {
+    // Check if allergen name matches category name or subcategories
+    if (category.name.toLowerCase().includes(lowerName) ||
+        category.subcategories.some(sub => sub.toLowerCase().includes(lowerName))) {
+      return category.id;
+    }
+  }
+  
+  return 'other'; // Default to other category
+};
+
 /**
+ * DEPRECATED: This function uses incorrect category names that don't match ALLERGEN_CATEGORIES
+ * Use mapAllergenToCategoryCorrect instead or the function from nutritionDataMapper.ts
+ *
  * Function to map allergen names to categories (English and Arabic)
+ * @deprecated Use the correct mapping function from nutritionDataMapper.ts
  */
-export const mapAllergenToCategory = (allergenName: string): string => {
+export const mapAllergenToCategory_DEPRECATED = (allergenName: string): string => {
+  console.warn('⚠️ DEPRECATED: mapAllergenToCategory uses incorrect category names. Use nutritionDataMapper.ts version instead.');
+  
   const allergenMap: { [key: string]: string } = {
-    // Dairy - English
+    // Dairy - English (WRONG: should be 'milk' not 'dairy')
     'milk': 'dairy',
     'cheese': 'dairy',
     'butter': 'dairy',
@@ -88,7 +125,7 @@ export const mapAllergenToCategory = (allergenName: string): string => {
     'فول سوداني': 'peanuts',
     'فستق العبيد': 'peanuts',
     
-    // Wheat - English
+    // Wheat - English (WRONG: should be 'wheat' but maps to 'wheat' - this one is actually correct)
     'wheat': 'wheat',
     'gluten': 'wheat',
     
@@ -98,7 +135,7 @@ export const mapAllergenToCategory = (allergenName: string): string => {
     'جلوتين': 'wheat',
     'غلوتين': 'wheat',
     
-    // Soybeans - English
+    // Soybeans - English (WRONG: should be 'soy' not 'soybeans')
     'soybeans': 'soybeans',
     'soy': 'soybeans',
     
@@ -121,7 +158,7 @@ export const mapAllergenToCategory = (allergenName: string): string => {
     'كبريتيت': 'sulfites',
     'ثاني أكسيد الكبريت': 'sulfites',
     
-    // Mustard - English
+    // Mustard - English (WRONG: should be in 'other' category)
     'mustard': 'mustard',
     
     // Mustard - Arabic
@@ -156,8 +193,8 @@ export const transformFlatToCategories = (flatAllergenData: any): AllergenData =
   // Handle detected allergens (flat array to category-based)
   if (Array.isArray(flatAllergenData.detected)) {
     flatAllergenData.detected.forEach((allergen: any) => {
-      // Try to determine category from allergen name or use a default mapping
-      const category = mapAllergenToCategory(allergen.name);
+      // Try to determine category from allergen name or use the correct mapping
+      const category = mapAllergenToCategoryCorrect(allergen.name) || 'other';
       if (!categoryBasedData.detected[category]) {
         categoryBasedData.detected[category] = [];
       }
@@ -173,7 +210,7 @@ export const transformFlatToCategories = (flatAllergenData: any): AllergenData =
   // Handle manual allergens (flat array to category-based)
   if (Array.isArray(flatAllergenData.manual)) {
     flatAllergenData.manual.forEach((allergen: any) => {
-      const category = allergen.category || mapAllergenToCategory(allergen.name);
+      const category = allergen.category || mapAllergenToCategoryCorrect(allergen.name) || 'other';
       if (!categoryBasedData.manual[category]) {
         categoryBasedData.manual[category] = [];
       }

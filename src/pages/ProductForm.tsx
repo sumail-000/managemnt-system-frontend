@@ -50,7 +50,6 @@ import {
 } from '@/utils/ingredientProcessing';
 import {
   transformFlatToCategories,
-  mapAllergenToCategory,
   extractAllergensFromIngredients,
   generateAllergenStatement,
   hasAllergens,
@@ -110,11 +109,9 @@ export default function ProductForm() {
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [recipeName, setRecipeName] = useState('');
-  const [isRecipeNameModalOpen, setIsRecipeNameModalOpen] = useState(false);
+  const [recipeDescription, setRecipeDescription] = useState('');
   const [activeTab, setActiveTab] = useState('recipe');
   const [isRecipeCreated, setIsRecipeCreated] = useState(false);
-  const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
-  const [newRecipeName, setNewRecipeName] = useState('');
   const [searchResults, setSearchResults] = useState<SimpleIngredient[]>([]);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [totalResults, setTotalResults] = useState(0);
@@ -192,6 +189,64 @@ export default function ProductForm() {
   React.useEffect(() => {
     updateIngredientStatementPreview();
   }, [updateIngredientStatementPreview]);
+
+  // Function to save recipe description to backend
+  const saveRecipeDescriptionToBackend = async (description: string) => {
+    if (!currentRecipe?.id) {
+      console.warn('⚠️ No current recipe ID, skipping description save');
+      return;
+    }
+    
+    try {
+      console.log('🔄 Saving recipe description to backend:', {
+        recipeId: currentRecipe.id,
+        description: description.substring(0, 50) + (description.length > 50 ? '...' : '')
+      });
+      
+      const response = await ProgressiveRecipeApi.updateRecipe(currentRecipe.id, {
+        description: description
+      });
+      
+      console.log('📡 Description save API response:', response);
+      
+      // Handle both wrapped response format and direct response format
+      const isSuccess = response && (
+        response.success === true ||
+        (typeof response === 'object' && !response.hasOwnProperty('success') && (response as any).id)
+      );
+      
+      if (isSuccess) {
+        console.log('✅ Description saved successfully');
+        // Update current recipe with new description
+        setCurrentRecipe(prev => prev ? { ...prev, description: description } : null);
+      } else {
+        console.error('❌ Description save failed:', response);
+        const errorMessage = response?.message || (response as any)?.error || 'Unknown error';
+        toast({
+          title: "Sync Error",
+          description: 'Failed to save description: ' + errorMessage,
+          variant: "destructive"
+        });
+      }
+    } catch (error: any) {
+      console.error('❌ Description save error:', error);
+      let errorMessage = 'Network error';
+      
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      toast({
+        title: "Sync Error",
+        description: 'Failed to save description: ' + errorMessage,
+        variant: "destructive"
+      });
+    }
+  };
 
   // Function to save ingredient statements to backend
   const saveIngredientStatementsToBackend = async (statements: {[key: string]: string}) => {
@@ -347,6 +402,7 @@ export default function ProductForm() {
               
               // Set recipe basic info
               setRecipeName(recipeData.name || '');
+              setRecipeDescription(recipeData.description || '');
               setCurrentRecipe(recipeData);
               setIsRecipeCreated(true);
               
@@ -777,19 +833,9 @@ export default function ProductForm() {
         // Clear cache after successful restoration
         clearStateCache();
       } else {
-        // Check if this is a direct navigation to create new recipe
-        // Only open modal if it's truly a new recipe creation (not returning from another page)
-        const isDirectNavigation = location.pathname === '/products/new' &&
-                                  !isRecipeCreated &&
-                                  !recipeName &&
-                                  !isRecipeNameModalOpen &&
-                                  !location.state?.fromCustomLabel; // Don't open modal when returning from custom label
-        
-        if (isDirectNavigation) {
-          console.log('🔍 Navigation Debug - Direct navigation to new recipe detected, opening modal');
-          setIsRecipeNameModalOpen(true);
-        } else if (location.pathname === '/products/new' && location.state?.fromCustomLabel) {
-          console.log('🔍 Navigation Debug - Returning from custom label page, not opening modal');
+        // For new recipes, automatically create recipe when user starts entering name
+        if (location.pathname === '/products/new' && !isRecipeCreated) {
+          setIsRecipeCreated(true);
         }
       }
     }
@@ -1906,147 +1952,73 @@ export default function ProductForm() {
     }
   };
 
-  const handleAddRecipe = () => {
-    setIsRecipeNameModalOpen(true);
-  };
-
-  const handleRecipeNameSubmit = async () => {
-    if (recipeName.trim() && !isCreatingRecipe) {
-      // If in edit mode, just update the recipe name and close modal
-      if (isEditMode && currentRecipe) {
-        try {
-          setIsCreatingRecipe(true);
-          
-          const response = await ProgressiveRecipeApi.updateRecipe(currentRecipe.id!, {
-            name: recipeName.trim()
-          });
-          
-          if (response.success) {
-            setCurrentRecipe(prev => prev ? { ...prev, name: recipeName.trim() } : null);
-            setIsRecipeNameModalOpen(false);
-          } else {
-            throw new Error(response.message || 'Failed to update recipe name');
-          }
-        } catch (error: any) {
-          toast({
-            title: "Update Error",
-            description: 'Failed to update recipe name: ' + (error.message || 'Unknown error'),
-            variant: "destructive"
-          });
-        } finally {
-          setIsCreatingRecipe(false);
-        }
-        return;
-      }
-
-      // Create new recipe (existing logic)
-      setIsCreatingRecipe(true);
-      try {
-        // Step 1: Create recipe with progressive API
-        const response = await ProgressiveRecipeApi.createRecipe({
-          name: recipeName.trim(),
-          description: '',
-          is_public: false
-        });
-
-        // Handle both direct response and wrapped response formats
-        let responseData: any;
-        let recipeData: any;
-        
-        // Check if response has success property (wrapped format)
-        if ('success' in response) {
-          responseData = response;
-          recipeData = responseData.data || responseData;
-        } else {
-          // Direct response format
-          responseData = { success: true, data: response };
-          recipeData = response;
-        }
-        
-        if (responseData.success !== false && recipeData) {
-          // Set all states immediately after successful creation
-          setCurrentRecipe(recipeData);
-          setIsRecipeCreated(true);
-          setIsRecipeNameModalOpen(false);
-          
-          forceProgressUpdate();
-          
-          // Get initial progress
-          try {
-            const progressResponse = await ProgressiveRecipeApi.getProgress(recipeData.id!);
-            if (progressResponse.success) {
-              setRecipeProgress(progressResponse.data.progress);
-            }
-          } catch (progressError) {
-            console.warn('Failed to load progress, but recipe was created:', progressError);
-          }
-          
-          // Clear any existing cache to prevent conflicts
-          clearStateCache();
-        } else {
-          const errorMessage = ('error' in responseData ? responseData.error : null) ||
-                              ('message' in responseData ? responseData.message : null) ||
-                              'Failed to create recipe';
-          throw new Error(errorMessage);
-        }
-      } catch (error: any) {
-        toast({
-          title: "Creation Error",
-          description: 'Failed to create recipe: ' + (error.message || 'Unknown error'),
-          variant: "destructive"
-        });
-        // Reset states on error but keep the modal open for retry
-        setCurrentRecipe(null);
-        setRecipeProgress(null);
-        setIsRecipeCreated(false);
-      } finally {
-        setIsCreatingRecipe(false);
-      }
-    }
-  };
-
-  const handleCancelRecipeCreation = () => {
-    setIsRecipeNameModalOpen(false);
-    
-    // If we have an existing recipe (returning from custom label), don't reset everything
-    if (currentRecipe && isRecipeCreated) {
-      // Just close the modal, keep the existing recipe
+  // Function to create new recipe automatically (without modal)
+  const handleCreateNewRecipe = async () => {
+    if (!recipeName.trim() || isCreatingRecipe) {
       return;
     }
-    
-    // If this is truly a new recipe creation that's being cancelled
-    if (!currentRecipe || !isRecipeCreated) {
-      setRecipeName('');
-      setIsRecipeCreated(false);
+
+    setIsCreatingRecipe(true);
+    try {
+      // Step 1: Create recipe with progressive API
+      const response = await ProgressiveRecipeApi.createRecipe({
+        name: recipeName.trim(),
+        description: recipeDescription || '',
+        is_public: false
+      });
+
+      // Handle both direct response and wrapped response formats
+      let responseData: any;
+      let recipeData: any;
+      
+      // Check if response has success property (wrapped format)
+      if ('success' in response) {
+        responseData = response;
+        recipeData = responseData.data || responseData;
+      } else {
+        // Direct response format
+        responseData = { success: true, data: response };
+        recipeData = response;
+      }
+      
+      if (responseData.success !== false && recipeData) {
+        // Set all states immediately after successful creation
+        setCurrentRecipe(recipeData);
+        setIsRecipeCreated(true);
+        
+        forceProgressUpdate();
+        
+        // Get initial progress
+        try {
+          const progressResponse = await ProgressiveRecipeApi.getProgress(recipeData.id!);
+          if (progressResponse.success) {
+            setRecipeProgress(progressResponse.data.progress);
+          }
+        } catch (progressError) {
+          console.warn('Failed to load progress, but recipe was created:', progressError);
+        }
+        
+        // Clear any existing cache to prevent conflicts
+        clearStateCache();
+      } else {
+        const errorMessage = ('error' in responseData ? responseData.error : null) ||
+                            ('message' in responseData ? responseData.message : null) ||
+                            'Failed to create recipe';
+        throw new Error(errorMessage);
+      }
+    } catch (error: any) {
+      toast({
+        title: "Creation Error",
+        description: 'Failed to create recipe: ' + (error.message || 'Unknown error'),
+        variant: "destructive"
+      });
+      // Reset states on error
       setCurrentRecipe(null);
       setRecipeProgress(null);
+      setIsRecipeCreated(false);
+    } finally {
       setIsCreatingRecipe(false);
-      
-      // Check if we came from custom label page
-      if (location.state?.fromCustomLabel) {
-        navigate('/nutrition-label', { replace: true });
-      } else {
-        navigate('/products', { replace: true });
-      }
     }
-  };
-
-  const handleRename = () => {
-    setNewRecipeName(recipeName);
-    setIsRenameModalOpen(true);
-  };
-
-  const handleRenameSubmit = () => {
-    if (newRecipeName.trim()) {
-      setRecipeName(newRecipeName.trim());
-      setIsRenameModalOpen(false);
-      setNewRecipeName('');
-    }
-  };
-
-  const handleCancelRename = () => {
-    setIsRenameModalOpen(false);
-    setNewRecipeName('');
   };
 
   const handleConfirmDuplicateAdd = () => {
@@ -2582,9 +2554,6 @@ export default function ProductForm() {
                 <h1 className="text-2xl font-bold text-gray-900">
                   {isEditMode ? 'Edit Recipe: ' : ''}{recipeName || 'Recipe'}
                 </h1>
-                <Button variant="outline" size="sm" onClick={handleRename} className="flex items-center gap-2">
-                  🏷️ Rename...
-                </Button>
                 <Button variant="outline" size="sm" className="flex items-center gap-2">
                   🏷️ Add Tags...
                 </Button>
@@ -2715,7 +2684,7 @@ export default function ProductForm() {
               <nav className="flex space-x-8">
                 {[
                   { id: 'recipe', label: 'Recipe' },
-                  { id: 'product-details', label: 'Product Details' },
+                  { id: 'ingredients', label: 'Ingredients' },
                   { id: 'ingredient-statement', label: 'Ingredient Statement' },
                   { id: 'allergens', label: 'Allergens' },
                   { id: 'publication', label: 'Publication' },
@@ -2777,9 +2746,95 @@ export default function ProductForm() {
           {/* Left Side - Tab Content */}
           <div className="space-y-4">
             
-            {/* Product Details Tab */}
-            {activeTab === 'product-details' && (
+            {/* Recipe Tab - Recipe Details */}
+            {activeTab === 'recipe' && (
               <div className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Recipe Information</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Recipe Name */}
+                    <div className="space-y-2">
+                      <Label htmlFor="recipeName">Recipe Name</Label>
+                      <Input
+                        id="recipeName"
+                        type="text"
+                        placeholder="Enter recipe name..."
+                        value={recipeName}
+                        onChange={(e) => {
+                          const newName = e.target.value;
+                          setRecipeName(newName);
+                          
+                          // Auto-save recipe name with debounce
+                         if (currentRecipe?.id) {
+                           // Clear existing timeout
+                           if ((window as any).recipeNameSaveTimeout) {
+                             clearTimeout((window as any).recipeNameSaveTimeout);
+                           }
+                           
+                           // Set new timeout for auto-save
+                           (window as any).recipeNameSaveTimeout = setTimeout(async () => {
+                              try {
+                                const response = await ProgressiveRecipeApi.updateRecipe(currentRecipe.id!, {
+                                  name: newName.trim()
+                                });
+                                
+                                if (response.success) {
+                                  setCurrentRecipe(prev => prev ? { ...prev, name: newName.trim() } : null);
+                                }
+                              } catch (error: any) {
+                                console.error('Failed to auto-save recipe name:', error);
+                              }
+                            }, 1000); // 1 second debounce
+                          }
+                        }}
+                        className="text-lg font-medium"
+                      />
+                      <div className="text-xs text-gray-500">
+                        Changes are saved automatically
+                      </div>
+                    </div>
+
+                    {/* Recipe Description */}
+                    <div className="space-y-2">
+                      <Label htmlFor="recipeDescription">Recipe Description</Label>
+                      <Textarea
+                        id="recipeDescription"
+                        placeholder="Enter a description for your recipe..."
+                        value={recipeDescription}
+                        onChange={(e) => {
+                          const newDescription = e.target.value;
+                          setRecipeDescription(newDescription);
+                          
+                          // Auto-save recipe description with debounce
+                          if (currentRecipe?.id) {
+                            // Clear existing timeout
+                            if ((window as any).recipeDescriptionSaveTimeout) {
+                              clearTimeout((window as any).recipeDescriptionSaveTimeout);
+                            }
+                            
+                            // Set new timeout for auto-save
+                            (window as any).recipeDescriptionSaveTimeout = setTimeout(async () => {
+                              try {
+                                await saveRecipeDescriptionToBackend(newDescription);
+                              } catch (error) {
+                                console.error('Auto-save description error:', error);
+                              }
+                            }, 1500); // 1.5 second debounce for longer text
+                          }
+                        }}
+                        className="min-h-[100px] resize-y"
+                        maxLength={500}
+                      />
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>Changes are saved automatically</span>
+                        <span>{recipeDescription.length}/500 characters</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-lg">Product Image</CardTitle>
@@ -2924,8 +2979,8 @@ export default function ProductForm() {
               </div>
             )}
 
-            {/* Recipe Tab (Ingredient Management) */}
-            {activeTab === 'recipe' && (
+            {/* Ingredients Tab (formerly Recipe Tab) */}
+            {activeTab === 'ingredients' && (
               <div className="space-y-4">
                 {/* Page Navigation */}
                 <div className="flex items-center space-x-2 text-sm text-muted-foreground">
@@ -3795,8 +3850,8 @@ export default function ProductForm() {
             )}
           </div>
           
-          {/* Right Side - Label Preview - Only show for Recipe and Label tabs */}
-          {(activeTab === 'recipe' || activeTab === 'label') && (
+          {/* Right Side - Label Preview - Only show for Ingredients and Label tabs */}
+          {(activeTab === 'ingredients' || activeTab === 'label') && (
             <div className="space-y-3">
               <Card className="shadow-sm">
                 <CardHeader className="pb-3">
@@ -3845,88 +3900,71 @@ export default function ProductForm() {
             </div>
           )}
         </div>
-      ) : null}
 
-      {/* Add Recipe Modal */}
-      <Dialog
-        open={isRecipeNameModalOpen && !isRecipeCreated}
-        onOpenChange={(open) => {
-          if (!isCreatingRecipe) {
-            setIsRecipeNameModalOpen(open);
-          }
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create New Recipe</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">Recipe Name</label>
-              <Input
-                type="text"
-                placeholder="Enter recipe name..."
-                value={recipeName}
-                onChange={(e) => setRecipeName(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && !isCreatingRecipe && handleRecipeNameSubmit()}
-                disabled={isCreatingRecipe}
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={handleCancelRecipeCreation}
-                disabled={isCreatingRecipe}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleRecipeNameSubmit}
-                disabled={!recipeName.trim() || isCreatingRecipe}
-              >
-                {isCreatingRecipe ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Creating Recipe...
-                  </>
-                ) : (
-                  'Create Recipe'
-                )}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
-      {/* Rename Recipe Modal */}
-      <Dialog open={isRenameModalOpen} onOpenChange={setIsRenameModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Rename Recipe</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">Recipe Name</label>
-              <Input
-                type="text"
-                placeholder="Enter new recipe name..."
-                value={newRecipeName}
-                onChange={(e) => setNewRecipeName(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleRenameSubmit()}
-                autoFocus
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={handleCancelRename}>
-                Cancel
-              </Button>
-              <Button onClick={handleRenameSubmit} disabled={!newRecipeName.trim()}>
-                Rename
-              </Button>
-            </div>
+      ) : (
+        /* Initial Recipe Creation Interface for New Recipes */
+        <div className="container mx-auto py-8 px-6">
+          <div className="max-w-2xl mx-auto">
+            <Card>
+              <CardHeader className="text-center">
+                <CardTitle className="text-2xl">Create New Recipe</CardTitle>
+                <p className="text-gray-600">Start by giving your recipe a name</p>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="newRecipeName">Recipe Name</Label>
+                  <Input
+                    id="newRecipeName"
+                    type="text"
+                    placeholder="Enter your recipe name..."
+                    value={recipeName}
+                    onChange={(e) => setRecipeName(e.target.value)}
+                    className="text-lg"
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter' && recipeName.trim()) {
+                        handleCreateNewRecipe();
+                      }
+                    }}
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="newRecipeDescription">Recipe Description (Optional)</Label>
+                  <Textarea
+                    id="newRecipeDescription"
+                    placeholder="Describe your recipe..."
+                    value={recipeDescription}
+                    onChange={(e) => setRecipeDescription(e.target.value)}
+                    className="min-h-[100px]"
+                    maxLength={500}
+                  />
+                  <div className="text-xs text-gray-500 text-right">
+                    {recipeDescription.length}/500 characters
+                  </div>
+                </div>
+
+                <div className="flex justify-center">
+                  <Button
+                    onClick={handleCreateNewRecipe}
+                    disabled={!recipeName.trim() || isCreatingRecipe}
+                    className="px-8 py-2 bg-blue-600 hover:bg-blue-700"
+                  >
+                    {isCreatingRecipe ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Creating Recipe...
+                      </>
+                    ) : (
+                      'Create Recipe'
+                    )}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </div>
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
 
       {/* Duplicate Ingredient Warning Dialog */}
       <Dialog open={isDuplicateDialogOpen} onOpenChange={setIsDuplicateDialogOpen}>

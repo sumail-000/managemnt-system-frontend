@@ -388,13 +388,19 @@ export default function NutritionLabel() {
   const handleGoBack = () => {
     // Check if we have data indicating we came from ProductForm
     if (passedData?.nutritionData && passedData?.recipeName) {
+      // Determine the correct route based on whether we have a productId (edit mode) or not (new mode)
+      const targetRoute = passedData?.productId
+        ? `/products/${passedData.productId}/edit`  // Edit existing recipe
+        : '/products/new';                          // Create new recipe
+      
       // Navigate back to ProductForm with proper state indicating we're returning from custom label
-      navigate('/product-form', {
+      navigate(targetRoute, {
         state: {
           returnFromCustomLabel: true,
           recipeName: passedData.recipeName,
           productId: passedData.productId,
-          preserveRecipeState: true
+          preserveRecipeState: true,
+          fromCustomLabel: true
         },
         replace: true // Replace current history entry to prevent back button loops
       });
