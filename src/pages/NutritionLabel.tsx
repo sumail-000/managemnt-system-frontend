@@ -85,6 +85,15 @@ export default function NutritionLabel() {
     showQRCodeOnReturn?: boolean; // Flag for returning from QR code generation
   } | null;
   const isLoggedUserWithData = !!passedData?.nutritionData;
+
+  // Label state persistence helpers
+  const LABEL_STATE_VERSION = 'label_state_v1';
+  const LABEL_LAST_KEY = 'label_last_key';
+  const getLabelCacheKey = () => {
+    if (passedData?.productId) return `${LABEL_STATE_VERSION}_${passedData.productId}`;
+    const lastKey = localStorage.getItem(LABEL_LAST_KEY);
+    return lastKey || `${LABEL_STATE_VERSION}_new`;
+  };
   
   // Use real data if provided, otherwise use sample data
   const [nutritionData, setNutritionData] = useState<NutritionData>(
@@ -187,6 +196,96 @@ export default function NutritionLabel() {
   const [showQRCodeManagement, setShowQRCodeManagement] = useState(false);
   const [qrCodeData, setQrCodeData] = useState<any>(null);
   const [isLoadingQRCode, setIsLoadingQRCode] = useState(false);
+
+  // Save/Load label customization state to/from cache
+  const saveLabelStateToCache = () => {
+    try {
+      const key = getLabelCacheKey();
+      const state = {
+        // Core
+        nutritionData,
+        labelType,
+        expandedSections,
+        labelStyle,
+        optionalNutrients,
+        optionalVitamins,
+        labelSections,
+        businessInfo,
+        nutritionAdjustments,
+        qrCodeData,
+        // Metadata to help restore context
+        recipeName: passedData?.recipeName,
+        productId: passedData?.productId,
+        timestamp: Date.now(),
+      };
+      localStorage.setItem(key, JSON.stringify(state));
+      localStorage.setItem(LABEL_LAST_KEY, key);
+    } catch (e) {
+      console.warn('Failed to save label state:', e);
+    }
+  };
+
+  const loadLabelStateFromCache = () => {
+    try {
+      const key = getLabelCacheKey();
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+      const cached = JSON.parse(raw);
+      // Only restore if cache is fresh (<= 24h)
+      const maxAge = 24 * 60 * 60 * 1000;
+      if (Date.now() - (cached.timestamp || 0) > maxAge) return;
+
+      if (cached.nutritionData) setNutritionData(cached.nutritionData);
+      if (cached.labelType) setLabelType(cached.labelType);
+      if (cached.expandedSections) setExpandedSections(cached.expandedSections);
+      if (cached.labelStyle) setLabelStyle(cached.labelStyle);
+      if (cached.optionalNutrients) setOptionalNutrients(cached.optionalNutrients);
+      if (cached.optionalVitamins) setOptionalVitamins(cached.optionalVitamins);
+      if (cached.labelSections) setLabelSections(cached.labelSections);
+      if (cached.businessInfo) setBusinessInfo(cached.businessInfo);
+      if (cached.nutritionAdjustments) setNutritionAdjustments(cached.nutritionAdjustments);
+      if (cached.qrCodeData) setQrCodeData(cached.qrCodeData);
+    } catch (e) {
+      console.warn('Failed to load label state:', e);
+    }
+  };
+
+  // Initialize from cache or persist initial passed data
+  useEffect(() => {
+    if (!isLoggedUserWithData) {
+      loadLabelStateFromCache();
+    } else {
+      // Persist initial state so refresh recovers
+      saveLabelStateToCache();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Autosave on changes (debounced)
+  useEffect(() => {
+    const t = setTimeout(() => {
+      saveLabelStateToCache();
+    }, 300);
+    return () => clearTimeout(t);
+  }, [
+    nutritionData,
+    labelType,
+    expandedSections,
+    labelStyle,
+    optionalNutrients,
+    optionalVitamins,
+    labelSections,
+    businessInfo,
+    nutritionAdjustments,
+    qrCodeData
+  ]);
+
+  // Save on page unload
+  useEffect(() => {
+    const onBeforeUnload = () => saveLabelStateToCache();
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, []);
 
   const labelTypeOptions = [
     "FDA Vertical (default)",
@@ -386,6 +485,9 @@ export default function NutritionLabel() {
   };
 
   const handleGoBack = () => {
+    // Persist current label state before navigating
+    saveLabelStateToCache();
+
     // Check if we have data indicating we came from ProductForm
     if (passedData?.nutritionData && passedData?.recipeName) {
       // Determine the correct route based on whether we have a productId (edit mode) or not (new mode)

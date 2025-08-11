@@ -112,7 +112,7 @@ export default function ProductForm() {
   const [recipeName, setRecipeName] = useState('');
   const [recipeDescription, setRecipeDescription] = useState('');
   const [activeTab, setActiveTab] = useState('recipe');
-  const [isRecipeCreated, setIsRecipeCreated] = useState(false);
+  const [isRecipeCreated, setIsRecipeCreated] = useState(true);
   const [searchResults, setSearchResults] = useState<SimpleIngredient[]>([]);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [totalResults, setTotalResults] = useState(0);
@@ -343,8 +343,13 @@ export default function ProductForm() {
     }
   };
 
-  // Cache key for localStorage
+  // Cache key for localStorage (legacy, kept for compatibility)
   const RECIPE_STATE_CACHE_KEY = 'recipe_state_cache';
+  // Namespaced cache key per product or new recipe
+  const getRecipeCacheKey = () => {
+    const base = 'recipe_state_v2';
+    return isEditMode && productId ? `${base}_${productId}` : `${base}_new`;
+  };
   
 
   // Cache functions for state preservation
@@ -364,11 +369,17 @@ export default function ProductForm() {
       labelSetupMode,
       netWeightPerPackage,
       servingsPerPackage,
+      // Additional persisted fields
+      recipeDescription,
+      productImageUrl,
+      selectedCategoryId,
+      ingredientStatements,
+      allergenData,
       timestamp: Date.now()
     };
     
     try {
-      localStorage.setItem(RECIPE_STATE_CACHE_KEY, JSON.stringify(currentState));
+      localStorage.setItem(getRecipeCacheKey(), JSON.stringify(currentState));
     } catch (error) {
       console.warn('Failed to save recipe state to cache:', error);
     }
@@ -376,7 +387,7 @@ export default function ProductForm() {
 
   const loadStateFromCache = () => {
     try {
-      const cachedState = localStorage.getItem(RECIPE_STATE_CACHE_KEY);
+      const cachedState = localStorage.getItem(getRecipeCacheKey());
       if (cachedState) {
         const parsedState = JSON.parse(cachedState);
         
@@ -386,23 +397,60 @@ export default function ProductForm() {
           return parsedState;
         } else {
           // Clear old cache
-          localStorage.removeItem(RECIPE_STATE_CACHE_KEY);
+          localStorage.removeItem(getRecipeCacheKey());
         }
       }
     } catch (error) {
       console.warn('Failed to load recipe state from cache:', error);
-      localStorage.removeItem(RECIPE_STATE_CACHE_KEY);
+      localStorage.removeItem(getRecipeCacheKey());
     }
     return null;
   };
 
   const clearStateCache = () => {
     try {
-      localStorage.removeItem(RECIPE_STATE_CACHE_KEY);
+      localStorage.removeItem(getRecipeCacheKey());
     } catch (error) {
       console.warn('Failed to clear recipe state cache:', error);
     }
   };
+
+  // Autosave to localStorage (debounced)
+  useEffect(() => {
+    const t = setTimeout(() => {
+      saveStateToCache();
+    }, 300);
+    return () => clearTimeout(t);
+  }, [
+    recipeName,
+    recipeDescription,
+    addedIngredients,
+    isRecipeCreated,
+    searchQuery,
+    hasSearched,
+    searchResults,
+    totalResults,
+    currentPage,
+    servingsPerContainer,
+    servingSizeWeight,
+    servingSizeNumber,
+    labelSetupMode,
+    netWeightPerPackage,
+    servingsPerPackage,
+    productImageUrl,
+    selectedCategoryId,
+    ingredientStatements,
+    allergenData
+  ]);
+
+  // Persist on page exit/refresh
+  useEffect(() => {
+    const onBeforeUnload = () => {
+      saveStateToCache();
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, []);
 
   // Initialize state from cache on component mount and handle direct navigation
   useEffect(() => {
@@ -839,6 +887,13 @@ export default function ProductForm() {
         setNetWeightPerPackage(cachedState.netWeightPerPackage || 100);
         setServingsPerPackage(cachedState.servingsPerPackage || 1);
         
+        // Restore additional persisted fields
+        if (cachedState.recipeDescription !== undefined) setRecipeDescription(cachedState.recipeDescription || '');
+        if (cachedState.productImageUrl !== undefined) setProductImageUrl(cachedState.productImageUrl || '');
+        if (cachedState.selectedCategoryId !== undefined) setSelectedCategoryId(cachedState.selectedCategoryId || null);
+        if (cachedState.ingredientStatements) setIngredientStatements(cachedState.ingredientStatements);
+        if (cachedState.allergenData) setAllergenData(cachedState.allergenData);
+        
         // Restore ingredient names tracking set
         if (cachedState.addedIngredients) {
           const ingredientNames = new Set<string>(
@@ -847,8 +902,8 @@ export default function ProductForm() {
           setAddedIngredientNames(ingredientNames);
         }
         
-        // Clear cache after successful restoration
-        clearStateCache();
+        // Keep cache after successful restoration to persist across refresh
+        // clearStateCache();
       } else {
         // For new recipes, automatically create recipe when user starts entering name
         if (location.pathname === '/products/new' && !isRecipeCreated) {
@@ -2240,8 +2295,8 @@ export default function ProductForm() {
           console.warn('Failed to load progress, but recipe was created:', progressError);
         }
         
-        // Clear any existing cache to prevent conflicts
-        clearStateCache();
+        // Keep cache to persist across refreshes of new recipe flow
+        // clearStateCache();
       } else {
         const errorMessage = ('error' in responseData ? responseData.error : null) ||
                             ('message' in responseData ? responseData.message : null) ||
@@ -2374,6 +2429,7 @@ export default function ProductForm() {
     
     // Navigate to the custom ingredient page with return URL
     const currentPath = location.pathname;
+    saveStateToCache();
     navigate(`/ingredients/create?returnTo=${encodeURIComponent(currentPath)}`);
   };
 
@@ -3059,6 +3115,7 @@ export default function ProductForm() {
                       if (tab.id === 'label') {
                         // Navigate to the nutrition label page with current data and return info
                         console.log('🔍 Navigation Debug - Navigating to custom label page');
+                        saveStateToCache();
                         navigate('/nutrition-label', {
                           state: {
                             nutritionData: nutritionData,
@@ -4498,6 +4555,7 @@ export default function ProductForm() {
                                       onClick={() => {
                                         // Navigate to QR code page with current recipe auto-selected
                                         console.log('🔍 Navigation Debug - Navigating to QR codes page with productId:', currentRecipe?.id || productId);
+                                        saveStateToCache();
                                         navigate('/qr-codes', {
                                           state: {
                                             productId: currentRecipe?.id || productId,
@@ -4658,10 +4716,11 @@ export default function ProductForm() {
           <div className="max-w-2xl mx-auto">
             <Card>
               <CardHeader className="text-center">
-                <CardTitle className="text-2xl">Create New Recipe</CardTitle>
-                <p className="text-gray-600">Start by giving your recipe a name</p>
+                {/* Legacy modal removed: title */}
+                {/* Legacy modal removed: subtitle */}
               </CardHeader>
-              <CardContent className="space-y-6">
+              {/* Legacy modal content hidden */}
+          <CardContent className="hidden">
                 <div className="space-y-2">
                   <Label htmlFor="newRecipeName">Recipe Name</Label>
                   <Input
