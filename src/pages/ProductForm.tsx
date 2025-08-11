@@ -4708,12 +4708,10 @@ export default function ProductForm() {
             </div>
           )}
         </div>
+      ) : null}
 
-
-      ) }
-
-      {/* Duplicate Ingredient Warning Dialog */}
-      <Dialog open={isDuplicateDialogOpen} onOpenChange={setIsDuplicateDialogOpen}>
+        {/* Duplicate Ingredient Warning Dialog */}
+        <Dialog open={isDuplicateDialogOpen} onOpenChange={setIsDuplicateDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>⚠️ Duplicate Ingredient Detected</DialogTitle>
