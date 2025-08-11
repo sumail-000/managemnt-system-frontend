@@ -254,33 +254,21 @@ export default function Dashboard() {
                 Create New Recipe
               </Link>
             </Button>
-            <Button 
-              variant="outline" 
-              className="group/btn justify-start h-12 border-border/50 hover:border-accent/50 hover:bg-accent/5 transition-all duration-200" 
+            <Button
+              variant="outline"
+              className="group/btn justify-start h-12 border-border/50 hover:border-indigo-400/50 hover:bg-indigo-400/5 transition-all duration-200"
               asChild
-              disabled={membershipInfo.name === 'Basic'}
             >
-              <Link to="/nutrition">
-                <div className="p-1.5 rounded-md bg-gradient-to-br from-blue-100 to-blue-50 mr-3 group-hover/btn:from-blue-200 group-hover/btn:to-blue-100 transition-all">
-                  <BarChart3 className="w-4 h-4 text-blue-600" />
+              <Link to="/categories">
+                <div className="p-1.5 rounded-md bg-gradient-to-br from-indigo-100 to-indigo-50 mr-3 group-hover/btn:from-indigo-200 group-hover/btn:to-indigo-100 transition-all">
+                  <Package className="w-4 h-4 text-indigo-600" />
                 </div>
-                Analyze Nutrition
-                {membershipInfo.name === 'Basic' && (
-                  <Badge variant="secondary" className="ml-auto bg-gradient-to-r from-amber-100 to-amber-50 text-amber-700">Pro+</Badge>
-                )}
+                Manage Category
               </Link>
             </Button>
-            <Button variant="outline" className="group/btn justify-start h-12 border-border/50 hover:border-purple-400/50 hover:bg-purple-400/5 transition-all duration-200" asChild>
-              <Link to="/labels">
-                <div className="p-1.5 rounded-md bg-gradient-to-br from-purple-100 to-purple-50 mr-3 group-hover/btn:from-purple-200 group-hover/btn:to-purple-100 transition-all">
-                  <FileText className="w-4 h-4 text-purple-600" />
-                </div>
-                Generate Label
-              </Link>
-            </Button>
-            <Button 
-              variant="outline" 
-              className="group/btn justify-start h-12 border-border/50 hover:border-orange-400/50 hover:bg-orange-400/5 transition-all duration-200" 
+            <Button
+              variant="outline"
+              className="group/btn justify-start h-12 border-border/50 hover:border-orange-400/50 hover:bg-orange-400/5 transition-all duration-200"
               asChild
               disabled={membershipInfo.name === 'Basic'}
             >

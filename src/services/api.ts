@@ -233,7 +233,13 @@ export const authAPI = {
     new_password_confirmation: string;
   }) => {
     console.log('[AUTH_API] Change password request initiated');
-    return api.post('/auth/change-password', data);
+    // Map frontend fields to typical Laravel expectation: password + password_confirmation
+    const payload = {
+      current_password: data.current_password,
+      password: data.new_password,
+      password_confirmation: data.new_password_confirmation,
+    };
+    return api.post('/auth/change-password', payload);
   },
   
   deleteAccount: (data: { password: string; reason?: string }) => {

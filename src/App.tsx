@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import ProtectedRoute from './components/ProtectedRoute'
 import { DashboardLayout } from './components/DashboardLayout'
 import { AuthProvider } from './contexts/AuthContext'
+import { NotificationsProvider } from './contexts/NotificationsContext'
 import { StripeProvider } from './components/providers/StripeProvider'
 import { Toaster } from './components/ui/toaster'
 import LandingPage from "./pages/LandingPage";
@@ -63,6 +64,7 @@ const App = () => {
     <StripeProvider>
       <Router>
         <AuthProvider>
+          <NotificationsProvider>
       <Routes>
       {/* Public Routes */}
       <Route path="/" element={<LandingPage />} />
@@ -252,6 +254,7 @@ const App = () => {
       <Route path="*" element={<NotFound />} />
       </Routes>
         <Toaster />
+        </NotificationsProvider>
         </AuthProvider>
       </Router>
     </StripeProvider>

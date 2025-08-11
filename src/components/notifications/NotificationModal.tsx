@@ -34,120 +34,75 @@ import {
   Info,
   CheckCircle
 } from "lucide-react"
+import { useNotifications } from "@/contexts/NotificationsContext"
+import api from "@/services/api"
 
 interface NotificationModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-const mockNotifications = [
-  {
-    id: 1,
-    title: "New product added",
-    message: "Premium Olive Oil has been added to your inventory",
-    type: "info",
-    read: false,
-    timestamp: "2 minutes ago",
-    date: "2024-01-15"
-  },
-  {
-    id: 2,
-    title: "Label generated successfully",
-    message: "Your nutrition label for Organic Greek Yogurt is ready",
-    type: "success",
-    read: false,
-    timestamp: "1 hour ago",
-    date: "2024-01-15"
-  },
-  {
-    id: 3,
-    title: "Compliance alert",
-    message: "Please review allergen information for Margherita Pizza",
-    type: "warning",
-    read: false,
-    timestamp: "3 hours ago",
-    date: "2024-01-15"
-  },
-  {
-    id: 4,
-    title: "Weekly report available",
-    message: "Your product analytics report for this week is ready",
-    type: "info",
-    read: true,
-    timestamp: "1 day ago",
-    date: "2024-01-14"
-  },
-  {
-    id: 5,
-    title: "System maintenance",
-    message: "Scheduled maintenance will occur on Sunday 2:00 AM - 4:00 AM",
-    type: "warning",
-    read: true,
-    timestamp: "2 days ago",
-    date: "2024-01-13"
-  },
-  {
-    id: 6,
-    title: "Payment successful",
-    message: "Your Pro subscription has been renewed successfully",
-    type: "success",
-    read: true,
-    timestamp: "3 days ago",
-    date: "2024-01-12"
+// Map backend notification type => UI category and icon color
+function mapTypeToCategory(type?: string) {
+  const t = type || "system.info"
+  if (t.endsWith(".created")) return "success" as const
+  if (t.startsWith("security.")) return "warning" as const
+  if (t === "system.info") return "info" as const
+  return "info" as const
+}
+
+function getTypeIcon(category: "success" | "warning" | "info") {
+  switch (category) {
+    case 'success': return <CheckCircle className="h-4 w-4 text-green-500" />
+    case 'warning': return <AlertTriangle className="h-4 w-4 text-yellow-500" />
+    case 'info': default: return <Info className="h-4 w-4 text-blue-500" />
   }
-]
+}
+
+function getTypeBadgeClass(category: "success" | "warning" | "info") {
+  const colors = {
+    success: "bg-green-100 text-green-800",
+    warning: "bg-yellow-100 text-yellow-800",
+    info: "bg-blue-100 text-blue-800",
+  }
+  return colors[category]
+}
 
 export function NotificationModal({ open, onOpenChange }: NotificationModalProps) {
-  const [notifications, setNotifications] = useState(mockNotifications)
+  const { notifications, markAsRead, markAllAsRead, refresh } = useNotifications()
   const [filter, setFilter] = useState("all")
   const [searchQuery, setSearchQuery] = useState("")
 
-  const filteredNotifications = notifications.filter(notification => {
-    const matchesFilter = filter === "all" || 
-      (filter === "unread" && !notification.read) || 
-      (filter === "read" && notification.read) ||
-      (filter === notification.type)
-    
-    const matchesSearch = notification.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      notification.message.toLowerCase().includes(searchQuery.toLowerCase())
-    
+  const filteredNotifications = notifications.filter((n) => {
+    const category = mapTypeToCategory(n.type)
+    const matchesFilter = filter === "all" ||
+      (filter === "unread" && !n.read_at) ||
+      (filter === "read" && !!n.read_at) ||
+      (filter === category)
+
+    const q = searchQuery.trim().toLowerCase()
+    const matchesSearch = !q ||
+      n.title?.toLowerCase().includes(q) ||
+      n.message?.toLowerCase().includes(q)
+
     return matchesFilter && matchesSearch
   })
 
-  const markAsRead = (id: number) => {
-    setNotifications(prev => 
-      prev.map(notif => 
-        notif.id === id ? { ...notif, read: true } : notif
-      )
-    )
-  }
-
-  const markAllAsRead = () => {
-    setNotifications(prev => 
-      prev.map(notif => ({ ...notif, read: true }))
-    )
-  }
-
-  const deleteNotification = (id: number) => {
-    setNotifications(prev => prev.filter(notif => notif.id !== id))
-  }
-
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case 'success': return <CheckCircle className="h-4 w-4 text-green-500" />
-      case 'warning': return <AlertTriangle className="h-4 w-4 text-yellow-500" />
-      case 'info': return <Info className="h-4 w-4 text-blue-500" />
-      default: return <Bell className="h-4 w-4 text-gray-500" />
+  const handleMarkAsRead = async (id: string) => {
+    try {
+      await markAsRead(id)
+    } catch {
+      // ignore UI errors; context handles API fallback
     }
   }
 
-  const getTypeBadge = (type: string) => {
-    const colors = {
-      success: "bg-green-100 text-green-800",
-      warning: "bg-yellow-100 text-yellow-800",
-      info: "bg-blue-100 text-blue-800"
+  const handleDelete = async (id: string) => {
+    try {
+      await api.delete(`/user/notifications/${id}`)
+      await refresh()
+    } catch {
+      // noop; could add toast in future
     }
-    return colors[type as keyof typeof colors] || "bg-gray-100 text-gray-800"
   }
 
   return (
@@ -191,7 +146,7 @@ export function NotificationModal({ open, onOpenChange }: NotificationModalProps
                 </SelectContent>
               </Select>
             </div>
-            <Button onClick={markAllAsRead} variant="outline" size="sm">
+            <Button onClick={async () => { await markAllAsRead() }} variant="outline" size="sm">
               <CheckCircle2 className="h-4 w-4 mr-2" />
               Mark All Read
             </Button>
@@ -212,61 +167,64 @@ export function NotificationModal({ open, onOpenChange }: NotificationModalProps
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredNotifications.map((notification) => (
-                    <TableRow 
-                      key={notification.id}
-                      className={`${!notification.read ? 'bg-accent/20' : ''}`}
-                    >
-                      <TableCell>
-                        {!notification.read && (
-                          <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          {getTypeIcon(notification.type)}
-                          <Badge className={getTypeBadge(notification.type)}>
-                            {notification.type}
-                          </Badge>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-medium">{notification.title}</div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm text-muted-foreground max-w-xs truncate">
-                          {notification.message}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-xs text-muted-foreground">
-                          {notification.timestamp}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          {!notification.read && (
+                  {filteredNotifications.map((n) => {
+                    const category = mapTypeToCategory(n.type)
+                    return (
+                      <TableRow 
+                        key={n.id}
+                        className={`${!n.read_at ? 'bg-accent/20' : ''}`}
+                      >
+                        <TableCell>
+                          {!n.read_at && (
+                            <div className="w-2 h-2 bg-blue-500 rounded-full" />
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {getTypeIcon(category)}
+                            <Badge className={getTypeBadgeClass(category)}>
+                              {category}
+                            </Badge>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-medium">{n.title}</div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm text-muted-foreground max-w-xs truncate">
+                            {n.message}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-xs text-muted-foreground">
+                            {new Date(n.created_at).toLocaleString()}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            {!n.read_at && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleMarkAsRead(String(n.id))}
+                                className="h-8 w-8 p-0"
+                              >
+                                <CheckCircle2 className="h-4 w-4" />
+                              </Button>
+                            )}
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => markAsRead(notification.id)}
-                              className="h-8 w-8 p-0"
+                              onClick={() => handleDelete(String(n.id))}
+                              className="h-8 w-8 p-0 text-destructive hover:text-destructive"
                             >
-                              <CheckCircle2 className="h-4 w-4" />
+                              <Trash2 className="h-4 w-4" />
                             </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => deleteNotification(notification.id)}
-                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
             </div>

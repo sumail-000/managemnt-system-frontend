@@ -8,12 +8,13 @@ import { Card, CardContent } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
 import { authAPI } from "@/services/api"
 import { ArrowLeft, Eye, EyeOff, Loader2, Mail, CheckCircle, Shield } from "lucide-react"
-
+import { useNotifications } from "@/contexts/NotificationsContext"
 type ResetStep = 'email' | 'otp' | 'password'
 
 export default function ResetPassword() {
   const navigate = useNavigate()
   const { toast } = useToast()
+  const { addNotification } = useNotifications()
   const [searchParams] = useSearchParams()
   const [currentStep, setCurrentStep] = useState<ResetStep>('email')
   const [isLoading, setIsLoading] = useState(false)
@@ -227,7 +228,21 @@ export default function ResetPassword() {
         title: "Password reset successful!",
         description: "You can now login with your new password.",
       })
-      
+
+      // Record security notification; stores pending by email when not authenticated
+      try {
+        await addNotification(
+          {
+            type: "security.password_reset",
+            title: "Password changed",
+            message: `Password was reset for ${email}`,
+            metadata: { email },
+            link: "/login"
+          },
+          { userEmail: email }
+        )
+      } catch {}
+
       navigate("/login")
     } catch (error: any) {
       console.error('[RESET_PASSWORD] Password reset failed', {

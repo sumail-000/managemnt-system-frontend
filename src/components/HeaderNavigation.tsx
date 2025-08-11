@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { NavLink, useLocation } from "react-router-dom"
+import { NavLink, useLocation, useNavigate } from "react-router-dom"
 import { 
   Package, 
   Plus, 
@@ -47,6 +47,7 @@ import { getAvatarUrl } from "@/utils/storage"
 import { cn } from "@/lib/utils"
 import { NotificationModal } from "@/components/notifications/NotificationModal"
 import { NotificationSettings } from "@/components/notifications/NotificationSettings"
+import { useNotifications } from "@/contexts/NotificationsContext"
 
 const coreNavItems = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -76,6 +77,8 @@ export function HeaderNavigation() {
   const [notificationModalOpen, setNotificationModalOpen] = useState(false)
   const [notificationSettingsOpen, setNotificationSettingsOpen] = useState(false)
   const location = useLocation()
+  const navigate = useNavigate()
+  const { notifications, unreadCount, markAllAsRead, markAsRead, refresh } = useNotifications()
 
   const handleLogout = async () => {
     try {
@@ -246,20 +249,27 @@ export function HeaderNavigation() {
           </DropdownMenu>
 
           {/* Notifications */}
-          <DropdownMenu>
+          <DropdownMenu onOpenChange={(open) => { if (open) { try { refresh() } catch {} } }}>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="relative hover:bg-accent/50 transition-colors">
                 <Bell className="h-4 w-4" />
-                <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 transition-all duration-200">
-                  3
-                </Badge>
+                {unreadCount > 0 && (
+                  <Badge className="absolute -top-1 -right-1 min-h-5 min-w-5 h-5 w-auto px-1.5 flex items-center justify-center p-0 text-[10px] bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 transition-all duration-200">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </Badge>
+                )}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-80 bg-background border border-border shadow-lg z-50">
               <div className="flex items-center justify-between p-4 border-b border-border">
                 <DropdownMenuLabel className="text-base font-semibold">Notifications</DropdownMenuLabel>
                 <div className="flex gap-2">
-                  <Button variant="ghost" size="sm" className="text-xs h-7 px-2" onClick={() => setNotificationModalOpen(true)}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs h-7 px-2"
+                    onClick={() => { markAllAsRead() }}
+                  >
                     Mark all read
                   </Button>
                   <Button variant="ghost" size="sm" className="text-xs h-7 px-2" onClick={() => setNotificationSettingsOpen(true)}>
@@ -269,38 +279,43 @@ export function HeaderNavigation() {
               </div>
               <div className="max-h-96 overflow-y-auto">
                 <div className="p-2 space-y-1">
-                  <div className="flex items-start gap-3 p-3 rounded-lg hover:bg-accent/50 transition-colors cursor-pointer">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">New recipe added</p>
-                      <p className="text-xs text-muted-foreground">Premium Olive Oil has been added to your recipes</p>
-                      <p className="text-xs text-muted-foreground mt-1">2 minutes ago</p>
+                  {notifications.length === 0 ? (
+                    <div className="p-6 text-center text-sm text-muted-foreground">
+                      <Bell className="h-6 w-6 mx-auto mb-2 opacity-60" />
+                      No notifications
                     </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-3 rounded-lg hover:bg-accent/50 transition-colors cursor-pointer">
-                    <div className="w-2 h-2 bg-green-500 rounded-full mt-2 flex-shrink-0"></div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">Label generated successfully</p>
-                      <p className="text-xs text-muted-foreground">Your nutrition label for Organic Greek Yogurt is ready</p>
-                      <p className="text-xs text-muted-foreground mt-1">1 hour ago</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-3 rounded-lg hover:bg-accent/50 transition-colors cursor-pointer">
-                    <div className="w-2 h-2 bg-orange-500 rounded-full mt-2 flex-shrink-0"></div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">Compliance alert</p>
-                      <p className="text-xs text-muted-foreground">Please review allergen information for Margherita Pizza</p>
-                      <p className="text-xs text-muted-foreground mt-1">3 hours ago</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-3 rounded-lg hover:bg-accent/50 transition-colors cursor-pointer opacity-60">
-                    <div className="w-2 h-2 bg-muted rounded-full mt-2 flex-shrink-0"></div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">Weekly report available</p>
-                      <p className="text-xs text-muted-foreground">Your recipe analytics report for this week is ready</p>
-                      <p className="text-xs text-muted-foreground mt-1">1 day ago</p>
-                    </div>
-                  </div>
+                  ) : (
+                    notifications.slice(0, 10).map((n) => (
+                      <div
+                        key={n.id}
+                        className={cn(
+                          "flex items-start gap-3 p-3 rounded-lg hover:bg-accent/50 transition-colors cursor-pointer",
+                          !n.read_at ? "" : "opacity-80"
+                        )}
+                        onClick={() => {
+                          markAsRead(n.id)
+                          if (n.link) navigate(n.link)
+                        }}
+                      >
+                        <div
+                          className={cn(
+                            "w-2 h-2 rounded-full mt-2 flex-shrink-0",
+                            n.type === "product.created" ? "bg-blue-500" :
+                            n.type === "qr.created" ? "bg-green-500" :
+                            n.type === "security.password_reset" ? "bg-orange-500" :
+                            "bg-muted"
+                          )}
+                        ></div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium">{n.title}</p>
+                          <p className="text-xs text-muted-foreground truncate">{n.message}</p>
+                          <p className="text-[10px] text-muted-foreground mt-1">
+                            {new Date(n.created_at).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
               <div className="p-3 border-t border-border">

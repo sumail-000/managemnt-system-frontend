@@ -83,13 +83,15 @@ import {
   clearAllIngredientsFromBackend
 } from '@/utils/backendSync';
 
-// AddedIngredient interface is now imported from @/utils/nutritionCalculations
+ // AddedIngredient interface is now imported from @/utils/nutritionCalculations
+import { useNotifications } from '@/contexts/NotificationsContext'
 
 export default function ProductForm() {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
   const { id: productId } = useParams();
+  const { addNotification } = useNotifications();
   const isEditMode = Boolean(productId);
   
   // Progressive recipe state
@@ -2214,7 +2216,18 @@ export default function ProductForm() {
         // Set all states immediately after successful creation
         setCurrentRecipe(recipeData);
         setIsRecipeCreated(true);
-        
+
+        // Notify activity center: recipe created
+        try {
+          await addNotification({
+            type: "product.created",
+            title: "Recipe created",
+            message: recipeName ? `Recipe "${recipeName.trim()}" created` : "Recipe created",
+            metadata: { product_id: recipeData.id },
+            link: `/products/${recipeData.id}/edit`
+          })
+        } catch {}
+
         forceProgressUpdate();
         
         // Get initial progress
