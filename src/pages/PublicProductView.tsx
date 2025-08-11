@@ -101,8 +101,11 @@ export default function PublicProductView() {
       try {
         // Get the product directly by ID from the public endpoint
         const response = await productsAPI.getPublicById(id)
-        // Transform the API response to Product type
-        const productData = transformProductFromAPI(response)
+        console.log('API Response:', response)
+        
+        // The API returns {success: true, data: {...}}, so we need response.data
+        const productData = transformProductFromAPI(response.data)
+        console.log('Transformed Product:', productData)
         setProduct(productData)
         
 
@@ -161,15 +164,36 @@ export default function PublicProductView() {
 
 
 
-  // Format ingredients for simple display (fallback)
+  // Format ingredients from ingredients_data (new system)
   const formatIngredients = () => {
+    // First try the new ingredients_data format
+    if (product.nutrition_data?.ingredients_data && Array.isArray(product.nutrition_data.ingredients_data)) {
+      return product.nutrition_data.ingredients_data.map((ing: any) => {
+        const quantity = ing.quantity || ''
+        const unit = ing.unit || ''
+        const displayQuantity = quantity ? `${quantity} ${unit}` : ''
+        return displayQuantity ? `${displayQuantity} ${ing.name}` : ing.name
+      })
+    }
+    
+    // Try direct ingredients_data on product
+    if (product.ingredients_data && Array.isArray(product.ingredients_data)) {
+      return product.ingredients_data.map((ing: any) => {
+        const quantity = ing.quantity || ''
+        const unit = ing.unit || ''
+        const displayQuantity = quantity ? `${quantity} ${unit}` : ''
+        return displayQuantity ? `${displayQuantity} ${ing.name}` : ing.name
+      })
+    }
+    
+    // Fallback to old ingredients format
     if (product.ingredients && product.ingredients.length > 0) {
       return product.ingredients.map((ing: any) => {
         const pivotData = ing.pivot || {}
         const quantity = pivotData.amount || ing.quantity || ''
         const unit = pivotData.unit || ing.unit || ''
-        const displayQuantity = quantity ? `${quantity}${unit}` : ''
-        return displayQuantity ? `${ing.name} (${displayQuantity})` : ing.name
+        const displayQuantity = quantity ? `${quantity} ${unit}` : ''
+        return displayQuantity ? `${displayQuantity} ${ing.name}` : ing.name
       })
     } else if (product.ingredient_notes && product.ingredient_notes.trim()) {
       return product.ingredient_notes.split('\n').filter(line => line.trim())
@@ -177,7 +201,108 @@ export default function PublicProductView() {
     return []
   }
 
+  // Get nutrition information
+  const getNutritionInfo = () => {
+    if (product.nutrition_data) {
+      console.log('=== NUTRITION DATA DEBUG ===')
+      console.log('Full nutrition_data:', product.nutrition_data)
+      console.log('Calories:', product.nutrition_data.calories)
+      console.log('Macronutrients:', product.nutrition_data.macronutrients)
+      console.log('Vitamins/Minerals:', product.nutrition_data.vitamins_minerals)
+      console.log('Daily Values:', product.nutrition_data.daily_values)
+      console.log('Health labels:', product.nutrition_data.health_labels)
+      console.log('=== END DEBUG ===')
+      
+      // Convert the API format to the expected format
+      const macros = product.nutrition_data.macronutrients || {}
+      const vitamins = product.nutrition_data.vitamins_minerals || {}
+      const dailyVals = product.nutrition_data.daily_values || {}
+      
+      // Create totalNutrients object in Edamam format
+      const totalNutrients = {
+        // Macronutrients
+        FAT: { quantity: macros.total_fat || 0, unit: 'g', label: 'Total Fat' },
+        FASAT: { quantity: macros.saturated_fat || 0, unit: 'g', label: 'Saturated Fat' },
+        FATRN: { quantity: macros.trans_fat || 0, unit: 'g', label: 'Trans Fat' },
+        CHOLE: { quantity: macros.cholesterol || 0, unit: 'mg', label: 'Cholesterol' },
+        NA: { quantity: macros.sodium || 0, unit: 'mg', label: 'Sodium' },
+        CHOCDF: { quantity: macros.total_carbohydrate || 0, unit: 'g', label: 'Total Carbohydrate' },
+        FIBTG: { quantity: macros.dietary_fiber || 0, unit: 'g', label: 'Dietary Fiber' },
+        SUGAR: { quantity: macros.total_sugars || 0, unit: 'g', label: 'Total Sugars' },
+        PROCNT: { quantity: macros.protein || 0, unit: 'g', label: 'Protein' },
+        
+        // Vitamins & Minerals
+        VITD: { quantity: vitamins.vitamin_d || 0, unit: 'µg', label: 'Vitamin D' },
+        CA: { quantity: vitamins.calcium || 0, unit: 'mg', label: 'Calcium' },
+        FE: { quantity: vitamins.iron || 0, unit: 'mg', label: 'Iron' },
+        K: { quantity: vitamins.potassium || 0, unit: 'mg', label: 'Potassium' },
+        MG: { quantity: vitamins.magnesium || 0, unit: 'mg', label: 'Magnesium' },
+        
+        // Add more vitamins/minerals as available in your API
+        VITA_RAE: { quantity: vitamins.vitamin_a || 0, unit: 'µg', label: 'Vitamin A' },
+        VITC: { quantity: vitamins.vitamin_c || 0, unit: 'mg', label: 'Vitamin C' },
+        TOCPHA: { quantity: vitamins.vitamin_e || 0, unit: 'mg', label: 'Vitamin E' },
+        VITK1: { quantity: vitamins.vitamin_k || 0, unit: 'µg', label: 'Vitamin K' },
+        THIA: { quantity: vitamins.thiamin || 0, unit: 'mg', label: 'Thiamin' },
+        RIBF: { quantity: vitamins.riboflavin || 0, unit: 'mg', label: 'Riboflavin' },
+        NIA: { quantity: vitamins.niacin || 0, unit: 'mg', label: 'Niacin' },
+        VITB6A: { quantity: vitamins.vitamin_b6 || 0, unit: 'mg', label: 'Vitamin B6' },
+        FOLDFE: { quantity: vitamins.folate || 0, unit: 'µg', label: 'Folate' },
+        VITB12: { quantity: vitamins.vitamin_b12 || 0, unit: 'µg', label: 'Vitamin B12' },
+        P: { quantity: vitamins.phosphorus || 0, unit: 'mg', label: 'Phosphorus' },
+        ZN: { quantity: vitamins.zinc || 0, unit: 'mg', label: 'Zinc' },
+        SE: { quantity: vitamins.selenium || 0, unit: 'µg', label: 'Selenium' }
+      }
+      
+      // Create totalDaily object
+      const totalDaily = {
+        FAT: { quantity: dailyVals.total_fat_dv || 0, unit: '%' },
+        FASAT: { quantity: dailyVals.saturated_fat_dv || 0, unit: '%' },
+        CHOLE: { quantity: dailyVals.cholesterol_dv || 0, unit: '%' },
+        NA: { quantity: dailyVals.sodium_dv || 0, unit: '%' },
+        CHOCDF: { quantity: dailyVals.total_carbohydrate_dv || 0, unit: '%' },
+        FIBTG: { quantity: dailyVals.dietary_fiber_dv || 0, unit: '%' },
+        PROCNT: { quantity: dailyVals.protein_dv || 0, unit: '%' },
+        VITD: { quantity: dailyVals.vitamin_d_dv || 0, unit: '%' },
+        CA: { quantity: dailyVals.calcium_dv || 0, unit: '%' },
+        FE: { quantity: dailyVals.iron_dv || 0, unit: '%' },
+        K: { quantity: dailyVals.potassium_dv || 0, unit: '%' },
+        MG: { quantity: dailyVals.magnesium_dv || 0, unit: '%' }
+      }
+      
+      return {
+        calories: product.nutrition_data.calories || 0,
+        healthLabels: product.nutrition_data.health_labels || [],
+        dietLabels: product.nutrition_data.diet_labels || [],
+        totalNutrients: totalNutrients,
+        totalDaily: totalDaily,
+        totalWeight: product.nutrition_data.total_weight || 0,
+        yield: product.nutrition_data.yield || 1
+      }
+    }
+    console.log('No nutrition_data found in product!')
+    return null
+  }
+
   const ingredients = formatIngredients()
+  const nutritionInfo = getNutritionInfo()
+
+  // Helper function to get nutrient value safely
+  const getNutrientValue = (nutrientKey: string, totalNutrients: any) => {
+    const nutrient = totalNutrients[nutrientKey]
+    if (!nutrient) return { quantity: 0, unit: 'g', label: nutrientKey }
+    return {
+      quantity: nutrient.quantity || 0,
+      unit: nutrient.unit || 'g',
+      label: nutrient.label || nutrientKey
+    }
+  }
+
+  // Helper function to get daily value safely
+  const getDailyValue = (nutrientKey: string, totalDaily: any) => {
+    const daily = totalDaily[nutrientKey]
+    return daily ? Math.round(daily.quantity || 0) : 0
+  }
 
   return (
     <div className="min-h-screen bg-white">
@@ -414,13 +539,319 @@ export default function PublicProductView() {
             </div>
           </section>
 
+          {/* Nutrition Facts Section */}
+          {nutritionInfo && (
+            <section className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+              {/* FDA-Style Nutrition Facts Label */}
+              <div className="bg-black text-white px-6 py-3">
+                <h2 className="text-xl font-bold">Nutrition Facts</h2>
+                <p className="text-sm opacity-90">Per serving</p>
+              </div>
+              
+              <div className="p-6">
+                {/* Calories Section */}
+                <div className="border-b-4 border-black pb-2 mb-4">
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-2xl font-bold">Calories</span>
+                    <span className="text-3xl font-bold">{nutritionInfo.calories}</span>
+                  </div>
+                </div>
+
+                {/* Daily Value Header */}
+                <div className="text-right text-sm font-semibold mb-2 border-b border-gray-300 pb-1">
+                  % Daily Value*
+                </div>
+
+                {/* Macronutrients Table */}
+                <div className="space-y-1 text-sm">
+                  {/* Total Fat */}
+                  <div className="flex justify-between border-b border-gray-200 py-1">
+                    <span className="font-semibold">
+                      Total Fat {Math.round(getNutrientValue('FAT', nutritionInfo.totalNutrients).quantity * 100) / 100}{getNutrientValue('FAT', nutritionInfo.totalNutrients).unit}
+                    </span>
+                    <span className="font-semibold">
+                      {getDailyValue('FAT', nutritionInfo.totalDaily)}%
+                    </span>
+                  </div>
+
+                  {/* Saturated Fat */}
+                  <div className="flex justify-between border-b border-gray-200 py-1 pl-4">
+                    <span>
+                      Saturated Fat {Math.round(getNutrientValue('FASAT', nutritionInfo.totalNutrients).quantity * 100) / 100}{getNutrientValue('FASAT', nutritionInfo.totalNutrients).unit}
+                    </span>
+                    <span className="font-semibold">
+                      {getDailyValue('FASAT', nutritionInfo.totalDaily)}%
+                    </span>
+                  </div>
+
+                  {/* Trans Fat */}
+                  <div className="flex justify-between border-b border-gray-200 py-1 pl-4">
+                    <span>
+                      Trans Fat {Math.round(getNutrientValue('FATRN', nutritionInfo.totalNutrients).quantity * 100) / 100}{getNutrientValue('FATRN', nutritionInfo.totalNutrients).unit}
+                    </span>
+                    <span></span>
+                  </div>
+
+                  {/* Cholesterol */}
+                  <div className="flex justify-between border-b border-gray-200 py-1">
+                    <span className="font-semibold">
+                      Cholesterol {Math.round(getNutrientValue('CHOLE', nutritionInfo.totalNutrients).quantity * 100) / 100}{getNutrientValue('CHOLE', nutritionInfo.totalNutrients).unit}
+                    </span>
+                    <span className="font-semibold">
+                      {getDailyValue('CHOLE', nutritionInfo.totalDaily)}%
+                    </span>
+                  </div>
+
+                  {/* Sodium */}
+                  <div className="flex justify-between border-b border-gray-200 py-1">
+                    <span className="font-semibold">
+                      Sodium {Math.round(getNutrientValue('NA', nutritionInfo.totalNutrients).quantity * 100) / 100}{getNutrientValue('NA', nutritionInfo.totalNutrients).unit}
+                    </span>
+                    <span className="font-semibold">
+                      {getDailyValue('NA', nutritionInfo.totalDaily)}%
+                    </span>
+                  </div>
+
+                  {/* Total Carbohydrates */}
+                  <div className="flex justify-between border-b border-gray-200 py-1">
+                    <span className="font-semibold">
+                      Total Carbohydrate {Math.round(getNutrientValue('CHOCDF', nutritionInfo.totalNutrients).quantity * 100) / 100}{getNutrientValue('CHOCDF', nutritionInfo.totalNutrients).unit}
+                    </span>
+                    <span className="font-semibold">
+                      {getDailyValue('CHOCDF', nutritionInfo.totalDaily)}%
+                    </span>
+                  </div>
+
+                  {/* Dietary Fiber */}
+                  <div className="flex justify-between border-b border-gray-200 py-1 pl-4">
+                    <span>
+                      Dietary Fiber {Math.round(getNutrientValue('FIBTG', nutritionInfo.totalNutrients).quantity * 100) / 100}{getNutrientValue('FIBTG', nutritionInfo.totalNutrients).unit}
+                    </span>
+                    <span className="font-semibold">
+                      {getDailyValue('FIBTG', nutritionInfo.totalDaily)}%
+                    </span>
+                  </div>
+
+                  {/* Total Sugars */}
+                  <div className="flex justify-between border-b border-gray-200 py-1 pl-4">
+                    <span>
+                      Total Sugars {Math.round(getNutrientValue('SUGAR', nutritionInfo.totalNutrients).quantity * 100) / 100}{getNutrientValue('SUGAR', nutritionInfo.totalNutrients).unit}
+                    </span>
+                    <span></span>
+                  </div>
+
+                  {/* Added Sugars */}
+                  <div className="flex justify-between border-b border-gray-200 py-1 pl-8">
+                    <span>
+                      Added Sugars {Math.round(getNutrientValue('SUGAR_ADDED', nutritionInfo.totalNutrients).quantity * 100) / 100}{getNutrientValue('SUGAR_ADDED', nutritionInfo.totalNutrients).unit}
+                    </span>
+                    <span className="font-semibold">
+                      {getDailyValue('SUGAR_ADDED', nutritionInfo.totalDaily)}%
+                    </span>
+                  </div>
+
+                  {/* Protein */}
+                  <div className="flex justify-between border-b-4 border-black py-2">
+                    <span className="font-semibold">
+                      Protein {Math.round(getNutrientValue('PROCNT', nutritionInfo.totalNutrients).quantity * 100) / 100}{getNutrientValue('PROCNT', nutritionInfo.totalNutrients).unit}
+                    </span>
+                    <span className="font-semibold">
+                      {getDailyValue('PROCNT', nutritionInfo.totalDaily)}%
+                    </span>
+                  </div>
+                </div>
+
+                {/* Vitamins and Minerals Section */}
+                <div className="mt-4 space-y-1 text-sm">
+                  {/* Vitamin D */}
+                  <div className="flex justify-between border-b border-gray-200 py-1">
+                    <span>Vitamin D {Math.round(getNutrientValue('VITD', nutritionInfo.totalNutrients).quantity * 100) / 100}{getNutrientValue('VITD', nutritionInfo.totalNutrients).unit}</span>
+                    <span className="font-semibold">
+                      {getDailyValue('VITD', nutritionInfo.totalDaily)}%
+                    </span>
+                  </div>
+
+                  {/* Calcium */}
+                  <div className="flex justify-between border-b border-gray-200 py-1">
+                    <span>Calcium {Math.round(getNutrientValue('CA', nutritionInfo.totalNutrients).quantity * 100) / 100}{getNutrientValue('CA', nutritionInfo.totalNutrients).unit}</span>
+                    <span className="font-semibold">
+                      {getDailyValue('CA', nutritionInfo.totalDaily)}%
+                    </span>
+                  </div>
+
+                  {/* Iron */}
+                  <div className="flex justify-between border-b border-gray-200 py-1">
+                    <span>Iron {Math.round(getNutrientValue('FE', nutritionInfo.totalNutrients).quantity * 100) / 100}{getNutrientValue('FE', nutritionInfo.totalNutrients).unit}</span>
+                    <span className="font-semibold">
+                      {getDailyValue('FE', nutritionInfo.totalDaily)}%
+                    </span>
+                  </div>
+
+                  {/* Potassium */}
+                  <div className="flex justify-between border-b border-gray-200 py-1">
+                    <span>Potassium {Math.round(getNutrientValue('K', nutritionInfo.totalNutrients).quantity * 100) / 100}{getNutrientValue('K', nutritionInfo.totalNutrients).unit}</span>
+                    <span className="font-semibold">
+                      {getDailyValue('K', nutritionInfo.totalDaily)}%
+                    </span>
+                  </div>
+
+                  {/* Vitamin A */}
+                  <div className="flex justify-between border-b border-gray-200 py-1">
+                    <span>Vitamin A {Math.round(getNutrientValue('VITA_RAE', nutritionInfo.totalNutrients).quantity * 100) / 100}{getNutrientValue('VITA_RAE', nutritionInfo.totalNutrients).unit}</span>
+                    <span className="font-semibold">
+                      {getDailyValue('VITA_RAE', nutritionInfo.totalDaily)}%
+                    </span>
+                  </div>
+
+                  {/* Vitamin C */}
+                  <div className="flex justify-between border-b border-gray-200 py-1">
+                    <span>Vitamin C {Math.round(getNutrientValue('VITC', nutritionInfo.totalNutrients).quantity * 100) / 100}{getNutrientValue('VITC', nutritionInfo.totalNutrients).unit}</span>
+                    <span className="font-semibold">
+                      {getDailyValue('VITC', nutritionInfo.totalDaily)}%
+                    </span>
+                  </div>
+
+                  {/* Vitamin E */}
+                  <div className="flex justify-between border-b border-gray-200 py-1">
+                    <span>Vitamin E {Math.round(getNutrientValue('TOCPHA', nutritionInfo.totalNutrients).quantity * 100) / 100}{getNutrientValue('TOCPHA', nutritionInfo.totalNutrients).unit}</span>
+                    <span className="font-semibold">
+                      {getDailyValue('TOCPHA', nutritionInfo.totalDaily)}%
+                    </span>
+                  </div>
+
+                  {/* Vitamin K */}
+                  <div className="flex justify-between border-b border-gray-200 py-1">
+                    <span>Vitamin K {Math.round(getNutrientValue('VITK1', nutritionInfo.totalNutrients).quantity * 100) / 100}{getNutrientValue('VITK1', nutritionInfo.totalNutrients).unit}</span>
+                    <span className="font-semibold">
+                      {getDailyValue('VITK1', nutritionInfo.totalDaily)}%
+                    </span>
+                  </div>
+
+                  {/* Thiamin (B1) */}
+                  <div className="flex justify-between border-b border-gray-200 py-1">
+                    <span>Thiamin (B1) {Math.round(getNutrientValue('THIA', nutritionInfo.totalNutrients).quantity * 100) / 100}{getNutrientValue('THIA', nutritionInfo.totalNutrients).unit}</span>
+                    <span className="font-semibold">
+                      {getDailyValue('THIA', nutritionInfo.totalDaily)}%
+                    </span>
+                  </div>
+
+                  {/* Riboflavin (B2) */}
+                  <div className="flex justify-between border-b border-gray-200 py-1">
+                    <span>Riboflavin (B2) {Math.round(getNutrientValue('RIBF', nutritionInfo.totalNutrients).quantity * 100) / 100}{getNutrientValue('RIBF', nutritionInfo.totalNutrients).unit}</span>
+                    <span className="font-semibold">
+                      {getDailyValue('RIBF', nutritionInfo.totalDaily)}%
+                    </span>
+                  </div>
+
+                  {/* Niacin (B3) */}
+                  <div className="flex justify-between border-b border-gray-200 py-1">
+                    <span>Niacin (B3) {Math.round(getNutrientValue('NIA', nutritionInfo.totalNutrients).quantity * 100) / 100}{getNutrientValue('NIA', nutritionInfo.totalNutrients).unit}</span>
+                    <span className="font-semibold">
+                      {getDailyValue('NIA', nutritionInfo.totalDaily)}%
+                    </span>
+                  </div>
+
+                  {/* Vitamin B6 */}
+                  <div className="flex justify-between border-b border-gray-200 py-1">
+                    <span>Vitamin B6 {Math.round(getNutrientValue('VITB6A', nutritionInfo.totalNutrients).quantity * 100) / 100}{getNutrientValue('VITB6A', nutritionInfo.totalNutrients).unit}</span>
+                    <span className="font-semibold">
+                      {getDailyValue('VITB6A', nutritionInfo.totalDaily)}%
+                    </span>
+                  </div>
+
+                  {/* Folate */}
+                  <div className="flex justify-between border-b border-gray-200 py-1">
+                    <span>Folate {Math.round(getNutrientValue('FOLDFE', nutritionInfo.totalNutrients).quantity * 100) / 100}{getNutrientValue('FOLDFE', nutritionInfo.totalNutrients).unit}</span>
+                    <span className="font-semibold">
+                      {getDailyValue('FOLDFE', nutritionInfo.totalDaily)}%
+                    </span>
+                  </div>
+
+                  {/* Vitamin B12 */}
+                  <div className="flex justify-between border-b border-gray-200 py-1">
+                    <span>Vitamin B12 {Math.round(getNutrientValue('VITB12', nutritionInfo.totalNutrients).quantity * 100) / 100}{getNutrientValue('VITB12', nutritionInfo.totalNutrients).unit}</span>
+                    <span className="font-semibold">
+                      {getDailyValue('VITB12', nutritionInfo.totalDaily)}%
+                    </span>
+                  </div>
+
+                  {/* Phosphorus */}
+                  <div className="flex justify-between border-b border-gray-200 py-1">
+                    <span>Phosphorus {Math.round(getNutrientValue('P', nutritionInfo.totalNutrients).quantity * 100) / 100}{getNutrientValue('P', nutritionInfo.totalNutrients).unit}</span>
+                    <span className="font-semibold">
+                      {getDailyValue('P', nutritionInfo.totalDaily)}%
+                    </span>
+                  </div>
+
+                  {/* Magnesium */}
+                  <div className="flex justify-between border-b border-gray-200 py-1">
+                    <span>Magnesium {Math.round(getNutrientValue('MG', nutritionInfo.totalNutrients).quantity * 100) / 100}{getNutrientValue('MG', nutritionInfo.totalNutrients).unit}</span>
+                    <span className="font-semibold">
+                      {getDailyValue('MG', nutritionInfo.totalDaily)}%
+                    </span>
+                  </div>
+
+                  {/* Zinc */}
+                  <div className="flex justify-between border-b border-gray-200 py-1">
+                    <span>Zinc {Math.round(getNutrientValue('ZN', nutritionInfo.totalNutrients).quantity * 100) / 100}{getNutrientValue('ZN', nutritionInfo.totalNutrients).unit}</span>
+                    <span className="font-semibold">
+                      {getDailyValue('ZN', nutritionInfo.totalDaily)}%
+                    </span>
+                  </div>
+
+                  {/* Selenium */}
+                  <div className="flex justify-between border-b border-gray-200 py-1">
+                    <span>Selenium {Math.round(getNutrientValue('SE', nutritionInfo.totalNutrients).quantity * 100) / 100}{getNutrientValue('SE', nutritionInfo.totalNutrients).unit}</span>
+                    <span className="font-semibold">
+                      {getDailyValue('SE', nutritionInfo.totalDaily)}%
+                    </span>
+                  </div>
+                </div>
+
+                {/* Footer Note */}
+                <div className="mt-4 pt-4 border-t border-gray-300 text-xs text-gray-600">
+                  <p>* The % Daily Value (DV) tells you how much a nutrient in a serving of food contributes to a daily diet. 2,000 calories a day is used for general nutrition advice.</p>
+                </div>
+
+                {/* Health & Diet Labels */}
+                <div className="mt-6 space-y-4">
+                  {nutritionInfo.healthLabels.length > 0 && (
+                    <div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-3">Health Labels</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {nutritionInfo.healthLabels.map((label: string) => (
+                          <Badge key={label} variant="outline" className="text-green-700 border-green-200 bg-green-50 text-xs">
+                            {label}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {nutritionInfo.dietLabels.length > 0 && (
+                    <div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-3">Diet Labels</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {nutritionInfo.dietLabels.map((label: string) => (
+                          <Badge key={label} variant="outline" className="text-purple-700 border-purple-200 bg-purple-50 text-xs">
+                            {label}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* Per Serving Details */}
           <section className="bg-gray-50 rounded-lg p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Per Serving Information</h2>
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Serving Information</h2>
             <div className="grid gap-4 md:grid-cols-3">
               <div className="text-center p-4 bg-white rounded-lg">
-                <div className="text-2xl font-bold text-blue-600">{product.serving_size}</div>
-                <div className="text-sm text-gray-600 mt-1">Serving Size ({product.serving_unit})</div>
+                <div className="text-2xl font-bold text-blue-600">{product.serving_size || 'Not set'}</div>
+                <div className="text-sm text-gray-600 mt-1">Serving Size ({product.serving_unit || 'g'})</div>
               </div>
               <div className="text-center p-4 bg-white rounded-lg">
                 <div className="text-2xl font-bold text-green-600">{product.servings_per_container}</div>
@@ -428,9 +859,9 @@ export default function PublicProductView() {
               </div>
               <div className="text-center p-4 bg-white rounded-lg">
                 <div className="text-2xl font-bold text-purple-600">
-                  {product.serving_size * product.servings_per_container}
+                  {nutritionInfo?.totalWeight ? Math.round(nutritionInfo.totalWeight) : 'N/A'}g
                 </div>
-                <div className="text-sm text-gray-600 mt-1">Total Size ({product.serving_unit})</div>
+                <div className="text-sm text-gray-600 mt-1">Total Recipe Weight</div>
               </div>
             </div>
           </section>
@@ -613,7 +1044,7 @@ export default function PublicProductView() {
             <div className="grid gap-4 md:grid-cols-2">
               <div className="flex justify-between items-center">
                 <span className="text-gray-600">Category</span>
-                <Badge variant="outline" className="bg-white">{product.category.name}</Badge>
+                <Badge variant="outline" className="bg-white">{product.category?.name || 'Uncategorized'}</Badge>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-gray-600">Created by</span>

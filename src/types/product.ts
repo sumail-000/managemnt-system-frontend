@@ -117,6 +117,7 @@ export interface Product {
   image_url?: string; // Direct URL field
   image_path?: string; // Storage path field
   ingredients?: Ingredient[]; // Product ingredients with pivot data
+  ingredients_data?: any[]; // New JSON ingredients data format
   ingredient_notes?: string; // Free-text ingredient notes
   collections?: Collection[]; // Collections this product belongs to
   qrCodes?: QrCode[]; // QR codes associated with this product
@@ -193,6 +194,7 @@ export const transformProductFromAPI = (apiProduct: any): Product => {
             }
           }))
         : []),
+    ingredients_data: apiProduct.ingredients_data,
     ingredient_notes: apiProduct.ingredient_notes,
     collections: apiProduct.collections || [],
     qrCodes: apiProduct.qr_codes || [],
