@@ -3,8 +3,6 @@ import { useParams, Link, useNavigate } from "react-router-dom"
 import { 
   ArrowLeft, 
   Edit, 
-  Copy, 
-  Trash2, 
   Pin, 
   Share2,
   Download,
@@ -13,31 +11,12 @@ import {
   User,
   Tag,
   Eye,
-  EyeOff,
-  MoreHorizontal
+  EyeOff
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger,
-  DropdownMenuSeparator
-} from "@/components/ui/dropdown-menu"
-import { 
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
 import { productsAPI, edamamAPI, collectionsAPI } from "@/services/api"
 import { Product, transformProductFromAPI } from "@/types/product"
@@ -59,6 +38,8 @@ export default function ProductDetail() {
   const [collections, setCollections] = useState<any[]>([])
   const [productCollections, setProductCollections] = useState<any[]>([])
   const [loadingCollections, setLoadingCollections] = useState(false)
+e   const [selectedCollectionId, setSelectedCollectionId] = useState<string>('')
+  const [addingCollection, setAddingCollection] = useState(false)
   
 
 
@@ -78,6 +59,29 @@ export default function ProductDetail() {
     }
   };
 
+  const handleAddToCollection = async () => {
+    if (!product) return;
+    if (!selectedCollectionId) {
+      toast({ title: "Select a collection", description: "Please select a collection to add this product to." });
+      return;
+    }
+    try {
+      setAddingCollection(true);
+      await collectionsAPI.addProduct(String(selectedCollectionId), String(product.id));
+      const added = collections.find((c: any) => String(c.id) === String(selectedCollectionId));
+      if (added && !productCollections.some((pc: any) => String(pc.id) === String(added.id))) {
+        setProductCollections(prev => [...prev, added]);
+      }
+      setSelectedCollectionId('');
+      toast({ title: "Added to collection", description: `Product added to "${added?.name || 'collection'}".` });
+    } catch (error: any) {
+      console.error('Error adding to collection:', error);
+      toast({ title: "Error", description: error.response?.data?.message || "Failed to add to collection", variant: "destructive" });
+    } finally {
+      setAddingCollection(false);
+    }
+  };
+
   useEffect(() => {
     const loadProduct = async () => {
       if (!id) return
@@ -85,7 +89,11 @@ export default function ProductDetail() {
       setIsLoading(true)
       try {
         const response = await productsAPI.getById(id)
-        const transformedProduct = transformProductFromAPI(response)
+        // Unwrap API response if wrapped as { success, data }
+        const rawProduct = (response && typeof response === 'object' && 'data' in (response as any) && (response as any).success !== undefined)
+          ? (response as any).data
+          : response
+        const transformedProduct = transformProductFromAPI(rawProduct)
         setProduct(transformedProduct)
         
         // Load additional data
@@ -307,76 +315,6 @@ export default function ProductDetail() {
           >
             {product.status === "published" ? "Published" : "Draft"}
           </Badge>
-          
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem asChild>
-                <Link to={`/products/${product.id}/edit`}>
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit Product
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleDuplicate}>
-                <Copy className="h-4 w-4 mr-2" />
-                Duplicate
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleTogglePin}>
-                <Pin className="h-4 w-4 mr-2" />
-                {product.is_pinned ? "Unpin" : "Pin"} Product
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleTogglePublic}>
-                {product.is_public ? (
-                  <EyeOff className="h-4 w-4 mr-2" />
-                ) : (
-                  <Eye className="h-4 w-4 mr-2" />
-                )}
-                {product.is_public ? "Make Private" : "Make Public"}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleShare}>
-                <Share2 className="h-4 w-4 mr-2" />
-                Share Link
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Delete Product
-                  </DropdownMenuItem>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Delete Product</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Are you sure you want to delete "{product.name}"? This action will move the product to trash.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction 
-                      onClick={handleDelete}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    >
-                      Delete
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <Button asChild>
-            <Link to={`/products/${product.id}/edit`}>
-              <Edit className="w-4 h-4 mr-2" />
-              Edit Product
-            </Link>
-          </Button>
         </div>
       </div>
 
@@ -491,6 +429,66 @@ export default function ProductDetail() {
             </CardContent>
           </Card>
 
+          {/* Nutrition (Per Serving) */}
+          {(product as any).nutrition_data && (() => {
+            const nd: any = (product as any).nutrition_data
+            const per = nd.per_serving_data || {}
+            const nutrients: any = per.nutrients_per_serving || {}
+            const calories = per.calories_per_serving ?? per.calories ?? (nd.calories && product.servings_per_container ? Math.round(nd.calories / product.servings_per_container) : null)
+            const servingSizeGrams = per.serving_size_grams ?? product.serving_size ?? null
+            const fat = nutrients.FAT?.quantity ?? nd.macronutrients?.total_fat ?? null
+            const satFat = nutrients.FASAT?.quantity ?? nd.macronutrients?.saturated_fat ?? null
+            const carbs = nutrients.CHOCDF?.quantity ?? nd.macronutrients?.total_carbohydrate ?? null
+            const sugars = nutrients.SUGAR?.quantity ?? nd.macronutrients?.total_sugars ?? null
+            const protein = nutrients.PROCNT?.quantity ?? nd.macronutrients?.protein ?? null
+            const sodium = nutrients.NA?.quantity ?? nd.macronutrients?.sodium ?? null
+            return (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Nutrition (per serving)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div>
+                      <Label className="text-sm font-medium text-muted-foreground">Calories</Label>
+                      <p className="text-lg font-semibold">{calories ?? 'N/A'}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-muted-foreground">Serving Size</Label>
+                      <p className="text-lg font-semibold">{servingSizeGrams ? `${servingSizeGrams} g` : 'N/A'}</p>
+                    </div>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-3 mt-4">
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Total Fat</Label>
+                      <p className="font-medium">{fat !== null ? `${Math.round(fat * 100) / 100} g` : 'N/A'}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Saturated Fat</Label>
+                      <p className="font-medium">{satFat !== null ? `${Math.round(satFat * 100) / 100} g` : 'N/A'}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Carbohydrates</Label>
+                      <p className="font-medium">{carbs !== null ? `${Math.round(carbs * 100) / 100} g` : 'N/A'}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Total Sugars</Label>
+                      <p className="font-medium">{sugars !== null ? `${Math.round(sugars * 100) / 100} g` : 'N/A'}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Protein</Label>
+                      <p className="font-medium">{protein !== null ? `${Math.round(protein * 100) / 100} g` : 'N/A'}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Sodium</Label>
+                      <p className="font-medium">{sodium !== null ? `${Math.round(sodium * 100) / 100} mg` : 'N/A'}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })()}
+
           {/* Tags */}
           {product.tags && product.tags.length > 0 && (
             <Card>
@@ -585,7 +583,7 @@ export default function ProductDetail() {
                 
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <User className="h-4 w-4" />
-                  <span>By {product.user.name}</span>
+                  <span>By {product.user?.name || 'Unknown'}</span>
                 </div>
               </div>
             </CardContent>
@@ -597,14 +595,18 @@ export default function ProductDetail() {
               <CardTitle>Quick Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Button variant="outline" className="w-full justify-start" onClick={handleTogglePin}>
-                <Pin className="w-4 h-4 mr-2" />
-                {product.is_pinned ? "Unpin Product" : "Pin Product"}
-              </Button>
-              
               <Button variant="outline" className="w-full justify-start" onClick={handleShare}>
                 <Share2 className="w-4 h-4 mr-2" />
                 Share Product
+              </Button>
+
+              <Button variant="outline" className="w-full justify-start" onClick={handleTogglePublic}>
+                {product.is_public ? (
+                  <EyeOff className="w-4 h-4 mr-2" />
+                ) : (
+                  <Eye className="w-4 h-4 mr-2" />
+                )}
+                {product.is_public ? 'Make Private' : 'Make Public'}
               </Button>
               
 
@@ -615,11 +617,6 @@ export default function ProductDetail() {
                   Generate QR Code
                 </Button>
               )}
-              
-              <Button variant="outline" className="w-full justify-start">
-                <Download className="w-4 h-4 mr-2" />
-                Export Data
-              </Button>
             </CardContent>
           </Card>
 
@@ -646,19 +643,44 @@ export default function ProductDetail() {
                       </Badge>
                     ))}
                   </div>
-                  <Button variant="outline" size="sm" className="w-full">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Manage Collections
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <select
+                      className="flex-1 border rounded px-2 py-1 text-sm"
+                      value={selectedCollectionId}
+                      onChange={(e) => setSelectedCollectionId(e.target.value)}
+                    >
+                      <option value="">Select collection</option>
+                      {collections
+                        .filter((c: any) => !productCollections.some((pc: any) => String(pc.id) === String(c.id)))
+                        .map((c: any) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                    </select>
+                    <Button variant="outline" size="sm" className="whitespace-nowrap" onClick={handleAddToCollection} disabled={addingCollection || !selectedCollectionId}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      {addingCollection ? 'Adding...' : 'Add to Collection'}
+                    </Button>
+                  </div>
                 </div>
               ) : (
-                <div className="text-center py-6 text-muted-foreground">
-                  <Package className="h-10 w-10 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">Not in any collections</p>
-                  <Button variant="outline" size="sm" className="mt-2">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add to Collection
-                  </Button>
+                <div className="space-y-3">
+                  <div className="text-muted-foreground text-sm">Not in any collections</div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      className="flex-1 border rounded px-2 py-1 text-sm"
+                      value={selectedCollectionId}
+                      onChange={(e) => setSelectedCollectionId(e.target.value)}
+                    >
+                      <option value="">Select collection</option>
+                      {collections.map((c: any) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                    <Button variant="outline" size="sm" className="whitespace-nowrap" onClick={handleAddToCollection} disabled={addingCollection || !selectedCollectionId}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      {addingCollection ? 'Adding...' : 'Add to Collection'}
+                    </Button>
+                  </div>
                 </div>
               )}
             </CardContent>

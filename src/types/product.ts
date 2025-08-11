@@ -171,14 +171,28 @@ export const transformProductFromAPI = (apiProduct: any): Product => {
     is_pinned: apiProduct.is_pinned || false,
     is_favorite: apiProduct.is_favorite || false,
     is_public: apiProduct.is_public || false,
-    serving_size: apiProduct.serving_size,
-    serving_unit: apiProduct.serving_unit,
-    servings_per_container: apiProduct.servings_per_container,
+    // Serving info fallback to serving_configuration/serving_size_grams
+    serving_size: apiProduct.serving_size ?? apiProduct.serving_size_grams ?? apiProduct.serving_configuration?.serving_size_grams ?? 0,
+    serving_unit: apiProduct.serving_unit ?? 'g',
+    servings_per_container: apiProduct.servings_per_container ?? apiProduct.serving_configuration?.servings_per_container ?? 1,
     tags: apiProduct.tags || [],
-    image: apiProduct.image,
+    // Image resolution: prefer image, then direct URL, then storage path
+    image: apiProduct.image || apiProduct.image_url || (apiProduct.image_path ? `${window.location.origin}/storage/${apiProduct.image_path}` : undefined),
     image_url: apiProduct.image_url,
     image_path: apiProduct.image_path,
-    ingredients: apiProduct.ingredients || [],
+    // Ingredients: support both relation-based and JSON ingredients_data
+    ingredients: Array.isArray(apiProduct.ingredients)
+      ? apiProduct.ingredients
+      : (Array.isArray(apiProduct.ingredients_data)
+        ? apiProduct.ingredients_data.map((ing: any, idx: number) => ({
+            id: ing.id || `ingredient-${idx}`,
+            name: ing.name,
+            pivot: {
+              amount: ing.quantity ?? (ing.grams !== undefined ? Math.round(ing.grams) : undefined),
+              unit: ing.unit ?? (ing.grams !== undefined ? 'g' : undefined),
+            }
+          }))
+        : []),
     ingredient_notes: apiProduct.ingredient_notes,
     collections: apiProduct.collections || [],
     qrCodes: apiProduct.qr_codes || [],
@@ -186,6 +200,8 @@ export const transformProductFromAPI = (apiProduct: any): Product => {
     created_at: apiProduct.created_at,
     updated_at: apiProduct.updated_at,
     user: apiProduct.user,
+    // Pass through raw nutrition data if available for other views
+    nutrition_data: apiProduct.nutrition_data
   };
 };
 
