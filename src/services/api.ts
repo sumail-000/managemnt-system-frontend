@@ -140,6 +140,26 @@ api.interceptors.response.use(
         return Promise.reject(error);
       }
     }
+
+    // Handle plan gating / limit reached errors globally and emit upgrade modal event
+    if (error.response?.status === 403) {
+      const code = error.response?.data?.error_code;
+      if (code === 'PLAN_LIMIT_REACHED' || code === 'PLAN_GATING') {
+        const limitInfo = error.response?.data?.limit_info || {};
+        const message = error.response?.data?.message || 'Upgrade required to use this feature.';
+        try {
+          window.dispatchEvent(new CustomEvent('planLimitReached', {
+            detail: {
+              message,
+              code,
+              limit_info: limitInfo
+            }
+          }));
+        } catch (e) {
+          console.warn('[API] Failed to dispatch planLimitReached event', e);
+        }
+      }
+    }
     
     if (error.response?.status === 401) {
       console.warn('[API] Unauthorized access detected');
@@ -216,9 +236,9 @@ export const authAPI = {
     return api.post('/auth/change-password', data);
   },
   
-  deleteAccount: (password: string) => {
-    console.log('[AUTH_API] Delete account request initiated');
-    return api.delete('/auth/delete-account', { data: { password } });
+  deleteAccount: (data: { password: string; reason?: string }) => {
+    console.log('[AUTH_API] Request account deletion initiated');
+    return api.post('/auth/request-account-deletion', data);
   },
   
   getUser: () => {

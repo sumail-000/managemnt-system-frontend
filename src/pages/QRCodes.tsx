@@ -190,10 +190,12 @@ export default function QRCodes() {
     const plan = user.membership_plan
     return {
       name: plan.name,
-      qr_limit: plan.name === 'Basic' ? 0 : plan.name === 'Pro' ? 20 : 999,
+      qr_limit: plan.name === 'Basic' ? 3 : plan.name === 'Pro' ? 50 : 999,
       features: plan.features || [],
-      can_generate_qr: plan.name !== 'Basic',
-      has_analytics: plan.name !== 'Basic' // Analytics requires premium (Pro/Enterprise)
+      // Allow QR generation across all plans; backend enforces plan limits
+      can_generate_qr: true,
+      // Keep analytics as premium feature
+      has_analytics: plan.name !== 'Basic'
     }
   }
 
@@ -1148,7 +1150,7 @@ export default function QRCodes() {
                   <Button 
                     onClick={handleGenerateQR} 
                     className="w-full"
-                    disabled={!qrContent || !membershipInfo.can_generate_qr || isGenerating}
+                    disabled={!qrContent || isGenerating}
                   >
                     {isGenerating ? (
                       <>

@@ -762,7 +762,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       email: user?.email
     });
     try {
-      await authAPI.deleteAccount(password);
+      await authAPI.deleteAccount({ password });
       console.log('[AUTH] Account deletion successful');
     } catch (error: any) {
       console.error('[AUTH] Account deletion failed:', error);

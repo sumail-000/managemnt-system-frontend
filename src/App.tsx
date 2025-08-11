@@ -73,6 +73,7 @@ const App = () => {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/blog" element={<Blog />} />
       <Route path="/nutrition-label" element={<NutritionLabel />} />
+      <Route path="/labels" element={<NutritionLabel />} />
       <Route path="/public/product/:id" element={<PublicProductView />} />
       
       {/* Protected Dashboard Routes */}
@@ -170,7 +171,7 @@ const App = () => {
       } />
       
       <Route path="/qr-codes" element={
-        <ProtectedRoute requiredPlan="pro">
+        <ProtectedRoute>
           <UserAuthGuard>
             <DashboardLayout>
               <QRCodes />

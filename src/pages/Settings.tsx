@@ -293,9 +293,8 @@ const Settings: React.FC = () => {
       setIsLoading(true);
       await deleteAccount(deleteAccountPassword);
       toast({
-        title: 'Account Deleted',
-        description: 'Your account has been permanently deleted.',
-        variant: 'destructive',
+        title: 'Account deletion scheduled',
+        description: 'Your account will be permanently deleted in 24 hours unless you cancel. A confirmation email has been sent.',
       });
     } catch (error: any) {
       toast({
@@ -690,7 +689,7 @@ const Settings: React.FC = () => {
                 <div>
                   <h4 className="font-medium text-destructive">Delete Account</h4>
                   <p className="text-sm text-muted-foreground">
-                    Permanently delete your account and all data
+                    Schedule deletion. Your account will be permanently deleted after 24 hours unless you cancel.
                   </p>
                 </div>
                 <Button 
@@ -698,7 +697,7 @@ const Settings: React.FC = () => {
                   onClick={() => setIsDeleteDialogOpen(true)}
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Account
+                  Schedule Deletion
                 </Button>
               </div>
             </CardContent>
@@ -901,9 +900,9 @@ const Settings: React.FC = () => {
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Account</DialogTitle>
+            <DialogTitle>Schedule Account Deletion</DialogTitle>
             <DialogDescription>
-              This action cannot be undone. This will permanently delete your account and remove all your data from our servers.
+              Your account will be scheduled for deletion and permanently removed after 24 hours unless you cancel. A confirmation email will be sent. You can cancel the deletion request within the waiting period from Settings or the email link.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -930,7 +929,7 @@ const Settings: React.FC = () => {
               onClick={handleDeleteAccount}
               disabled={isLoading || !deleteAccountPassword}
             >
-              {isLoading ? 'Deleting...' : 'Delete Account'}
+              {isLoading ? 'Scheduling...' : 'Schedule Deletion'}
             </Button>
           </DialogFooter>
         </DialogContent>
