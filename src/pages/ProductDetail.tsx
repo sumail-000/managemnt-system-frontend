@@ -38,7 +38,7 @@ export default function ProductDetail() {
   const [collections, setCollections] = useState<any[]>([])
   const [productCollections, setProductCollections] = useState<any[]>([])
   const [loadingCollections, setLoadingCollections] = useState(false)
-e   const [selectedCollectionId, setSelectedCollectionId] = useState<string>('')
+const [selectedCollectionId, setSelectedCollectionId] = useState<string>('')
   const [addingCollection, setAddingCollection] = useState(false)
   
 
