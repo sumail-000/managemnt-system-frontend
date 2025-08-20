@@ -1131,7 +1131,10 @@ export default function ProductForm() {
   
   // Local nutrition analysis functions using extracted utilities
   const performNutritionAnalysisLocal = async () => {
-    if (addedIngredients.length === 0) return;
+    if (addedIngredients.length === 0) {
+      console.log("Skipping nutrition analysis: No ingredients added.");
+      return;
+    }
     
     setIsLoadingNutrition(true);
     setNutritionError(null);

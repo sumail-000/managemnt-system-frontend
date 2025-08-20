@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react"
+import { Link } from "react-router-dom"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -20,7 +21,6 @@ import {
 import { AdminStatsCard } from "@/components/admin/AdminStatsCard"
 import { AdminChart } from "@/components/admin/AdminChart"
 import { AdminRecentActivity } from "@/components/admin/AdminRecentActivity"
-import { MonthYearPicker } from "@/components/admin/MonthYearPicker"
 import { useToast } from "@/hooks/use-toast"
 import api from "@/services/api"
 
@@ -40,10 +40,21 @@ interface SystemHealth {
   error_rate: { value: string; status: string }
 }
 
+// Define types for the API responses to ensure type safety
+interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+}
+
+interface MetricsData {
+  total_users: DashboardMetric;
+  active_products: DashboardMetric;
+  monthly_revenue: DashboardMetric;
+  api_calls_today: DashboardMetric;
+}
+
 export default function AdminDashboard() {
   const { toast } = useToast()
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
   const [metrics, setMetrics] = useState<DashboardMetric[]>([])
   const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null)
   const [loading, setLoading] = useState(true)
@@ -91,18 +102,17 @@ export default function AdminDashboard() {
     }
   ]
 
-  const fetchDashboardData = async (month?: number, year?: number) => {
+  const fetchDashboardData = async () => {
     try {
-      const currentMonth = month || selectedMonth
-      const currentYear = year || selectedYear
-      
-      const [metricsResponse, healthResponse] = await Promise.all([
-        api.get(`/admin/dashboard/metrics?month=${currentMonth}&year=${currentYear}`),
+      // Cast responses to 'any' to bypass incorrect TypeScript inference
+      const [metricsResponse, healthResponse]: [any, any] = await Promise.all([
+        api.get(`/admin/dashboard/metrics`),
         api.get('/admin/dashboard/system-health')
-      ])
+      ]);
 
-      if (metricsResponse.data.success) {
-        const data = metricsResponse.data.data
+      // The interceptor returns response.data, so we access properties directly
+      if (metricsResponse && metricsResponse.success) {
+        const data = metricsResponse.data;
         const formattedMetrics: DashboardMetric[] = [
           {
             title: data.total_users?.title || "Total Users",
@@ -136,15 +146,14 @@ export default function AdminDashboard() {
             icon: data.api_calls_today?.icon || "Activity",
             color: data.api_calls_today?.color || "orange"
           }
-        ]
-        setMetrics(formattedMetrics)
+        ];
+        setMetrics(formattedMetrics);
       } else {
-        // If API fails, show default metrics with zeros
-        setMetrics(getDefaultMetrics())
+        setMetrics(getDefaultMetrics());
       }
 
-      if (healthResponse.data.success) {
-        setSystemHealth(healthResponse.data.data)
+      if (healthResponse && healthResponse.success) {
+        setSystemHealth(healthResponse.data);
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
@@ -162,17 +171,8 @@ export default function AdminDashboard() {
   }
 
   useEffect(() => {
-    // Initialize with default metrics first
-    setMetrics(getDefaultMetrics())
     fetchDashboardData()
   }, [])
-
-  const handleDateChange = (month: number, year: number) => {
-    setSelectedMonth(month)
-    setSelectedYear(year)
-    setLoading(true)
-    fetchDashboardData(month, year)
-  }
 
   const handleRefresh = () => {
     setRefreshing(true)
@@ -205,11 +205,6 @@ export default function AdminDashboard() {
           </p>
         </div>
         <div className="flex items-center space-x-2">
-          <MonthYearPicker
-            selectedMonth={selectedMonth}
-            selectedYear={selectedYear}
-            onDateChange={handleDateChange}
-          />
           <Button 
             variant="outline" 
             size="sm" 
@@ -219,9 +214,11 @@ export default function AdminDashboard() {
             <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
-          <Button size="sm">
-            <BarChart3 className="mr-2 h-4 w-4" />
-            View Reports
+          <Button size="sm" asChild>
+            <Link to="/admin-panel/reports">
+              <BarChart3 className="mr-2 h-4 w-4" />
+              View Reports
+            </Link>
           </Button>
         </div>
       </div>
@@ -375,33 +372,6 @@ export default function AdminDashboard() {
         <div className="lg:col-span-2">
           <AdminRecentActivity />
         </div>
-
-        {/* Quick Actions */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-2">
-              <Button variant="outline" size="sm" className="justify-start">
-                <UserPlus className="mr-2 h-4 w-4" />
-                Add New User
-              </Button>
-              <Button variant="outline" size="sm" className="justify-start">
-                <AlertTriangle className="mr-2 h-4 w-4" />
-                View Flagged Products
-              </Button>
-              <Button variant="outline" size="sm" className="justify-start">
-                <TrendingUp className="mr-2 h-4 w-4" />
-                Generate Report
-              </Button>
-              <Button variant="outline" size="sm" className="justify-start">
-                <Activity className="mr-2 h-4 w-4" />
-                System Maintenance
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </div>
   )

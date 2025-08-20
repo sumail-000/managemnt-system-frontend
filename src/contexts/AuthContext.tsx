@@ -519,12 +519,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         payment_status
       });
       
-      // Store tokens separately for admin and user using TokenManager
+      // Ensure a clean slate by clearing all previous tokens
+      TokenManager.clearAllTokens();
+
+      // Store the new token for the correct user type
       const isAdmin = user_type === 'admin';
       TokenManager.setToken(access_token, expires_at, isAdmin);
-      
-      // Clear the other token type to prevent conflicts
-      TokenManager.clearToken(!isAdmin);
       
       if (expires_at) {
         setTokenExpiresAt(expires_at);
@@ -680,10 +680,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch (error) {
       console.error('[AUTH] Server logout error:', error);
     } finally {
-      console.log('[AUTH] Local logout completed');
-      // Clear tokens using TokenManager (respects manual logout)
-      const isAdminContext = TokenManager.isAdminContext();
-      TokenManager.clearTokensOnLogout(isAdminContext);
+      console.log('[AUTH] Local logout completed, clearing all tokens');
+      // Clear ALL tokens to ensure no session conflicts
+      TokenManager.clearAllTokens();
       
       setToken(null);
       setTokenExpiresAt(null);
