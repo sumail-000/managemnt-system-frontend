@@ -53,11 +53,11 @@ interface AdminProduct {
 export default function AdminProducts() {
   const [searchTerm, setSearchTerm] = useState("")
   const [categoryFilter, setCategoryFilter] = useState("all")
-  const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft' | 'public'>("all")
+  const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft' | 'public' | 'flagged'>("all")
   const [products, setProducts] = useState<AdminProduct[]>([])
   const [pagination, setPagination] = useState({ total: 0 })
   const [loading, setLoading] = useState(true)
-  const [metrics, setMetrics] = useState({ total: 0, public: 0, published: 0, draft: 0 })
+  const [metrics, setMetrics] = useState({ total: 0, public: 0, published: 0, draft: 0, flagged: 0 })
   const { toast } = useToast()
 
   const fetchMetrics = async () => {
@@ -129,8 +129,7 @@ export default function AdminProducts() {
             <Download className="mr-2 h-4 w-4" />
             Export Products
           </Button>
-          {/* Placeholder for future flagged filter/action */}
-          <Button variant="outline" size="sm" disabled>
+          <Button variant="outline" size="sm" onClick={() => setStatusFilter('flagged')}>
             <Flag className="mr-2 h-4 w-4" />
             Flagged Products
           </Button>
@@ -176,7 +175,7 @@ export default function AdminProducts() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-2xl font-bold">0</div>
+                <div className="text-2xl font-bold">{metrics.flagged.toLocaleString()}</div>
                 <p className="text-xs text-muted-foreground">Flagged</p>
               </div>
               <Flag className="h-8 w-8 text-red-600" />
@@ -220,6 +219,7 @@ export default function AdminProducts() {
                 <SelectItem value="public">Public</SelectItem>
                 <SelectItem value="published">Published</SelectItem>
                 <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="flagged">Flagged</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -232,6 +232,7 @@ export default function AdminProducts() {
           <CardTitle>Products ({pagination.total})</CardTitle>
         </CardHeader>
         <CardContent>
+          <div className="max-h-[520px] overflow-y-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -280,6 +281,20 @@ export default function AdminProducts() {
                             <Eye className="mr-2 h-4 w-4" />
                             View Product
                           </DropdownMenuItem>
+                          <DropdownMenuItem onClick={async () => {
+                            try {
+                              const resp: any = await adminAPI.toggleProductFlag(product.id)
+                              if (resp.success) {
+                                await Promise.all([fetchProducts(), fetchMetrics()])
+                                toast({ title: resp.message || 'Flag status updated' })
+                              }
+                            } catch (e: any) {
+                              toast({ title: 'Error', description: e.response?.data?.message || 'Failed to update flag', variant: 'destructive' })
+                            }
+                          }}>
+                            <Flag className="mr-2 h-4 w-4" />
+                            {product as any && (product as any).is_flagged ? 'Unflag' : 'Flag'} Product
+                          </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem className="text-red-600">
                             <Trash2 className="mr-2 h-4 w-4" />
@@ -293,6 +308,7 @@ export default function AdminProducts() {
               )}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
     </div>

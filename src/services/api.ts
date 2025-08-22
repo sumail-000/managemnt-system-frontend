@@ -796,9 +796,9 @@ export const adminAPI = {
 
   getProducts: (params?: { 
     search?: string;
-    status?: 'published' | 'draft' | 'public';
+    status?: 'published' | 'draft' | 'public' | 'flagged' | 'flag';
     category?: string;
-    sort_by?: 'created_at' | 'updated_at' | 'name' | 'status' | 'is_public';
+    sort_by?: 'created_at' | 'updated_at' | 'name' | 'status' | 'is_public' | 'is_flagged';
     sort_order?: 'asc' | 'desc';
     page?: number; 
     per_page?: number 
@@ -810,6 +810,11 @@ export const adminAPI = {
   getProductMetrics: () => {
     console.log('[ADMIN_API] Get product metrics request initiated');
     return api.get('/admin/products/metrics');
+  },
+
+  toggleProductFlag: (id: number) => {
+    console.log('[ADMIN_API] Toggle product flag request initiated', { id });
+    return api.patch(`/admin/products/${id}/toggle-flag`);
   },
 };
 
