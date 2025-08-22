@@ -38,7 +38,7 @@ import {
   Package
 } from "lucide-react"
 import { useNavigate } from 'react-router-dom'
-import { adminAPI } from "@/services/api"
+import api, { adminAPI } from "@/services/api"
 import { useToast } from "@/hooks/use-toast"
 
 interface AdminProduct {
@@ -60,6 +60,8 @@ export default function AdminProducts() {
   const [pagination, setPagination] = useState({ total: 0 })
   const [loading, setLoading] = useState(true)
   const [metrics, setMetrics] = useState({ total: 0, public: 0, published: 0, draft: 0, flagged: 0 })
+  const [categories, setCategories] = useState<string[]>([])
+  const [exporting, setExporting] = useState(false)
   const { toast } = useToast()
   const navigate = useNavigate()
 
@@ -98,12 +100,112 @@ export default function AdminProducts() {
   }
 
   useEffect(() => {
-    fetchMetrics()
+    fetchMetrics();
+    // Preload categories for filter dropdown from existing products
+    (async () => {
+      try {
+        const res: any = await adminAPI.getProducts({ per_page: 1000, sort_by: 'created_at', sort_order: 'desc' })
+        if (res.success) {
+          const names: string[] = Array.from(
+            new Set<string>(
+              (res.data || [])
+                .map((p: any) => p.category?.name as string | undefined)
+                .filter((n): n is string => typeof n === 'string' && n.length > 0)
+            )
+          ).sort();
+          setCategories(names)
+        }
+      } catch (e) {
+        console.error('Failed to fetch categories', e)
+      }
+    })();
   }, [])
 
   useEffect(() => {
     fetchProducts()
   }, [searchTerm, categoryFilter, statusFilter])
+
+  const handleExportProducts = async () => {
+    try {
+      setExporting(true)
+      const perPage = 100
+      let page = 1
+      let lastPage = 1
+      let allProducts: any[] = []
+
+      do {
+        const params: any = {
+          page,
+          per_page: perPage,
+          search: searchTerm || undefined,
+          status: statusFilter === 'all' ? undefined : statusFilter,
+          category: categoryFilter === 'all' ? undefined : categoryFilter,
+          sort_by: 'created_at',
+          sort_order: 'desc',
+        }
+        const resp: any = await api.get('/admin/products', { params })
+        if (!resp.success) break
+        allProducts = allProducts.concat(resp.data || [])
+        lastPage = resp.pagination?.last_page || page
+        page++
+      } while (page <= lastPage)
+
+      const headers = [
+        'ID',
+        'Name',
+        'Creator',
+        'Category',
+        'Status',
+        'Public',
+        'Flagged',
+        'Created At',
+        'Updated At'
+      ]
+
+      const rows = allProducts.map((p: any) => [
+        p.id,
+        sanitizeCsv(p.name),
+        sanitizeCsv(p.user?.name || ''),
+        sanitizeCsv(p.category?.name || ''),
+        sanitizeCsv(p.status || ''),
+        p.is_public ? 'Yes' : 'No',
+        p.is_flagged ? 'Yes' : 'No',
+        p.created_at ? new Date(p.created_at).toLocaleString() : '',
+        p.updated_at ? new Date(p.updated_at).toLocaleString() : ''
+      ])
+
+      const csvContent = toCsv([headers, ...rows])
+      const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      const ts = new Date()
+      const pad = (n: number) => String(n).padStart(2, '0')
+      const filename = `products_export_${ts.getFullYear()}-${pad(ts.getMonth()+1)}-${pad(ts.getDate())}_${pad(ts.getHours())}-${pad(ts.getMinutes())}.csv`
+      link.href = url
+      link.setAttribute('download', filename)
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (e: any) {
+      console.error('Export products failed', e)
+      toast({ title: 'Export failed', description: e?.response?.data?.message || 'Could not export products', variant: 'destructive' })
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const sanitizeCsv = (value: any): string => {
+    if (value === null || value === undefined) return ''
+    const str = String(value)
+    const escaped = str.replace(/"/g, '""')
+    if (/[",\n\r]/.test(escaped)) {
+      return `"${escaped}"`
+    }
+    return escaped
+  }
+
+  const toCsv = (rows: (string | number)[][]): string => rows.map(r => r.join(',')).join('\r\n')
 
   const getStatusBadge = (status: 'draft' | 'published', isPublic: boolean, isFlagged?: boolean) => {
     if (isFlagged) return <Badge className="bg-red-100 text-red-800">Flagged</Badge>
@@ -129,13 +231,9 @@ export default function AdminProducts() {
           </p>
         </div>
         <div className="flex items-center space-x-2">
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={handleExportProducts} disabled={exporting}>
             <Download className="mr-2 h-4 w-4" />
-            Export Products
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setStatusFilter('flagged')}>
-            <Flag className="mr-2 h-4 w-4" />
-            Flagged Products
+            {exporting ? 'Exporting...' : 'Export Products'}
           </Button>
         </div>
       </div>
@@ -207,11 +305,9 @@ export default function AdminProducts() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Categories</SelectItem>
-                <SelectItem value="Dairy">Dairy</SelectItem>
-                <SelectItem value="Bakery">Bakery</SelectItem>
-                <SelectItem value="Oils">Oils</SelectItem>
-                <SelectItem value="Snacks">Snacks</SelectItem>
-                <SelectItem value="Spreads">Spreads</SelectItem>
+                {categories.map((c) => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>

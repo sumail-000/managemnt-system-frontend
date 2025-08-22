@@ -30,7 +30,6 @@ import {
 import { 
   Search, 
   MoreHorizontal, 
-  UserPlus, 
   Ban, 
   Shield, 
   Trash2,
@@ -41,6 +40,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { Link } from "react-router-dom"
 import { usePaginatedUsers } from "@/hooks/usePaginatedUsers"
 import { adminAPI } from "@/services/api"
+import api from "@/services/api"
 import { User } from "@/types/user"
 import {
   AlertDialog,
@@ -65,6 +65,7 @@ import { Label } from "@/components/ui/label"
 
 export default function AdminUsers() {
   const { users, pagination, filters, loading, applyFilters, refresh } = usePaginatedUsers(50); // Fetch 50 users for scrolling
+  const [exporting, setExporting] = useState(false);
   const [stats, setStats] = useState({
     total_users: 0,
     active_users: 0,
@@ -209,6 +210,94 @@ export default function AdminUsers() {
     }
   };
 
+  const handleExportUsers = async () => {
+    try {
+      setExporting(true);
+      const perPage = 100;
+      let page = 1;
+      let allUsers: any[] = [];
+      let lastPage = 1;
+
+      do {
+        const params: any = {
+          page,
+          per_page: perPage,
+          search: filters.search || undefined,
+          plan: filters.plan || undefined,
+          status: filters.status || undefined,
+          sort_by: filters.sortBy || 'created_at',
+          sort_order: filters.sortOrder || 'desc',
+        };
+        const resp: any = await api.get('/admin/users', { params });
+        if (!resp.success) break;
+        allUsers = allUsers.concat(resp.data || []);
+        lastPage = resp.pagination?.last_page || page;
+        page++;
+      } while (page <= lastPage);
+
+      // Build CSV
+      const headers = [
+        'ID',
+        'Name',
+        'Email',
+        'Company',
+        'Plan',
+        'Payment Status',
+        'Suspended',
+        'Products Count',
+        'Last Active',
+        'Created At'
+      ];
+
+      const rows = allUsers.map((u: any) => [
+        u.id,
+        sanitizeCsv(u.name),
+        sanitizeCsv(u.email),
+        sanitizeCsv(u.company || ''),
+        sanitizeCsv(u.membership_plan?.name || ''),
+        sanitizeCsv(u.payment_status || ''),
+        u.is_suspended ? 'Yes' : 'No',
+        u.products_count ?? 0,
+        u.last_active_at ? new Date(u.last_active_at).toLocaleString() : 'Never',
+        u.created_at ? new Date(u.created_at).toLocaleString() : ''
+      ]);
+
+      const csvContent = toCsv([headers, ...rows]);
+      const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const ts = new Date();
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const filename = `users_export_${ts.getFullYear()}-${pad(ts.getMonth()+1)}-${pad(ts.getDate())}_${pad(ts.getHours())}-${pad(ts.getMinutes())}.csv`;
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      console.error('Export users failed', e);
+      // Best-effort error toast
+      // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+      (window as any)?.toast?.({ title: 'Export failed', description: e?.response?.data?.message || 'Could not export users' });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const sanitizeCsv = (value: any): string => {
+    if (value === null || value === undefined) return '';
+    const str = String(value);
+    // Escape quotes and wrap in quotes if contains comma, quote, or newline
+    const escaped = str.replace(/"/g, '""');
+    if (/[",\n\r]/.test(escaped)) {
+      return `"${escaped}"`;
+    }
+    return escaped;
+  };
+
+  const toCsv = (rows: (string | number)[][]): string => rows.map(r => r.join(',')).join('\r\n');
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -220,13 +309,9 @@ export default function AdminUsers() {
           </p>
         </div>
         <div className="flex items-center space-x-2">
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={handleExportUsers} disabled={exporting}>
             <Download className="mr-2 h-4 w-4" />
-            Export Users
-          </Button>
-          <Button size="sm">
-            <UserPlus className="mr-2 h-4 w-4" />
-            Add User
+            {exporting ? 'Exporting...' : 'Export Users'}
           </Button>
         </div>
       </div>
