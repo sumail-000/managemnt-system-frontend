@@ -794,9 +794,22 @@ export const adminAPI = {
     return api.patch(`/admin/users/${id}/reset-password`, data);
   },
 
-  getProducts: (params?: { search?: string; sort_by?: string; sort_order?: string; page?: number; per_page?: number }) => {
+  getProducts: (params?: { 
+    search?: string;
+    status?: 'published' | 'draft' | 'public';
+    category?: string;
+    sort_by?: 'created_at' | 'updated_at' | 'name' | 'status' | 'is_public';
+    sort_order?: 'asc' | 'desc';
+    page?: number; 
+    per_page?: number 
+  }) => {
     console.log('[ADMIN_API] Get products request initiated', params);
     return api.get('/admin/products', { params });
+  },
+
+  getProductMetrics: () => {
+    console.log('[ADMIN_API] Get product metrics request initiated');
+    return api.get('/admin/products/metrics');
   },
 };
 

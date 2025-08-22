@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -37,98 +37,82 @@ import {
   CheckCircle,
   Package
 } from "lucide-react"
+import { adminAPI } from "@/services/api"
+import { useToast } from "@/hooks/use-toast"
+
+interface AdminProduct {
+  id: number;
+  name: string;
+  status: 'draft' | 'published';
+  is_public: boolean;
+  created_at: string;
+  category?: { name: string } | null;
+  user?: { name: string } | null;
+}
 
 export default function AdminProducts() {
   const [searchTerm, setSearchTerm] = useState("")
   const [categoryFilter, setCategoryFilter] = useState("all")
-  const [statusFilter, setStatusFilter] = useState("all")
+  const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft' | 'public'>("all")
+  const [products, setProducts] = useState<AdminProduct[]>([])
+  const [pagination, setPagination] = useState({ total: 0 })
+  const [loading, setLoading] = useState(true)
+  const [metrics, setMetrics] = useState({ total: 0, public: 0, published: 0, draft: 0 })
+  const { toast } = useToast()
 
-  const products = [
-    {
-      id: 1,
-      name: "Organic Greek Yogurt",
-      user: "Sarah Wilson",
-      category: "Dairy",
-      status: "approved",
-      flagged: false,
-      createdAt: "2024-01-15",
-      views: 245,
-      nutritionScore: 98
-    },
-    {
-      id: 2,
-      name: "Artisan Sourdough Bread",
-      user: "John Doe",
-      category: "Bakery",
-      status: "pending",
-      flagged: true,
-      createdAt: "2024-01-20",
-      views: 156,
-      nutritionScore: 75
-    },
-    {
-      id: 3,
-      name: "Premium Olive Oil",
-      user: "Lisa Chen",
-      category: "Oils",
-      status: "approved",
-      flagged: false,
-      createdAt: "2024-01-18",
-      views: 389,
-      nutritionScore: 92
-    },
-    {
-      id: 4,
-      name: "Gluten-Free Crackers",
-      user: "Mike Johnson",
-      category: "Snacks",
-      status: "rejected",
-      flagged: true,
-      createdAt: "2024-01-22",
-      views: 78,
-      nutritionScore: 56
-    },
-    {
-      id: 5,
-      name: "Fresh Almond Butter",
-      user: "David Brown",
-      category: "Spreads",
-      status: "approved",
-      flagged: false,
-      createdAt: "2024-01-25",
-      views: 167,
-      nutritionScore: 89
+  const fetchMetrics = async () => {
+    try {
+      const res: any = await adminAPI.getProductMetrics()
+      if (res.success) setMetrics(res.data)
+    } catch (e) {
+      console.error('Failed to fetch product metrics', e)
     }
-  ]
+  }
 
-  const getStatusBadge = (status: string) => {
+  const fetchProducts = async () => {
+    setLoading(true)
+    try {
+      const params: any = {
+        search: searchTerm || undefined,
+        status: statusFilter === 'all' ? undefined : statusFilter,
+        category: categoryFilter === 'all' ? undefined : categoryFilter,
+        sort_by: 'created_at',
+        sort_order: 'desc',
+        page: 1,
+        per_page: 50,
+      }
+      const res: any = await adminAPI.getProducts(params)
+      if (res.success) {
+        setProducts(res.data)
+        setPagination({ total: res.pagination?.total || res.data.length })
+      }
+    } catch (e: any) {
+      console.error('Failed to fetch products', e)
+      toast({ title: 'Error', description: e.response?.data?.message || 'Failed to load products', variant: 'destructive' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchMetrics()
+  }, [])
+
+  useEffect(() => {
+    fetchProducts()
+  }, [searchTerm, categoryFilter, statusFilter])
+
+  const getStatusBadge = (status: 'draft' | 'published', isPublic: boolean) => {
+    if (isPublic) return <Badge className="bg-blue-100 text-blue-800">Public</Badge>
     switch (status) {
-      case "approved":
-        return <Badge className="bg-green-100 text-green-800">Approved</Badge>
-      case "pending":
-        return <Badge className="bg-yellow-100 text-yellow-800">Pending</Badge>
-      case "rejected":
-        return <Badge className="bg-red-100 text-red-800">Rejected</Badge>
+      case "published":
+        return <Badge className="bg-green-100 text-green-800">Published</Badge>
+      case "draft":
+        return <Badge className="bg-yellow-100 text-yellow-800">Draft</Badge>
       default:
         return <Badge variant="outline">{status}</Badge>
     }
   }
-
-  const getNutritionScoreBadge = (score: number) => {
-    if (score >= 90) return <Badge className="bg-green-100 text-green-800">Excellent</Badge>
-    if (score >= 75) return <Badge className="bg-blue-100 text-blue-800">Good</Badge>
-    if (score >= 60) return <Badge className="bg-yellow-100 text-yellow-800">Fair</Badge>
-    return <Badge className="bg-red-100 text-red-800">Poor</Badge>
-  }
-
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         product.user.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesCategory = categoryFilter === "all" || product.category.toLowerCase() === categoryFilter
-    const matchesStatus = statusFilter === "all" || product.status === statusFilter
-
-    return matchesSearch && matchesCategory && matchesStatus
-  })
 
   return (
     <div className="space-y-6">
@@ -145,7 +129,8 @@ export default function AdminProducts() {
             <Download className="mr-2 h-4 w-4" />
             Export Products
           </Button>
-          <Button variant="outline" size="sm">
+          {/* Placeholder for future flagged filter/action */}
+          <Button variant="outline" size="sm" disabled>
             <Flag className="mr-2 h-4 w-4" />
             Flagged Products
           </Button>
@@ -158,7 +143,7 @@ export default function AdminProducts() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-2xl font-bold">18,924</div>
+                <div className="text-2xl font-bold">{metrics.total.toLocaleString()}</div>
                 <p className="text-xs text-muted-foreground">Total Products</p>
               </div>
               <Package className="h-8 w-8 text-blue-600" />
@@ -169,7 +154,7 @@ export default function AdminProducts() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-2xl font-bold">17,456</div>
+                <div className="text-2xl font-bold">{metrics.public.toLocaleString()}</div>
                 <p className="text-xs text-muted-foreground">Public</p>
               </div>
               <CheckCircle className="h-8 w-8 text-green-600" />
@@ -180,7 +165,7 @@ export default function AdminProducts() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-2xl font-bold">1,234</div>
+                <div className="text-2xl font-bold">{(metrics.published + metrics.draft).toLocaleString()}</div>
                 <p className="text-xs text-muted-foreground">Publish/Draft</p>
               </div>
               <AlertTriangle className="h-8 w-8 text-yellow-600" />
@@ -191,7 +176,7 @@ export default function AdminProducts() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-2xl font-bold">234</div>
+                <div className="text-2xl font-bold">0</div>
                 <p className="text-xs text-muted-foreground">Flagged</p>
               </div>
               <Flag className="h-8 w-8 text-red-600" />
@@ -219,22 +204,22 @@ export default function AdminProducts() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Categories</SelectItem>
-                <SelectItem value="dairy">Dairy</SelectItem>
-                <SelectItem value="bakery">Bakery</SelectItem>
-                <SelectItem value="oils">Oils</SelectItem>
-                <SelectItem value="snacks">Snacks</SelectItem>
-                <SelectItem value="spreads">Spreads</SelectItem>
+                <SelectItem value="Dairy">Dairy</SelectItem>
+                <SelectItem value="Bakery">Bakery</SelectItem>
+                <SelectItem value="Oils">Oils</SelectItem>
+                <SelectItem value="Snacks">Snacks</SelectItem>
+                <SelectItem value="Spreads">Spreads</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
               <SelectTrigger className="w-full sm:w-40">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="approved">Approved</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
+                <SelectItem value="public">Public</SelectItem>
+                <SelectItem value="published">Published</SelectItem>
+                <SelectItem value="draft">Draft</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -244,7 +229,7 @@ export default function AdminProducts() {
       {/* Products Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Products ({filteredProducts.length})</CardTitle>
+          <CardTitle>Products ({pagination.total})</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
@@ -254,57 +239,58 @@ export default function AdminProducts() {
                 <TableHead>Creator</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Views</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredProducts.map((product) => (
-                <TableRow key={product.id}>
-                  <TableCell>
-                    <div className="flex items-center space-x-2">
-                      {product.flagged && (
-                        <Flag className="h-4 w-4 text-red-500" />
-                      )}
-                      <div className="font-medium">{product.name}</div>
-                    </div>
-                  </TableCell>
-                  <TableCell>{product.user}</TableCell>
-                  <TableCell>{product.category}</TableCell>
-                  <TableCell>{getStatusBadge(product.status)}</TableCell>
-                  <TableCell>{product.views}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {product.createdAt}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem>
-                          <Eye className="mr-2 h-4 w-4" />
-                          View Product
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <Flag className="mr-2 h-4 w-4" />
-                          {product.flagged ? "Unflag" : "Flag Product"}
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem className="text-red-600">
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Remove Product
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center">Loading...</TableCell>
                 </TableRow>
-              ))}
+              ) : products.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">No products found</TableCell>
+                </TableRow>
+              ) : (
+                products.map((product) => (
+                  <TableRow key={product.id}>
+                    <TableCell>
+                      <div className="flex items-center space-x-2">
+                        <div className="font-medium">{product.name}</div>
+                      </div>
+                    </TableCell>
+                    <TableCell>{product.user?.name || 'Unknown'}</TableCell>
+                    <TableCell>{product.category?.name || 'N/A'}</TableCell>
+                    <TableCell>{getStatusBadge(product.status, product.is_public)}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {new Date(product.created_at).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" className="h-8 w-8 p-0">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem>
+                            <Eye className="mr-2 h-4 w-4" />
+                            View Product
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem className="text-red-600">
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Remove Product
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
