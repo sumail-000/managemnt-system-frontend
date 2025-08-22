@@ -46,6 +46,7 @@ interface AdminProduct {
   status: 'draft' | 'published';
   is_public: boolean;
   created_at: string;
+  is_flagged?: boolean;
   category?: { name: string } | null;
   user?: { name: string } | null;
 }
@@ -102,7 +103,8 @@ export default function AdminProducts() {
     fetchProducts()
   }, [searchTerm, categoryFilter, statusFilter])
 
-  const getStatusBadge = (status: 'draft' | 'published', isPublic: boolean) => {
+  const getStatusBadge = (status: 'draft' | 'published', isPublic: boolean, isFlagged?: boolean) => {
+    if (isFlagged) return <Badge className="bg-red-100 text-red-800">Flagged</Badge>
     if (isPublic) return <Badge className="bg-blue-100 text-blue-800">Public</Badge>
     switch (status) {
       case "published":
@@ -263,7 +265,7 @@ export default function AdminProducts() {
                     </TableCell>
                     <TableCell>{product.user?.name || 'Unknown'}</TableCell>
                     <TableCell>{product.category?.name || 'N/A'}</TableCell>
-                    <TableCell>{getStatusBadge(product.status, product.is_public)}</TableCell>
+                    <TableCell>{getStatusBadge(product.status, product.is_public, product.is_flagged)}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {new Date(product.created_at).toLocaleDateString()}
                     </TableCell>
@@ -293,7 +295,7 @@ export default function AdminProducts() {
                             }
                           }}>
                             <Flag className="mr-2 h-4 w-4" />
-                            {product as any && (product as any).is_flagged ? 'Unflag' : 'Flag'} Product
+                            {product.is_flagged ? 'Unflag' : 'Flag'} Product
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem className="text-red-600">

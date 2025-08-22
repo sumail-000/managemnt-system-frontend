@@ -28,19 +28,22 @@ interface AdminSidebarProps {
 export function AdminSidebar({ open, onToggle }: AdminSidebarProps) {
   const location = useLocation()
   const [userCount, setUserCount] = useState(0)
+  const [productCount, setProductCount] = useState(0)
 
   useEffect(() => {
-    const fetchUserCount = async () => {
+    const fetchCounts = async () => {
       try {
-        const response: any = await adminAPI.getUserStats();
-        if (response.success) {
-          setUserCount(response.data.total_users);
-        }
+        const [userRes, productMetrics]: [any, any] = await Promise.all([
+          adminAPI.getUserStats(),
+          adminAPI.getProductMetrics()
+        ]);
+        if (userRes?.success) setUserCount(userRes.data.total_users || 0);
+        if (productMetrics?.success) setProductCount(productMetrics.data.total || 0);
       } catch (error) {
-        console.error("Failed to fetch user count:", error);
+        console.error("Failed to fetch sidebar counts:", error);
       }
     };
-    fetchUserCount();
+    fetchCounts();
   }, []);
 
   const navigation = [
@@ -60,7 +63,7 @@ export function AdminSidebar({ open, onToggle }: AdminSidebarProps) {
       name: "Products",
       href: "/admin-panel/products",
       icon: Package,
-      badge: "18.9k"
+      badge: productCount > 0 ? productCount.toLocaleString() : undefined
     },
     {
       name: "Analytics",
