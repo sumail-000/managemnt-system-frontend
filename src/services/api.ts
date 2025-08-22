@@ -816,6 +816,16 @@ export const adminAPI = {
     console.log('[ADMIN_API] Toggle product flag request initiated', { id });
     return api.patch(`/admin/products/${id}/toggle-flag`);
   },
+
+  getProductById: (id: number | string) => {
+    console.log('[ADMIN_API] Get admin product by ID request initiated', { id });
+    return api.get(`/admin/products/${id}`);
+  },
+
+  deleteProduct: (id: number | string) => {
+    console.log('[ADMIN_API] Permanently delete product request initiated', { id });
+    return api.delete(`/admin/products/${id}`);
+  },
 };
 
 export default api;

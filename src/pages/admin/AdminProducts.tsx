@@ -37,6 +37,7 @@ import {
   CheckCircle,
   Package
 } from "lucide-react"
+import { useNavigate } from 'react-router-dom'
 import { adminAPI } from "@/services/api"
 import { useToast } from "@/hooks/use-toast"
 
@@ -60,6 +61,7 @@ export default function AdminProducts() {
   const [loading, setLoading] = useState(true)
   const [metrics, setMetrics] = useState({ total: 0, public: 0, published: 0, draft: 0, flagged: 0 })
   const { toast } = useToast()
+  const navigate = useNavigate()
 
   const fetchMetrics = async () => {
     try {
@@ -279,7 +281,7 @@ export default function AdminProducts() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => navigate(`/admin-panel/products/${product.id}`)}>
                             <Eye className="mr-2 h-4 w-4" />
                             View Product
                           </DropdownMenuItem>
@@ -298,7 +300,16 @@ export default function AdminProducts() {
                             {product.is_flagged ? 'Unflag' : 'Flag'} Product
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem className="text-red-600">
+                          <DropdownMenuItem className="text-red-600" onClick={async () => {
+                            if (!confirm('This will permanently delete the product. Continue?')) return
+                            try {
+                              await adminAPI.deleteProduct(product.id)
+                              await Promise.all([fetchProducts(), fetchMetrics()])
+                              toast({ title: 'Product deleted' })
+                            } catch (e: any) {
+                              toast({ title: 'Error', description: e.response?.data?.message || 'Failed to delete product', variant: 'destructive' })
+                            }
+                          }}>
                             <Trash2 className="mr-2 h-4 w-4" />
                             Remove Product
                           </DropdownMenuItem>
