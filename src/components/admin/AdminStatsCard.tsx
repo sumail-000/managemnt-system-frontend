@@ -1,15 +1,16 @@
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { ArrowUpRight, ArrowDownRight, LucideIcon } from "lucide-react"
+import { ArrowUpRight, ArrowDownRight, Minus, LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface AdminStatsCardProps {
   title: string
   value: string
   change: string
-  trend: "up" | "down"
+  trend: "up" | "down" | "neutral"
   icon: LucideIcon
   color: "blue" | "green" | "purple" | "orange" | string
+  period?: string
 }
 
 const colorClasses = {
@@ -25,7 +26,8 @@ export function AdminStatsCard({
   change,
   trend,
   icon: Icon,
-  color
+  color,
+  period = "vs last month"
 }: AdminStatsCardProps) {
   return (
     <Card>
@@ -41,17 +43,15 @@ export function AdminStatsCard({
         </div>
         <div className="flex items-center space-x-2 mt-4">
           <Badge
-            variant={trend === "up" ? "default" : "destructive"}
+            variant={trend === "up" ? "default" : trend === "down" ? "destructive" : "secondary"}
             className="flex items-center space-x-1"
           >
-            {trend === "up" ? (
-              <ArrowUpRight className="h-3 w-3" />
-            ) : (
-              <ArrowDownRight className="h-3 w-3" />
-            )}
+            {trend === "up" && <ArrowUpRight className="h-3 w-3" />}
+            {trend === "down" && <ArrowDownRight className="h-3 w-3" />}
+            {trend === "neutral" && <Minus className="h-3 w-3" />}
             <span>{change}</span>
           </Badge>
-          <span className="text-xs text-muted-foreground">vs last month</span>
+          <span className="text-xs text-muted-foreground">{period}</span>
         </div>
       </CardContent>
     </Card>

@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -35,80 +35,142 @@ import {
   Shield, 
   Trash2,
   Download,
-  Filter,
   Eye
 } from "lucide-react"
+import { formatDistanceToNow } from 'date-fns'
+import { Link } from "react-router-dom"
+import { usePaginatedUsers } from "@/hooks/usePaginatedUsers"
+import { adminAPI } from "@/services/api"
+import { User } from "@/types/user"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { useToast } from "@/hooks/use-toast"
+import { Label } from "@/components/ui/label"
 
 export default function AdminUsers() {
-  const [searchTerm, setSearchTerm] = useState("")
-  const [planFilter, setPlanFilter] = useState("all")
-  const [statusFilter, setStatusFilter] = useState("all")
+  const { users, pagination, filters, loading, applyFilters, refresh } = usePaginatedUsers(50); // Fetch 50 users for scrolling
+  const [stats, setStats] = useState({
+    total_users: 0,
+    active_users: 0,
+    pro_users: 0,
+    enterprise_users: 0,
+  });
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{ isOpen: boolean; userId: number | null }>({
+    isOpen: false,
+    userId: null,
+  });
+  const [resetPasswordDialog, setResetPasswordDialog] = useState<{ isOpen: boolean; userId: number | null }>({
+    isOpen: false,
+    userId: null,
+  });
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const { toast } = useToast();
 
-  const users = [
-    {
-      id: 1,
-      name: "John Doe",
-      email: "john@company.com",
-      company: "Tech Corp",
-      plan: "Enterprise",
-      status: "active",
-      registeredAt: "2024-01-15",
-      lastActive: "2 hours ago",
-      products: 45,
-      avatar: "/avatars/01.png"
-    },
-    {
-      id: 2,
-      name: "Sarah Wilson",
-      email: "sarah@startup.io",
-      company: "Startup Inc",
-      plan: "Pro",
-      status: "active",
-      registeredAt: "2024-02-20",
-      lastActive: "1 day ago",
-      products: 23,
-      avatar: "/avatars/02.png"
-    },
-    {
-      id: 3,
-      name: "Mike Johnson",
-      email: "mike@freelance.com",
-      company: "Freelancer",
-      plan: "Basic",
-      status: "suspended",
-      registeredAt: "2024-03-10",
-      lastActive: "1 week ago",
-      products: 8,
-      avatar: "/avatars/03.png"
-    },
-    {
-      id: 4,
-      name: "Lisa Chen",
-      email: "lisa@enterprise.com",
-      company: "Enterprise Co",
-      plan: "Enterprise",
-      status: "active",
-      registeredAt: "2024-01-05",
-      lastActive: "30 minutes ago",
-      products: 67,
-      avatar: "/avatars/04.png"
-    },
-    {
-      id: 5,
-      name: "David Brown",
-      email: "david@smallbiz.com",
-      company: "Small Business",
-      plan: "Pro",
-      status: "inactive",
-      registeredAt: "2023-12-15",
-      lastActive: "2 weeks ago",
-      products: 12,
-      avatar: "/avatars/05.png"
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const response: any = await adminAPI.getUserStats();
+        if (response.success) {
+          setStats(response.data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch user stats:", error);
+      }
+    };
+    fetchStats();
+  }, []);
+
+  const handleDeleteUser = async () => {
+    if (deleteConfirmation.userId) {
+      try {
+        await adminAPI.deleteUser(deleteConfirmation.userId);
+        toast({
+          title: "Success",
+          description: "User has been deleted successfully.",
+        });
+        refresh(); // Refresh the user list
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to delete user.",
+          variant: "destructive",
+        });
+      } finally {
+        setDeleteConfirmation({ isOpen: false, userId: null });
+      }
     }
-  ]
+  };
 
-  const getPlanBadge = (plan: string) => {
-    switch (plan) {
+  const handleResetPassword = async () => {
+    if (resetPasswordDialog.userId) {
+      if (newPassword !== confirmPassword) {
+        toast({
+          title: "Error",
+          description: "Passwords do not match.",
+          variant: "destructive",
+        });
+        return;
+      }
+      try {
+        await adminAPI.resetPassword(resetPasswordDialog.userId, {
+          password: newPassword,
+          password_confirmation: confirmPassword,
+        });
+        toast({
+          title: "Success",
+          description: "User password has been reset successfully.",
+        });
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to reset user password.",
+          variant: "destructive",
+        });
+      } finally {
+        setResetPasswordDialog({ isOpen: false, userId: null });
+        setNewPassword("");
+        setConfirmPassword("");
+      }
+    }
+  };
+
+  const handleSuspendUser = async (userId: number) => {
+    try {
+      await adminAPI.suspendUser(userId);
+      toast({
+        title: "Success",
+        description: "User suspension status has been updated.",
+      });
+      refresh(); // Refresh the user list
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update user suspension status.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const getPlanBadge = (planName?: string) => {
+    if (!planName) return <Badge variant="outline">N/A</Badge>;
+    switch (planName) {
       case "Enterprise":
         return <Badge className="bg-purple-100 text-purple-800">Enterprise</Badge>
       case "Pro":
@@ -116,32 +178,36 @@ export default function AdminUsers() {
       case "Basic":
         return <Badge variant="secondary">Basic</Badge>
       default:
-        return <Badge variant="outline">{plan}</Badge>
+        return <Badge variant="outline">{planName}</Badge>
     }
   }
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
+  const getStatusBadge = (user: User) => {
+    if (user.is_suspended) {
+      return <Badge className="bg-red-100 text-red-800">Suspended</Badge>;
+    }
+    switch (user.payment_status) {
       case "active":
+      case "paid":
         return <Badge className="bg-green-100 text-green-800">Active</Badge>
-      case "suspended":
-        return <Badge className="bg-red-100 text-red-800">Suspended</Badge>
       case "inactive":
+      case "pending":
         return <Badge className="bg-yellow-100 text-yellow-800">Inactive</Badge>
       default:
-        return <Badge variant="outline">{status}</Badge>
+        return <Badge variant="outline">{user.payment_status}</Badge>
     }
   }
 
-  const filteredUsers = users.filter(user => {
-    const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.company.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesPlan = planFilter === "all" || user.plan.toLowerCase() === planFilter
-    const matchesStatus = statusFilter === "all" || user.status === statusFilter
-
-    return matchesSearch && matchesPlan && matchesStatus
-  })
+  const formatLastActive = (dateString?: string) => {
+    if (!dateString) {
+      return 'Never';
+    }
+    try {
+      return `${formatDistanceToNow(new Date(dateString))} ago`;
+    } catch (error) {
+      return 'Invalid date';
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -169,25 +235,25 @@ export default function AdminUsers() {
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardContent className="p-6">
-            <div className="text-2xl font-bold">2,847</div>
+            <div className="text-2xl font-bold">{stats.total_users.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">Total Users</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6">
-            <div className="text-2xl font-bold">2,456</div>
+            <div className="text-2xl font-bold">{stats.active_users.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">Active Users</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6">
-            <div className="text-2xl font-bold">892</div>
+            <div className="text-2xl font-bold">{stats.pro_users.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">Pro Users</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6">
-            <div className="text-2xl font-bold">708</div>
+            <div className="text-2xl font-bold">{stats.enterprise_users.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">Enterprise Users</p>
           </CardContent>
         </Card>
@@ -201,12 +267,12 @@ export default function AdminUsers() {
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search users..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                value={filters.search || ''}
+                onChange={(e) => applyFilters({ search: e.target.value })}
                 className="pl-9"
               />
             </div>
-            <Select value={planFilter} onValueChange={setPlanFilter}>
+            <Select value={filters.plan || "all"} onValueChange={(value) => applyFilters({ plan: value === 'all' ? undefined : value })}>
               <SelectTrigger className="w-full sm:w-40">
                 <SelectValue placeholder="Plan Type" />
               </SelectTrigger>
@@ -217,7 +283,7 @@ export default function AdminUsers() {
                 <SelectItem value="enterprise">Enterprise</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <Select value={filters.status || "all"} onValueChange={(value) => applyFilters({ status: value === 'all' ? undefined : value })}>
               <SelectTrigger className="w-full sm:w-40">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
@@ -235,79 +301,142 @@ export default function AdminUsers() {
       {/* Users Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Users ({filteredUsers.length})</CardTitle>
+          <CardTitle>Users ({pagination.total})</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>User</TableHead>
-                <TableHead>Company</TableHead>
-                <TableHead>Plan</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Products</TableHead>
-                <TableHead>Last Active</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredUsers.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell>
-                    <div className="flex items-center space-x-3">
-                      <Avatar className="h-8 w-8">
-                        <AvatarImage src={user.avatar} alt={user.name} />
-                        <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <div className="font-medium">{user.name}</div>
-                        <div className="text-sm text-muted-foreground">{user.email}</div>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>{user.company}</TableCell>
-                  <TableCell>{getPlanBadge(user.plan)}</TableCell>
-                  <TableCell>{getStatusBadge(user.status)}</TableCell>
-                  <TableCell>{user.products}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {user.lastActive}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem>
-                          <Eye className="mr-2 h-4 w-4" />
-                          View Details
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <Shield className="mr-2 h-4 w-4" />
-                          Reset Password
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <Ban className="mr-2 h-4 w-4" />
-                          {user.status === "suspended" ? "Unsuspend" : "Suspend"}
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem className="text-red-600">
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete User
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
+          <div className="h-[600px] overflow-y-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>User</TableHead>
+                  <TableHead>Company</TableHead>
+                  <TableHead>Plan</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Products</TableHead>
+                  <TableHead>Last Active</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center">Loading...</TableCell>
+                  </TableRow>
+                ) : (
+                  users.map((user: User) => (
+                    <TableRow key={user.id}>
+                      <TableCell>
+                        <div className="flex items-center space-x-3">
+                          <Avatar className="h-8 w-8">
+                            <AvatarImage src={user.avatar} alt={user.name} />
+                            <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <div className="font-medium">{user.name}</div>
+                            <div className="text-sm text-muted-foreground">{user.email}</div>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>{user.company}</TableCell>
+                      <TableCell>{getPlanBadge(user.membership_plan?.name)}</TableCell>
+                      <TableCell>{getStatusBadge(user)}</TableCell>
+                      <TableCell>{user.products_count || 0}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {formatLastActive(user.last_active_at)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="h-8 w-8 p-0">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem asChild>
+                              <Link to={`/admin-panel/users/${user.id}`}>
+                                <Eye className="mr-2 h-4 w-4" />
+                                View Details
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setResetPasswordDialog({ isOpen: true, userId: user.id })}>
+                              <Shield className="mr-2 h-4 w-4" />
+                              Reset Password
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleSuspendUser(user.id)}>
+                              <Ban className="mr-2 h-4 w-4" />
+                              {user.is_suspended ? "Unsuspend" : "Suspend"}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem className="text-red-600" onClick={() => setDeleteConfirmation({ isOpen: true, userId: user.id })}>
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete User
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
+      <AlertDialog open={deleteConfirmation.isOpen} onOpenChange={(isOpen) => setDeleteConfirmation({ ...deleteConfirmation, isOpen })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the user's account and all associated data.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteConfirmation({ isOpen: false, userId: null })}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteUser}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <Dialog open={resetPasswordDialog.isOpen} onOpenChange={(isOpen) => setResetPasswordDialog({ ...resetPasswordDialog, isOpen })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset Password</DialogTitle>
+            <DialogDescription>
+              Enter a new password for the user.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="new-password" >
+                New Password
+              </Label>
+              <Input
+                id="new-password"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="col-span-3"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="confirm-password" >
+                Confirm Password
+              </Label>
+              <Input
+                id="confirm-password"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="col-span-3"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleResetPassword}>Reset Password</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

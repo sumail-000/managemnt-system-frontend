@@ -17,6 +17,8 @@ import {
   Bell,
   HelpCircle
 } from "lucide-react"
+import { adminAPI } from "@/services/api"
+import { useEffect, useState } from "react"
 
 interface AdminSidebarProps {
   open: boolean
@@ -25,6 +27,21 @@ interface AdminSidebarProps {
 
 export function AdminSidebar({ open, onToggle }: AdminSidebarProps) {
   const location = useLocation()
+  const [userCount, setUserCount] = useState(0)
+
+  useEffect(() => {
+    const fetchUserCount = async () => {
+      try {
+        const response: any = await adminAPI.getUserStats();
+        if (response.success) {
+          setUserCount(response.data.total_users);
+        }
+      } catch (error) {
+        console.error("Failed to fetch user count:", error);
+      }
+    };
+    fetchUserCount();
+  }, []);
 
   const navigation = [
     {
@@ -37,7 +54,7 @@ export function AdminSidebar({ open, onToggle }: AdminSidebarProps) {
       name: "Users",
       href: "/admin-panel/users",
       icon: Users,
-      badge: "2,847"
+      badge: userCount.toLocaleString()
     },
     {
       name: "Products",

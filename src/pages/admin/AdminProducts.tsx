@@ -170,7 +170,7 @@ export default function AdminProducts() {
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-2xl font-bold">17,456</div>
-                <p className="text-xs text-muted-foreground">Approved</p>
+                <p className="text-xs text-muted-foreground">Public</p>
               </div>
               <CheckCircle className="h-8 w-8 text-green-600" />
             </div>
@@ -181,7 +181,7 @@ export default function AdminProducts() {
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-2xl font-bold">1,234</div>
-                <p className="text-xs text-muted-foreground">Pending Review</p>
+                <p className="text-xs text-muted-foreground">Publish/Draft</p>
               </div>
               <AlertTriangle className="h-8 w-8 text-yellow-600" />
             </div>
@@ -254,7 +254,6 @@ export default function AdminProducts() {
                 <TableHead>Creator</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Nutrition Score</TableHead>
                 <TableHead>Views</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -274,12 +273,6 @@ export default function AdminProducts() {
                   <TableCell>{product.user}</TableCell>
                   <TableCell>{product.category}</TableCell>
                   <TableCell>{getStatusBadge(product.status)}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm font-medium">{product.nutritionScore}</span>
-                      {getNutritionScoreBadge(product.nutritionScore)}
-                    </div>
-                  </TableCell>
                   <TableCell>{product.views}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {product.createdAt}

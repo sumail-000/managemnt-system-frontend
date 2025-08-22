@@ -51,14 +51,24 @@ interface MetricsData {
   active_products: DashboardMetric;
   monthly_revenue: DashboardMetric;
   api_calls_today: DashboardMetric;
+  user_distribution: any[];
+}
+
+interface AnalyticsData {
+    date: string;
+    label: string;
+    value: number;
 }
 
 export default function AdminDashboard() {
   const { toast } = useToast()
   const [metrics, setMetrics] = useState<DashboardMetric[]>([])
   const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null)
+  const [userDistribution, setUserDistribution] = useState<any[]>([])
+  const [revenueData, setRevenueData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [analyticsPeriod, setAnalyticsPeriod] = useState('30d');
 
   const iconMap = {
     Users,
@@ -104,13 +114,11 @@ export default function AdminDashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      // Cast responses to 'any' to bypass incorrect TypeScript inference
       const [metricsResponse, healthResponse]: [any, any] = await Promise.all([
         api.get(`/admin/dashboard/metrics`),
         api.get('/admin/dashboard/system-health')
       ]);
 
-      // The interceptor returns response.data, so we access properties directly
       if (metricsResponse && metricsResponse.success) {
         const data = metricsResponse.data;
         const formattedMetrics: DashboardMetric[] = [
@@ -148,6 +156,7 @@ export default function AdminDashboard() {
           }
         ];
         setMetrics(formattedMetrics);
+        setUserDistribution(data.user_distribution || []);
       } else {
         setMetrics(getDefaultMetrics());
       }
@@ -170,29 +179,49 @@ export default function AdminDashboard() {
     }
   }
 
+  const fetchAnalyticsData = async (period: string) => {
+    try {
+        const [revenueResponse, usersResponse]: [any, any] = await Promise.all([
+            api.get('/admin/dashboard/analytics', { params: { metric: 'revenue', period } }),
+            api.get('/admin/dashboard/analytics', { params: { metric: 'users', period } })
+        ]);
+
+        if (revenueResponse.success && usersResponse.success) {
+            const combinedData = revenueResponse.data.map((revItem: AnalyticsData) => {
+                const userItem = usersResponse.data.find((u: AnalyticsData) => u.date === revItem.date);
+                return {
+                    month: revItem.label,
+                    revenue: revItem.value,
+                    users: userItem ? userItem.value : 0,
+                };
+            });
+            setRevenueData(combinedData);
+        }
+    } catch (error) {
+        console.error('Error fetching analytics data:', error);
+        toast({
+            title: "Error",
+            description: "Failed to load chart data.",
+            variant: "destructive",
+        });
+    }
+  };
+
   useEffect(() => {
-    fetchDashboardData()
-  }, [])
+    setLoading(true);
+    Promise.all([
+        fetchDashboardData(),
+        fetchAnalyticsData(analyticsPeriod)
+    ]).finally(() => setLoading(false));
+  }, [analyticsPeriod])
 
   const handleRefresh = () => {
     setRefreshing(true)
-    fetchDashboardData()
+    Promise.all([
+        fetchDashboardData(),
+        fetchAnalyticsData(analyticsPeriod)
+    ]).finally(() => setRefreshing(false));
   }
-
-  const userDistribution = [
-    { name: "Basic", value: 1247, color: "#e2e8f0" },
-    { name: "Pro", value: 892, color: "#3b82f6" },
-    { name: "Enterprise", value: 708, color: "#8b5cf6" }
-  ]
-
-  const revenueData = [
-    { month: "Jan", revenue: 32000, users: 2100 },
-    { month: "Feb", revenue: 35000, users: 2300 },
-    { month: "Mar", revenue: 38000, users: 2500 },
-    { month: "Apr", revenue: 42000, users: 2700 },
-    { month: "May", revenue: 45000, users: 2800 },
-    { month: "Jun", revenue: 47892, users: 2847 }
-  ]
 
   return (
     <div className="space-y-6">
@@ -249,11 +278,13 @@ export default function AdminDashboard() {
           // Always show metrics, even if empty (with fallback to default)
           (metrics.length > 0 ? metrics : getDefaultMetrics()).map((metric) => {
             const IconComponent = iconMap[metric.icon as keyof typeof iconMap]
+            const period = metric.title === "API Calls Today" ? "vs yesterday" : "vs last month";
             return (
               <AdminStatsCard
                 key={metric.title}
                 {...metric}
                 icon={IconComponent}
+                period={period}
               />
             )
           })
@@ -292,7 +323,7 @@ export default function AdminDashboard() {
                   <div className="flex items-center space-x-2">
                     <span className="text-sm text-muted-foreground">{item.value}</span>
                     <Badge variant="outline" className="text-xs">
-                      {((item.value / 2847) * 100).toFixed(1)}%
+                      {((item.value / (userDistribution.reduce((acc, cur) => acc + cur.value, 0) || 1)) * 100).toFixed(1)}%
                     </Badge>
                   </div>
                 </div>

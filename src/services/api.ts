@@ -768,6 +768,36 @@ export const adminAPI = {
     console.log('[ADMIN_API] Update security settings request initiated');
     return api.put('/admin/profile/security', data);
   },
+
+  deleteUser: (id: number) => {
+    console.log('[ADMIN_API] Delete user request initiated', { id });
+    return api.delete(`/admin/users/${id}`);
+  },
+
+  getUserStats: () => {
+    console.log('[ADMIN_API] Get user stats request initiated');
+    return api.get('/admin/users/stats');
+  },
+
+  suspendUser: (id: number) => {
+    console.log('[ADMIN_API] Suspend user request initiated', { id });
+    return api.patch(`/admin/users/${id}/suspend`);
+  },
+
+  getUserById: (id: string) => {
+    console.log('[ADMIN_API] Get user by ID request initiated', { id });
+    return api.get(`/admin/users/${id}`);
+  },
+
+  resetPassword: (id: number, data: { password; password_confirmation }) => {
+    console.log('[ADMIN_API] Reset password request initiated', { id });
+    return api.patch(`/admin/users/${id}/reset-password`, data);
+  },
+
+  getProducts: (params?: { search?: string; sort_by?: string; sort_order?: string; page?: number; per_page?: number }) => {
+    console.log('[ADMIN_API] Get products request initiated', params);
+    return api.get('/admin/products', { params });
+  },
 };
 
 export default api;
