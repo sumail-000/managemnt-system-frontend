@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { FDANutritionLabel } from '@/components/previewlabel/FDANutritionLabel';
 import { generateNutritionLabelPDF } from '@/utils/pdfGenerator';
+import api from '@/services/api';
 import {
   ChevronDown,
   ChevronUp,
@@ -442,6 +443,35 @@ export default function NutritionLabel() {
   const [isGeneratingLabel, setIsGeneratingLabel] = useState(false);
   const [showDownloadButton, setShowDownloadButton] = useState(false);
 
+  // Log label generation to backend for accurate analytics/usage
+  const logLabelGeneration = async () => {
+    try {
+      if (!passedData?.productId) return;
+      const productId = parseInt(passedData.productId);
+      if (!Number.isFinite(productId)) return;
+
+      // Map UI label type to backend format enum
+      const formatMap: Record<string, string> = {
+        'FDA Vertical (default)': 'vertical',
+        'FDA Tabular': 'tabular',
+        'FDA Linear': 'linear',
+      };
+      const mappedFormat = formatMap[labelType] || 'vertical';
+
+      await api.post('/labels/log-generation', {
+        product_id: productId,
+        name: passedData?.recipeName ? `${passedData.recipeName} Label` : undefined,
+        format: mappedFormat,
+        language: 'bilingual',
+        unit_system: 'metric',
+      });
+      // console.debug('Label generation logged for product', productId);
+    } catch (e) {
+      // Keep UX silent but surface in console for diagnostics
+      console.warn('Failed to log label generation', e);
+    }
+  };
+
   const handleGenerateLabel = async () => {
     try {
       setIsGeneratingLabel(true);
@@ -460,6 +490,8 @@ export default function NutritionLabel() {
       });
       
       setShowDownloadButton(true);
+      // Record generation event for analytics
+      await logLabelGeneration();
     } catch (error) {
       console.error('PDF generation failed:', error);
       alert('Failed to generate label. Please try again.');
@@ -478,6 +510,8 @@ export default function NutritionLabel() {
         filename,
         quality: 1
       });
+      // Also log on direct download
+      await logLabelGeneration();
     } catch (error) {
       console.error('PDF generation failed:', error);
       alert('Failed to download label. Please try again.');

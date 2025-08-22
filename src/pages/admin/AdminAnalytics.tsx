@@ -16,6 +16,7 @@ import { format } from "date-fns"
 
 import { AdminChart } from "@/components/admin/AdminChart"
 import { AdminStatsCard } from "@/components/admin/AdminStatsCard"
+import jsPDF from 'jspdf'
 import api from "@/services/api"
 
 // Types for backend analytics response
@@ -280,6 +281,182 @@ export default function AdminAnalytics() {
     }
   }
 
+  const exportReport = async () => {
+    try {
+      const usingCustom = !!(dateRange.from && dateRange.to)
+      const startDate = usingCustom ? dateRange.from! : (revenueSeries[0] ? new Date(revenueSeries[0].date) : new Date())
+      const endDate = usingCustom ? dateRange.to! : (revenueSeries[revenueSeries.length - 1] ? new Date(revenueSeries[revenueSeries.length - 1].date) : new Date())
+      const rangeLabel = `${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}`
+
+      const doc = new jsPDF('p', 'mm', 'a4')
+      const pageWidth = doc.internal.pageSize.getWidth()
+      const pageHeight = doc.internal.pageSize.getHeight()
+      const marginX = 15
+      const marginY = 15
+      const contentWidth = pageWidth - marginX * 2
+      let cursorY = marginY
+
+      const setFont = (size = 10, style: 'normal' | 'bold' = 'normal') => {
+        doc.setFont('helvetica', style === 'bold' ? 'bold' : 'normal')
+        doc.setFontSize(size)
+      }
+      const hr = (y: number) => doc.line(marginX, y, pageWidth - marginX, y)
+      const addFooter = () => {
+        setFont(9, 'normal')
+        doc.text(`Page ${doc.getNumberOfPages()}`, pageWidth - marginX, pageHeight - 7, { align: 'right' })
+      }
+      const addHeader = () => {
+        setFont(16, 'bold')
+        doc.text('Analytics Report', marginX, cursorY)
+        setFont(10, 'normal')
+        doc.text(rangeLabel, marginX, cursorY + 6)
+        doc.text(`Generated: ${new Date().toLocaleString()}`, pageWidth - marginX, cursorY + 6, { align: 'right' })
+        cursorY += 12
+        hr(cursorY)
+        cursorY += 6
+      }
+      const ensureSpace = (needed: number) => {
+        if (cursorY + needed > pageHeight - marginY) {
+          addFooter()
+          doc.addPage()
+          cursorY = marginY
+        }
+      }
+
+      const drawKPIBlock = () => {
+        const blockH = 24
+        const gap = 4
+        const cols = 4
+        const boxW = (contentWidth - gap * (cols - 1)) / cols
+        const kpis = [
+          { title: 'MRR', value: formatCurrency(revenueCurrent), change: revenueGrowth.change, up: revenueGrowth.trend === 'up' },
+          { title: 'Active Users', value: usersCurrent.toLocaleString(), change: usersGrowth.change, up: usersGrowth.trend === 'up' },
+          { title: 'Products Created', value: productsCurrent.toLocaleString(), change: productsGrowth.change, up: productsGrowth.trend === 'up' },
+          { title: 'API Calls', value: apiCurrent.toLocaleString(), change: apiGrowth.change, up: apiGrowth.trend === 'up' },
+        ]
+        ensureSpace(blockH + 8)
+        setFont(12, 'bold'); doc.text('Executive Summary', marginX, cursorY)
+        cursorY += 6
+        for (let i = 0; i < kpis.length; i++) {
+          const x = marginX + i * (boxW + gap)
+          doc.setDrawColor(229, 231, 235)
+          doc.setLineWidth(0.2)
+          doc.rect(x, cursorY, boxW, blockH)
+          setFont(9, 'normal'); doc.text(kpis[i].title, x + 3, cursorY + 6)
+          setFont(12, 'bold'); doc.text(kpis[i].value, x + 3, cursorY + 12)
+          setFont(9, 'normal');
+          doc.setTextColor(kpis[i].up ? 22 : 220, kpis[i].up ? 163 : 38, kpis[i].up ? 74 : 38)
+          doc.text(kpis[i].change, x + 3, cursorY + 18)
+          doc.setTextColor(0, 0, 0)
+        }
+        cursorY += blockH + 6
+      }
+
+      type Col = { header: string, width: number, align?: 'left' | 'right' | 'center' }
+      const drawTable = (title: string, columns: Col[], rows: (string | number)[][]) => {
+        const rowH = 6
+        const headerH = 7
+        const titleH = 6
+        ensureSpace(titleH + headerH + rowH)
+        setFont(12, 'bold'); doc.text(title, marginX, cursorY)
+        cursorY += 5
+        // Header
+        doc.setDrawColor(229, 231, 235); doc.setLineWidth(0.2)
+        let x = marginX
+        setFont(9, 'bold')
+        columns.forEach(col => {
+          doc.rect(x, cursorY, col.width, headerH)
+          doc.text(col.header, x + 2, cursorY + 4)
+          x += col.width
+        })
+        cursorY += headerH
+        // Rows
+        setFont(9, 'normal')
+        rows.forEach(r => {
+          ensureSpace(rowH)
+          let cx = marginX
+          for (let i = 0; i < columns.length; i++) {
+            doc.rect(cx, cursorY, columns[i].width, rowH)
+            const txt = String(r[i] ?? '')
+            let tx = cx + 2
+            if (columns[i].align === 'right') tx = cx + columns[i].width - 2
+            if (columns[i].align === 'center') tx = cx + columns[i].width / 2
+            const opts: any = {}
+            if (columns[i].align === 'right') opts.align = 'right'
+            if (columns[i].align === 'center') opts.align = 'center'
+            doc.text(txt, tx, cursorY + 4, opts)
+            cx += columns[i].width
+          }
+          cursorY += rowH
+        })
+        cursorY += 4
+      }
+
+      // Compose PDF
+      addHeader()
+      drawKPIBlock()
+
+      // Feature Usage
+      const fuCols: Col[] = [
+        { header: 'Feature', width: contentWidth * 0.5 },
+        { header: 'Usage %', width: contentWidth * 0.25, align: 'right' },
+        { header: 'Trend', width: contentWidth * 0.25, align: 'right' },
+      ]
+      const fuRows = displayedFeatureUsage.map(f => [f.feature, `${f.usage}%`, f.trend])
+      drawTable('Feature Usage', fuCols, fuRows)
+
+      // Subscription Distribution
+      const sdCols: Col[] = [
+        { header: 'Plan', width: contentWidth * 0.35 },
+        { header: 'Users', width: contentWidth * 0.2, align: 'right' },
+        { header: '% Share', width: contentWidth * 0.2, align: 'right' },
+        { header: 'Revenue', width: contentWidth * 0.25, align: 'right' },
+      ]
+      const sdRows = planDistribution.map(p => [p.plan, p.count.toLocaleString(), `${p.percentage}%`, formatCurrency(p.revenue)])
+      drawTable('Subscription Distribution', sdCols, sdRows)
+
+      // API Usage by Plan
+      const apCols: Col[] = [
+        { header: 'Plan', width: contentWidth * 0.5 },
+        { header: 'Calls', width: contentWidth * 0.25, align: 'right' },
+        { header: 'Share', width: contentWidth * 0.25, align: 'right' },
+      ]
+      const apRows = apiUsageByPlan.map(r => [r.plan, r.count.toLocaleString(), `${r.percentage}%`])
+      drawTable('API Usage by Plan', apCols, apRows)
+
+      // User Growth
+      const ugCols: Col[] = [
+        { header: 'Period', width: contentWidth * 0.4 },
+        { header: 'New', width: contentWidth * 0.2, align: 'right' },
+        { header: 'Churned', width: contentWidth * 0.2, align: 'right' },
+        { header: 'Net', width: contentWidth * 0.2, align: 'right' },
+      ]
+      const ugRows = userGrowth.map(p => [p.period, `+${p.new.toLocaleString()}`, `-${p.churned.toLocaleString()}`, `${p.net >= 0 ? '+' : ''}${p.net.toLocaleString()}`])
+      drawTable('User Growth', ugCols, ugRows)
+
+      // System Health
+      const shCols: Col[] = [
+        { header: 'Metric', width: contentWidth * 0.6 },
+        { header: 'Value', width: contentWidth * 0.4 },
+      ]
+      const sh = systemHealth
+      const shRows = [
+        ['API Response Time', sh?.api_response_time?.value ?? '—'],
+        ['Uptime (30d)', sh?.server_uptime?.value ?? '—'],
+        ['Error Rate', sh?.error_rate?.value ?? '—'],
+        ['Database', sh?.database_status?.value ?? '—'],
+      ]
+      drawTable('System Health', shCols, shRows)
+
+      // Footer and save
+      addFooter()
+      const filename = `analytics_report_${startDate.toISOString().slice(0,10)}_${endDate.toISOString().slice(0,10)}.pdf`
+      doc.save(filename)
+    } catch (e) {
+      console.error('Export report failed', e)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -323,7 +500,7 @@ export default function AdminAnalytics() {
               </div>
             </PopoverContent>
           </Popover>
-          <Button size="sm">
+          <Button size="sm" onClick={exportReport}>
             <Download className="mr-2 h-4 w-4" />
             Export Report
           </Button>
