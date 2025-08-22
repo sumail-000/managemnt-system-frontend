@@ -21,6 +21,7 @@ import ResetPassword from "./pages/ResetPassword";
 import Blog from "./pages/Blog";
 import NutritionLabel from "./pages/NutritionLabel";
 import NotFound from "./pages/NotFound";
+import SupportCenter from "./pages/SupportCenter";
 import QRCodes from "./pages/QRCodes";
 import Favorites from "./pages/Favorites";
 import Settings from "./pages/Settings";
@@ -194,6 +195,16 @@ const App = () => {
         </ProtectedRoute>
       } />
       
+      <Route path="/support" element={
+        <ProtectedRoute>
+          <UserAuthGuard>
+            <DashboardLayout>
+              <SupportCenter />
+            </DashboardLayout>
+          </UserAuthGuard>
+        </ProtectedRoute>
+      } />
+
       <Route path="/billing" element={
         <ProtectedRoute>
           <UserAuthGuard>
