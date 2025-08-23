@@ -76,12 +76,7 @@ export function AdminSidebar({ open, onToggle }: AdminSidebarProps) {
       href: "/admin-panel/analytics",
       icon: BarChart3
     },
-    {
-      name: "Reports",
-      href: "/admin-panel/reports",
-      icon: FileText
-    },
-        {
+            {
       name: "Support",
       href: "/admin-panel/support",
       icon: HelpCircle,

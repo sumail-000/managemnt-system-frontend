@@ -39,7 +39,6 @@ import AdminUserDetails from "./pages/admin/AdminUserDetails";
 import AdminProducts from "./pages/admin/AdminProducts";
 import AdminAnalytics from "./pages/admin/AdminAnalytics";
 import AdminProductDetails from "./pages/admin/AdminProductDetails";
-import AdminReports from "./pages/admin/AdminReports";
 import AdminSupport from "./pages/admin/AdminSupport";
 import AdminSupportTicketDetail from "./pages/admin/AdminSupportTicketDetail";
 import AdminProfile from "./pages/admin/AdminProfile";
@@ -252,8 +251,7 @@ const App = () => {
         <Route path="products" element={<AdminProducts />} />
         <Route path="products/:id" element={<AdminProductDetails />} />
         <Route path="analytics" element={<AdminAnalytics />} />
-        <Route path="reports" element={<AdminReports />} />
-        <Route path="support" element={<AdminSupport />} />
+                <Route path="support" element={<AdminSupport />} />
         <Route path="support/:id" element={<AdminSupportTicketDetail />} />
         <Route path="profile" element={<AdminProfile />} />
         <Route path="settings" element={<AdminSettings />} />
