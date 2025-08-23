@@ -42,7 +42,6 @@ import AdminProductDetails from "./pages/admin/AdminProductDetails";
 import AdminSupport from "./pages/admin/AdminSupport";
 import AdminSupportTicketDetail from "./pages/admin/AdminSupportTicketDetail";
 import AdminProfile from "./pages/admin/AdminProfile";
-import AdminSettings from "./pages/admin/AdminSettings";
 import AdminNotifications from "./pages/admin/AdminNotifications";
 import AdminMaintenance from "./pages/admin/AdminMaintenance";
 import AdminFaqs from "./pages/admin/AdminFaqs";
@@ -254,8 +253,7 @@ const App = () => {
                 <Route path="support" element={<AdminSupport />} />
         <Route path="support/:id" element={<AdminSupportTicketDetail />} />
         <Route path="profile" element={<AdminProfile />} />
-        <Route path="settings" element={<AdminSettings />} />
-        <Route path="notifications" element={<AdminNotifications />} />
+                <Route path="notifications" element={<AdminNotifications />} />
         <Route path="maintenance" element={<AdminMaintenance />} />
         <Route path="faqs" element={<AdminFaqs />} />
       </Route>
