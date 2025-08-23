@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -15,7 +15,21 @@ import {
   TrendingUp,
   BarChart3
 } from "lucide-react"
-import { format } from "date-fns"
+import { format as dfFormat } from "date-fns"
+import api from "@/services/api"
+import jsPDF from "jspdf"
+
+interface ReportItem {
+  id: number
+  key: "user_activity" | "revenue_summary" | "product_performance" | "api_usage" | "platform_growth" | "feature_adoption"
+  name: string
+  description: string
+  type: string
+  icon: any
+  color: "blue" | "green" | "purple" | "orange"
+  lastGenerated: string
+  status: "ready" | "generating" | "outdated" | string
+}
 
 export default function AdminReports() {
   const [dateRange, setDateRange] = useState<{
@@ -26,75 +40,86 @@ export default function AdminReports() {
     to: new Date()
   })
 
-  const reports = [
+  // Make reports stateful so we can update status/lastGenerated
+  const [reports, setReports] = useState<ReportItem[]>([
     {
       id: 1,
+      key: "user_activity",
       name: "User Activity Report",
       description: "Detailed analysis of user engagement and activity patterns",
       type: "User Analytics",
       icon: Users,
       color: "blue",
-      lastGenerated: "2 hours ago",
-      status: "ready"
+      lastGenerated: "—",
+      status: "outdated"
     },
     {
       id: 2,
+      key: "revenue_summary",
       name: "Revenue Summary",
       description: "Monthly revenue breakdown by subscription plans",
       type: "Financial",
       icon: DollarSign,
       color: "green",
-      lastGenerated: "1 day ago",
-      status: "ready"
+      lastGenerated: "—",
+      status: "outdated"
     },
     {
       id: 3,
+      key: "product_performance",
       name: "Product Performance",
       description: "Most popular products and creation trends",
       type: "Product Analytics",
       icon: Package,
       color: "purple",
-      lastGenerated: "6 hours ago",
-      status: "ready"
+      lastGenerated: "—",
+      status: "outdated"
     },
     {
       id: 4,
+      key: "api_usage",
       name: "API Usage Statistics",
       description: "API call patterns and rate limiting analysis",
       type: "System Analytics",
       icon: Activity,
       color: "orange",
-      lastGenerated: "Generating...",
-      status: "generating"
+      lastGenerated: "—",
+      status: "outdated"
     },
     {
       id: 5,
+      key: "platform_growth",
       name: "Platform Growth Report",
       description: "User acquisition and retention metrics",
       type: "Growth Analytics",
       icon: TrendingUp,
       color: "blue",
-      lastGenerated: "3 days ago",
-      status: "ready"
+      lastGenerated: "—",
+      status: "outdated"
     },
     {
       id: 6,
+      key: "feature_adoption",
       name: "Feature Adoption Report",
       description: "Feature usage patterns and adoption rates",
       type: "Feature Analytics",
       icon: BarChart3,
       color: "green",
-      lastGenerated: "1 week ago",
+      lastGenerated: "—",
       status: "outdated"
     }
-  ]
+  ])
 
-  const quickStats = [
-    { label: "Total Reports Generated", value: "1,247", period: "This month" },
-    { label: "Active Report Subscribers", value: "89", period: "Current" },
-    { label: "Automated Reports", value: "24", period: "Scheduled" },
-    { label: "Export Downloads", value: "456", period: "This week" }
-  ]
+  // Datasets cache per report key
+  const [datasets, setDatasets] = useState<Record<string, any>>({})
+  const [loading, setLoading] = useState(false)
+
+  const quickStats = useMemo(() => ([
+    { label: "Total Reports Generated", value: Object.values(datasets).length.toString(), period: "This session" },
+    { label: "Active Report Types", value: reports.filter(r => r.status === 'ready').length.toString(), period: "Generated" },
+    { label: "Automated Reports", value: "0", period: "Scheduled" },
+    { label: "Export Downloads", value: "—", period: "Manual" }
+  ]), [datasets, reports])
 
   const getColorClasses = (color: string) => {
     switch (color) {
@@ -124,6 +149,235 @@ export default function AdminReports() {
     }
   }
 
+  const rangeParams = () => {
+    const from = dateRange.from ? dfFormat(dateRange.from, 'yyyy-MM-dd') : dfFormat(new Date(), 'yyyy-MM-dd')
+    const to = dateRange.to ? dfFormat(dateRange.to, 'yyyy-MM-dd') : dfFormat(new Date(), 'yyyy-MM-dd')
+    return { from, to }
+  }
+
+  const setReportStatus = (id: number, status: ReportItem['status'], lastGenerated?: string) => {
+    setReports(prev => prev.map(r => r.id === id ? { ...r, status, lastGenerated: lastGenerated ?? r.lastGenerated } : r))
+  }
+
+  // Fetch functions per report
+  const fetchUserActivity = async () => {
+    const res: any = await api.get('/admin/reports/user-activity', { params: rangeParams() })
+    return res
+  }
+  const fetchRevenueSummary = async () => {
+    const res: any = await api.get('/admin/reports/revenue-summary', { params: rangeParams() })
+    return res
+  }
+  const fetchProductPerformance = async () => {
+    const res: any = await api.get('/admin/reports/product-performance', { params: rangeParams() })
+    return res
+  }
+  const fetchApiUsage = async () => {
+    const res: any = await api.get('/admin/reports/api-usage', { params: rangeParams() })
+    return res
+  }
+  const fetchPlatformGrowth = async () => {
+    const res: any = await api.get('/admin/reports/platform-growth', { params: rangeParams() })
+    return res
+  }
+  const fetchFeatureAdoption = async () => {
+    const res: any = await api.get('/admin/reports/feature-adoption', { params: rangeParams() })
+    return res
+  }
+
+  const generateReport = async (report: ReportItem) => {
+    setReportStatus(report.id, 'generating')
+    try {
+      let data: any = null
+      if (report.key === 'user_activity') {
+        data = await fetchUserActivity()
+      } else if (report.key === 'revenue_summary') {
+        data = await fetchRevenueSummary()
+      } else if (report.key === 'product_performance') {
+        data = await fetchProductPerformance()
+      } else if (report.key === 'api_usage') {
+        data = await fetchApiUsage()
+      } else if (report.key === 'platform_growth') {
+        data = await fetchPlatformGrowth()
+      } else if (report.key === 'feature_adoption') {
+        data = await fetchFeatureAdoption()
+      } else {
+        // Not implemented server-side yet; return empty dataset
+        data = { success: true, data: [] }
+      }
+      setDatasets(prev => ({ ...prev, [report.key]: data }))
+      setReportStatus(report.id, 'ready', 'Just now')
+    } catch (e) {
+      setReportStatus(report.id, 'outdated')
+    }
+  }
+
+  // CSV builder (simple)
+  const toCSV = (rows: any[], headers?: string[]) => {
+    if (!rows || rows.length === 0) return ''
+    const cols = headers && headers.length ? headers : Array.from(new Set(rows.flatMap((r: any) => Object.keys(r))))
+    const esc = (v: any) => {
+      if (v == null) return ''
+      const s = String(v)
+      if (s.includes('"') || s.includes(',') || s.includes('\n')) return '"' + s.replace(/"/g, '""') + '"'
+      return s
+    }
+    const lines = [cols.join(',')]
+    for (const r of rows) {
+      lines.push(cols.map(c => esc(r[c])).join(','))
+    }
+    return lines.join('\n')
+  }
+
+  // Flatten datasets to CSV rows based on report type
+  const buildCSVForReport = (report: ReportItem, data: any): { filename: string; csv: string } => {
+    const { from, to } = rangeParams()
+    const base = `${report.key}_${from}_${to}`
+
+    if (report.key === 'user_activity') {
+      const rows: any[] = []
+      for (const r of (data.signups_by_day || [])) rows.push({ section: 'signups_by_day', date: r.date, count: r.count })
+      for (const r of (data.active_by_day || [])) rows.push({ section: 'active_by_day', date: r.date, count: r.count })
+      rows.push({ section: 'suspended_total', date: '', count: data.suspended_count ?? 0 })
+      return { filename: `${base}.csv`, csv: toCSV(rows, ['section','date','count']) }
+    }
+
+    if (report.key === 'revenue_summary') {
+      const rows: any[] = []
+      for (const r of (data.revenue_by_day || [])) rows.push({ section: 'revenue_by_day', date: r.date, total_amount: r.total_amount, tx_count: r.tx_count })
+      for (const r of (data.revenue_by_plan || [])) rows.push({ section: 'revenue_by_plan', plan: r.plan, total_amount: r.total_amount, tx_count: r.tx_count })
+      for (const r of (data.payment_methods || [])) rows.push({ section: 'payment_methods', provider: r.provider, brand: r.brand, count: r.count })
+      return { filename: `${base}.csv`, csv: toCSV(rows) }
+    }
+
+    if (report.key === 'product_performance') {
+      const rows: any[] = []
+      for (const r of (data.created_by_day || [])) rows.push({ section: 'created_by_day', date: r.date, count: r.count })
+      for (const r of (data.status_breakdown || [])) rows.push({ section: 'status_breakdown', status: r.status, count: r.count })
+      for (const r of (data.visibility || [])) rows.push({ section: 'visibility', is_public: r.is_public, count: r.count })
+      for (const r of (data.top_categories || [])) rows.push({ section: 'top_categories', category: r.category, count: r.count })
+      return { filename: `${base}.csv`, csv: toCSV(rows) }
+    }
+
+    if (report.key === 'api_usage') {
+      const rows: any[] = []
+      for (const r of (data.calls_by_day || [])) rows.push({ section: 'calls_by_day', date: r.date, count: r.count })
+      for (const r of (data.calls_by_service || [])) rows.push({ section: 'calls_by_service', service: r.service, count: r.count })
+      if (typeof data.error_rate_percent === 'number') rows.push({ section: 'error_rate', percent: data.error_rate_percent })
+      return { filename: `${base}.csv`, csv: toCSV(rows) }
+    }
+
+    if (report.key === 'platform_growth') {
+      const rows: any[] = []
+      for (const r of (data.new_users_by_day || [])) rows.push({ section: 'new_users_by_day', date: r.date, count: r.count })
+      for (const r of (data.paid_conversions_by_day || [])) rows.push({ section: 'paid_conversions_by_day', date: r.date, count: r.count })
+      for (const r of (data.churn_by_day || [])) rows.push({ section: 'churn_by_day', date: r.date, count: r.count })
+      return { filename: `${base}.csv`, csv: toCSV(rows) }
+    }
+
+    if (report.key === 'feature_adoption') {
+      const rows: any[] = []
+      for (const r of (data.usage_by_month || [])) rows.push({ month: r.month, products: r.products, qr_codes: r.qr_codes, labels: r.labels })
+      return { filename: `${base}.csv`, csv: toCSV(rows) }
+    }
+
+    // Default: dump JSON to CSV with a single column
+    return { filename: `${base}.csv`, csv: toCSV([{ note: 'No data available' }]) }
+  }
+
+  const triggerDownload = (filename: string, content: string, mime = 'text/csv') => {
+    const blob = new Blob([content], { type: mime + ';charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  const handleGenerate = async (report: ReportItem) => {
+    await generateReport(report)
+  }
+
+  const downloadJSON = (report: ReportItem, data: any) => {
+    const { from, to } = rangeParams()
+    const fname = `${report.key}_${from}_${to}.json`
+    triggerDownload(fname, JSON.stringify(data, null, 2), 'application/json')
+  }
+
+  const downloadPDF = (report: ReportItem, data: any) => {
+    const { from, to } = rangeParams()
+    const doc = new jsPDF()
+    const title = `${report.name} (${from} to ${to})`
+    doc.setFontSize(14)
+    doc.text(title, 10, 16)
+    doc.setFontSize(10)
+    let y = 24
+
+    const addRow = (label: string, value: string) => {
+      doc.text(`${label}: ${value}`, 10, y)
+      y += 6
+      if (y > 280) { doc.addPage(); y = 16 }
+    }
+
+    if (report.key === 'user_activity') {
+      addRow('Signups entries', String((data.signups_by_day || []).length))
+      addRow('Active entries', String((data.active_by_day || []).length))
+      addRow('Suspended total', String(data.suspended_count ?? 0))
+    } else if (report.key === 'revenue_summary') {
+      addRow('Revenue days', String((data.revenue_by_day || []).length))
+      addRow('Plans', String((data.revenue_by_plan || []).length))
+      addRow('Payment methods', String((data.payment_methods || []).length))
+    } else if (report.key === 'product_performance') {
+      addRow('Created days', String((data.created_by_day || []).length))
+      addRow('Statuses', String((data.status_breakdown || []).length))
+      addRow('Categories', String((data.top_categories || []).length))
+    } else if (report.key === 'api_usage') {
+      addRow('Days', String((data.calls_by_day || []).length))
+      addRow('Services', String((data.calls_by_service || []).length))
+      addRow('Error rate %', String(data.error_rate_percent ?? 'N/A'))
+    } else if (report.key === 'platform_growth') {
+      addRow('New users days', String((data.new_users_by_day || []).length))
+      addRow('Paid conv days', String((data.paid_conversions_by_day || []).length))
+      addRow('Churn days', String((data.churn_by_day || []).length))
+    } else if (report.key === 'feature_adoption') {
+      addRow('Months', String((data.usage_by_month || []).length))
+    }
+
+    const fname = `${report.key}_${from}_${to}.pdf`
+    doc.save(fname)
+  }
+
+  const handleDownload = async (report: ReportItem, ev?: React.MouseEvent) => {
+    // Ensure dataset exists
+    let data = datasets[report.key]
+    if (!data) {
+      await generateReport(report)
+      data = datasets[report.key]
+    }
+    // the generateReport above updates state asynchronously; re-read after slight delay if still missing
+    if (!data) {
+      await new Promise(res => setTimeout(res, 200))
+      data = datasets[report.key]
+    }
+    const payload = data?.data ? data.data : data
+
+    // If Alt key is pressed, export PDF; if Shift, export JSON; otherwise CSV
+    if (ev && ev.altKey) {
+      downloadPDF(report, payload)
+      return
+    }
+    if (ev && ev.shiftKey) {
+      downloadJSON(report, payload)
+      return
+    }
+
+    const { filename, csv } = buildCSVForReport(report, payload)
+    triggerDownload(filename, csv)
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -140,7 +394,7 @@ export default function AdminReports() {
               <Button variant="outline" size="sm">
                 <CalendarIcon className="mr-2 h-4 w-4" />
                 {dateRange.from && dateRange.to ? (
-                  `${format(dateRange.from, "MMM dd")} - ${format(dateRange.to, "MMM dd")}`
+                  `${dfFormat(dateRange.from, "MMM dd")} - ${dfFormat(dateRange.to, "MMM dd")}`
                 ) : (
                   "Select Date Range"
                 )}
@@ -202,11 +456,11 @@ export default function AdminReports() {
                         <span className="text-xs text-muted-foreground">{report.lastGenerated}</span>
                       </div>
                       <div className="flex items-center space-x-2 pt-2">
-                        <Button size="sm" variant="outline" className="text-xs h-8">
+                        <Button size="sm" variant="outline" className="text-xs h-8" onClick={(e) => handleDownload(report, e)} disabled={report.status === 'generating'} title="Click: CSV | Shift+Click: JSON | Alt+Click: PDF">
                           <Download className="mr-1 h-3 w-3" />
                           Download
                         </Button>
-                        <Button size="sm" variant="ghost" className="text-xs h-8">
+                        <Button size="sm" variant="ghost" className="text-xs h-8" onClick={() => handleGenerate(report)} disabled={report.status === 'generating'}>
                           Generate
                         </Button>
                       </div>
