@@ -60,6 +60,12 @@ import { APIManagement } from "./pages/enterprise/APIManagement";
 import { EnterpriseAnalytics } from "./pages/enterprise/EnterpriseAnalytics";
 import { EnterpriseSettings } from "./pages/enterprise/EnterpriseSettings";
 import { Navigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { membershipAPI } from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 const App = () => {
   console.log('[App] Application initialized');
@@ -279,11 +285,103 @@ const App = () => {
       <Route path="*" element={<NotFound />} />
       </Routes>
         <Toaster />
+        <PlanLimitUpgradeListener />
         </NotificationsProvider>
         </AuthProvider>
       </Router>
     </StripeProvider>
   );
 };
+
+function PlanLimitUpgradeListener() {
+  const [open, setOpen] = useState(false);
+  const [eventData, setEventData] = useState<any>(null);
+  const [plans, setPlans] = useState<any[]>([]);
+  const [recommendation, setRecommendation] = useState<any>(null);
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  useEffect(() => {
+    const handler = (e: any) => {
+      const detail = e?.detail || {};
+      setEventData(detail);
+      setOpen(true);
+      // Load plans and recommendations when event fires
+      loadPlansAndRecommendations();
+    };
+    window.addEventListener('planLimitReached', handler as EventListener);
+    return () => window.removeEventListener('planLimitReached', handler as EventListener);
+  }, []);
+
+  const loadPlansAndRecommendations = async () => {
+    try {
+      const rec = await membershipAPI.getRecommendations();
+      setRecommendation(rec?.data || null);
+    } catch (e) {
+      // ignore
+    }
+    try {
+      const res = await membershipAPI.getPlans();
+      const arr = res?.data || res; // handle both wrapped/unwrapped
+      setPlans(Array.isArray(arr) ? arr : []);
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  const getNextPlan = () => {
+    const current = user?.membership_plan?.name || 'Basic';
+    // Use API recommendation if available
+    const recPlan = recommendation?.recommended_plan;
+    if (recPlan) return recPlan;
+    const targetName = current === 'Basic' ? 'Pro' : current === 'Pro' ? 'Enterprise' : null;
+    if (!targetName) return null;
+    const found = plans.find((p: any) => p.name === targetName);
+    return found || { name: targetName };
+  };
+
+  const onUpgrade = () => {
+    const next = getNextPlan();
+    const currentName = user?.membership_plan?.name || 'Basic';
+    if (next) {
+      navigate('/payment', {
+        state: {
+          planId: next.id,
+          planName: next.name,
+          price: next.price,
+          isUpgrade: true,
+          currentPlan: currentName,
+        }
+      });
+    } else {
+      // Fallback: go to payment without specific plan (UI can select)
+      navigate('/payment', { state: { isUpgrade: true, currentPlan: currentName } });
+    }
+    setOpen(false);
+  };
+
+  const message = eventData?.message || 'You have reached the limit of your current plan.';
+  const code = eventData?.code || 'PLAN_LIMIT_REACHED';
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Upgrade required</DialogTitle>
+          <DialogDescription>
+            {message}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="mt-2 text-sm text-muted-foreground">
+          {code === 'PLAN_LIMIT_REACHED' ? 'To continue, please upgrade your plan.' : 'This feature requires a higher plan.'}
+        </div>
+        <div className="mt-4 flex gap-2 justify-end">
+          <Button variant="outline" onClick={() => setOpen(false)}>Not now</Button>
+          <Button onClick={onUpgrade}>Upgrade</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export default App;

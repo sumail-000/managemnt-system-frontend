@@ -15,7 +15,6 @@ import {
   ArrowUpRight,
   Building2,
   Zap,
-  DollarSign,
   BarChart3,
   PieChart,
   Calendar,
@@ -28,7 +27,7 @@ import {
 export function NewEnterpriseDashboard() {
   const stats = [
     {
-      title: "Active Team Members",
+      title: "Active Members",
       value: "156",
       change: "+12",
       changeLabel: "this month",
@@ -37,30 +36,30 @@ export function NewEnterpriseDashboard() {
       trend: "up"
     },
     {
-      title: "Products Managed",
-      value: "2,847",
-      change: "+324",
-      changeLabel: "this week",
+      title: "Products Needing Review",
+      value: "142",
+      change: "-23",
+      changeLabel: "last 7 days",
       icon: Package,
       color: "green",
-      trend: "up"
+      trend: "down"
     },
     {
-      title: "Compliance Score",
-      value: "94%",
-      change: "+2%",
-      changeLabel: "this quarter",
-      icon: Shield,
-      color: "purple",
-      trend: "up"
-    },
-    {
-      title: "Monthly Revenue",
-      value: "$12.4K",
-      change: "+18%",
-      changeLabel: "vs last month",
-      icon: DollarSign,
+      title: "Open Compliance Issues",
+      value: "28",
+      change: "-5",
+      changeLabel: "this week",
+      icon: AlertTriangle,
       color: "orange",
+      trend: "down"
+    },
+    {
+      title: "API Sync Health",
+      value: "99.9%",
+      change: "+0.1%",
+      changeLabel: "uptime (30d)",
+      icon: Zap,
+      color: "purple",
       trend: "up"
     }
   ]
@@ -103,11 +102,11 @@ export function NewEnterpriseDashboard() {
     }
   ]
 
-  const upcomingTasks = [
-    { title: "Q4 Product Review", due: "Tomorrow", priority: "high", assignee: "Product Team" },
-    { title: "EU Compliance Audit", due: "Dec 15", priority: "medium", assignee: "Legal Team" },
-    { title: "Brand Guidelines Update", due: "Dec 20", priority: "low", assignee: "Design Team" },
-    { title: "API Documentation", due: "Dec 22", priority: "medium", assignee: "Dev Team" }
+  const recentImports = [
+    { filename: "enterprise_products_q4.csv", rows: 1240, status: "success", date: "Today 14:22" },
+    { filename: "brands_update.xlsx", rows: 58, status: "warning", date: "Today 09:10" },
+    { filename: "api_sync_2024-12-10.json", rows: 342, status: "failed", date: "Yesterday 18:40" },
+    { filename: "nutrition_batches.csv", rows: 210, status: "success", date: "Dec 09" }
   ]
 
   return (
@@ -119,7 +118,7 @@ export function NewEnterpriseDashboard() {
             Enterprise Dashboard
           </h1>
           <p className="text-lg text-muted-foreground">
-            Comprehensive overview of your organization's performance and operations
+            Requirement-focused overview: compliance, API sync, team access, and bulk operations
           </p>
         </div>
         
@@ -189,10 +188,10 @@ export function NewEnterpriseDashboard() {
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Activity className="h-5 w-5 text-blue-500" />
-                Organization Performance
+                Enterprise Health Overview
               </CardTitle>
               <CardDescription className="mt-1">
-                Key metrics and health indicators for your enterprise
+                Compliance, API synchronization and team readiness
               </CardDescription>
             </div>
             <Button variant="ghost" size="sm">
@@ -204,38 +203,38 @@ export function NewEnterpriseDashboard() {
             <div className="grid gap-6 sm:grid-cols-2">
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium">Team Productivity</span>
-                  <span className="text-sm font-bold text-green-600">87%</span>
+                  <span className="text-sm font-medium">Compliance Resolution Rate</span>
+                  <span className="text-sm font-bold text-green-600">78%</span>
                 </div>
-                <Progress value={87} className="h-3" />
-                <p className="text-xs text-muted-foreground">Based on task completion rates and delivery times</p>
+                <Progress value={78} className="h-3" />
+                <p className="text-xs text-muted-foreground">Based on issues resolved vs. opened in the period</p>
               </div>
               
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium">Compliance Status</span>
-                  <span className="text-sm font-bold text-blue-600">94%</span>
+                  <span className="text-sm font-medium">API Sync Uptime</span>
+                  <span className="text-sm font-bold text-blue-600">99.9%</span>
                 </div>
-                <Progress value={94} className="h-3" />
-                <p className="text-xs text-muted-foreground">Regulatory compliance across all departments</p>
+                <Progress value={99.9} className="h-3" />
+                <p className="text-xs text-muted-foreground">Uptime and sync success rates across integrations</p>
               </div>
               
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium">API Performance</span>
-                  <span className="text-sm font-bold text-purple-600">99.8%</span>
+                  <span className="text-sm font-medium">Role Coverage</span>
+                  <span className="text-sm font-bold text-purple-600">92%</span>
                 </div>
-                <Progress value={99.8} className="h-3" />
-                <p className="text-xs text-muted-foreground">Uptime and response time metrics</p>
+                <Progress value={92} className="h-3" />
+                <p className="text-xs text-muted-foreground">Percentage of required roles assigned in teams</p>
               </div>
               
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium">Customer Satisfaction</span>
-                  <span className="text-sm font-bold text-orange-600">96%</span>
+                  <span className="text-sm font-medium">Products Ready for Labeling</span>
+                  <span className="text-sm font-bold text-orange-600">65%</span>
                 </div>
-                <Progress value={96} className="h-3" />
-                <p className="text-xs text-muted-foreground">Average rating from customer feedback</p>
+                <Progress value={65} className="h-3" />
+                <p className="text-xs text-muted-foreground">Products passing checks and ready for label generation</p>
               </div>
             </div>
 
@@ -309,36 +308,36 @@ export function NewEnterpriseDashboard() {
 
       {/* Bottom Grid */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Upcoming Tasks */}
+        {/* Bulk Import Status */}
         <Card className="border border-border/50 bg-gradient-to-br from-background to-muted/10">
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
-              <span>Upcoming Tasks</span>
+              <span>Bulk Import Status</span>
               <Button variant="ghost" size="sm">
                 <Plus className="w-4 h-4" />
               </Button>
             </CardTitle>
             <CardDescription>
-              Important deadlines and scheduled activities
+              Recent imports and their results
             </CardDescription>
           </CardHeader>
           
           <CardContent>
             <div className="space-y-3">
-              {upcomingTasks.map((task, index) => (
+              {recentImports.map((imp, index) => (
                 <div key={index} className="flex items-center justify-between p-3 rounded-lg border border-border/50 hover:bg-muted/20 transition-colors">
                   <div className="space-y-1">
-                    <p className="text-sm font-medium">{task.title}</p>
-                    <p className="text-xs text-muted-foreground">{task.assignee}</p>
+                    <p className="text-sm font-medium truncate max-w-[220px]">{imp.filename}</p>
+                    <p className="text-xs text-muted-foreground">{imp.rows} rows</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge 
-                      variant={task.priority === 'high' ? 'destructive' : task.priority === 'medium' ? 'default' : 'secondary'}
-                      className="text-xs"
+                      variant={imp.status === 'success' ? 'default' : imp.status === 'warning' ? 'secondary' : 'destructive'}
+                      className="text-xs capitalize"
                     >
-                      {task.priority}
+                      {imp.status}
                     </Badge>
-                    <span className="text-xs text-muted-foreground">{task.due}</span>
+                    <span className="text-xs text-muted-foreground">{imp.date}</span>
                   </div>
                 </div>
               ))}
@@ -359,12 +358,12 @@ export function NewEnterpriseDashboard() {
             <div className="grid gap-3 grid-cols-2">
               <Button variant="outline" className="h-20 flex-col gap-2 hover:bg-blue-50 dark:hover:bg-blue-950 hover:border-blue-200 dark:hover:border-blue-800 transition-all duration-200">
                 <Users className="h-5 w-5" />
-                <span className="text-sm">Invite Members</span>
+                <span className="text-sm">Add Member</span>
               </Button>
               
               <Button variant="outline" className="h-20 flex-col gap-2 hover:bg-green-50 dark:hover:bg-green-950 hover:border-green-200 dark:hover:border-green-800 transition-all duration-200">
                 <Package className="h-5 w-5" />
-                <span className="text-sm">Bulk Import</span>
+                <span className="text-sm">Upload CSV/XLSX</span>
               </Button>
               
               <Button variant="outline" className="h-20 flex-col gap-2 hover:bg-purple-50 dark:hover:bg-purple-950 hover:border-purple-200 dark:hover:border-purple-800 transition-all duration-200">
@@ -373,8 +372,8 @@ export function NewEnterpriseDashboard() {
               </Button>
               
               <Button variant="outline" className="h-20 flex-col gap-2 hover:bg-orange-50 dark:hover:bg-orange-950 hover:border-orange-200 dark:hover:border-orange-800 transition-all duration-200">
-                <TrendingUp className="h-5 w-5" />
-                <span className="text-sm">Generate Report</span>
+                <AlertTriangle className="h-5 w-5" />
+                <span className="text-sm">View Regulatory Updates</span>
               </Button>
             </div>
           </CardContent>

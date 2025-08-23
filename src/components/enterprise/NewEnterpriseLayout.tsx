@@ -13,14 +13,10 @@ import {
 } from "@/components/ui/breadcrumb"
 
 interface NewEnterpriseLayoutProps {
-  onSearch?: (query: string) => void
-  onNotificationClick?: () => void
   onUserMenuAction?: (action: string) => void
 }
 
 export function NewEnterpriseLayout({
-  onSearch,
-  onNotificationClick,
   onUserMenuAction
 }: NewEnterpriseLayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -51,9 +47,6 @@ export function NewEnterpriseLayout({
       )}>
         {/* Header */}
         <EnterpriseHeaderNew 
-          onSearch={onSearch}
-          onNotificationClick={onNotificationClick}
-          onUserMenuAction={onUserMenuAction}
           onSidebarToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
           sidebarCollapsed={sidebarCollapsed}
         />

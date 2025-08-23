@@ -1022,6 +1022,21 @@ export default function Billing() {
                             </p>
                           )}
                         </div>
+                        <div className="ml-4">
+                          <Button
+                            onClick={() => navigate('/payment', {
+                              state: {
+                                planId: planRecommendations.recommended_plan.id,
+                                planName: planRecommendations.recommended_plan.name,
+                                price: planRecommendations.recommended_plan.price,
+                                isUpgrade: true,
+                                currentPlan: currentPlan.name,
+                              }
+                            })}
+                          >
+                            Upgrade to {planRecommendations.recommended_plan.name}
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   )}

@@ -846,4 +846,34 @@ export const adminAPI = {
   },
 };
 
+// Team Members API (Enterprise owner management and team member login)
+export const teamMembersAPI = {
+  list: (params?: { page?: number; per_page?: number; search?: string }) =>
+    api.get('/team-members', { params }),
+
+  create: (data: {
+    name: string;
+    email: string;
+    password: string;
+    password_confirmation: string;
+    role: 'admin' | 'manager' | 'editor' | 'viewer';
+    permissions?: any;
+  }) => api.post('/team-members', data),
+
+  update: (id: number, data: Partial<{
+    name: string;
+    email: string;
+    password: string;
+    password_confirmation: string;
+    role: 'admin' | 'manager' | 'editor' | 'viewer';
+    permissions: any;
+    status: 'active' | 'invited' | 'suspended';
+  }>) => api.put(`/team-members/${id}`, data),
+
+  delete: (id: number) => api.delete(`/team-members/${id}`),
+
+  login: (credentials: { email: string; password: string }) =>
+    api.post('/team-members/login', credentials),
+};
+
 export default api;
