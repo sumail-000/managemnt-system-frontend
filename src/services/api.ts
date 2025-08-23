@@ -740,6 +740,12 @@ export const adminAPI = {
     return api.get('/admin/dashboard/system-health');
   },
   
+  // Recent activities (admin dashboard)
+  getRecentActivities: (params?: { limit?: number }) => {
+    console.log('[ADMIN_API] Get recent activities request initiated', params);
+    return api.get('/admin/dashboard/recent-activities', { params });
+  },
+  
   // FAQ management
   getFaqs: (params?: { search?: string; category?: string; sort_by?: string; sort_order?: 'asc' | 'desc'; page?: number; per_page?: number }) => {
     console.log('[ADMIN_API] Get FAQs request initiated', params);

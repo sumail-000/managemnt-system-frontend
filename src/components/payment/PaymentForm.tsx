@@ -67,26 +67,35 @@ function PaymentFormContent() {
   const userPlan = user?.membership_plan
   
   useEffect(() => {
-    // Check if user needs payment or redirect to dashboard
+    // Determine if we were sent here for an explicit upgrade or update
+    const upgrading = !!navigationState.isUpgrade;
+    const updatingMethod = !!navigationState.isUpdate;
+
     if (user) {
-      // If user exists but no membership plan, wait a bit more for complete data
+      // If user exists but no membership plan yet, wait a bit for complete data
       if (!userPlan) {
-        // Set a timeout to prevent infinite loading
         const timeout = setTimeout(() => {
           setIsLoading(false)
         }, 3000)
-        
         return () => clearTimeout(timeout)
       }
-      
+
+      // If the user is explicitly upgrading or updating payment method,
+      // do NOT redirect away, even if on Basic or already paid.
+      if (upgrading || updatingMethod) {
+        setIsLoading(false)
+        return
+      }
+
+      // Otherwise keep original behavior
       if (user.payment_status === 'paid' || userPlan?.name === 'Basic') {
-        // User already paid or on free plan, redirect to dashboard
         window.location.href = '/dashboard'
         return
       }
+
       setIsLoading(false)
     }
-  }, [user, userPlan])
+  }, [user, userPlan, navigationState.isUpgrade, navigationState.isUpdate])
 
   // Show loading while checking user status
   if (isLoading || !user) {
@@ -122,7 +131,7 @@ function PaymentFormContent() {
   }
 
   // If user is on Basic plan, they shouldn't be here
-  if (userPlan.name === 'Basic') {
+  if (userPlan.name === 'Basic' && !navigationState.isUpgrade) {
     return (
       <div className="max-w-2xl mx-auto p-6 text-center space-y-6">
         <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto">

@@ -1,4 +1,6 @@
 import { ReactNode } from "react"
+import { Link } from "react-router-dom"
+import { Home } from "lucide-react"
 import heroImage from "@/assets/hero-food-dashboard.jpg"
 
 interface AuthLayoutProps {
@@ -9,7 +11,18 @@ interface AuthLayoutProps {
 
 export function AuthLayout({ children, title, subtitle }: AuthLayoutProps) {
   return (
-    <div className="min-h-screen flex">
+    <div className="relative min-h-screen flex">
+      {/* Home Link */}
+      <div className="absolute top-4 left-4 z-50">
+        <Link
+          to="/"
+          className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-border bg-background/80 backdrop-blur hover:bg-background transition-colors"
+          aria-label="Go to Home"
+        >
+          <Home className="h-4 w-4" />
+          <span className="text-sm font-medium">Home</span>
+        </Link>
+      </div>
       {/* Left side - Form */}
       <div className="flex-1 flex items-center justify-center p-8 lg:p-12">
         <div className="w-full max-w-md space-y-8">

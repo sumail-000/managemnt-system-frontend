@@ -168,7 +168,7 @@ function normalize(list: any[]): AppNotification[] {
 
 // ---------- Provider ----------
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(false);
   const [lastSeenAt, setLastSeenAt] = useState<string | null>(null);
@@ -225,13 +225,19 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      // Try API first
-      const apiList = await tryFetchFromApi();
-      if (apiList) {
-        setNotifications(apiList);
-        saveToStorage(userStorageKey, apiList);
+      if (token) {
+        // Authenticated: try API first
+        const apiList = await tryFetchFromApi();
+        if (apiList) {
+          setNotifications(apiList);
+          saveToStorage(userStorageKey, apiList);
+        } else {
+          // Fallback to local storage for this cycle
+          const local = loadFromStorage(userStorageKey);
+          setNotifications(local);
+        }
       } else {
-        // Fallback to local storage
+        // Not authenticated: do NOT hit API. Load any locally stored notifications.
         const local = loadFromStorage(userStorageKey);
         setNotifications(local);
       }
@@ -240,7 +246,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     } finally {
       setLoading(false);
     }
-  }, [user?.email, userStorageKey, mergePendingForEmail]);
+  }, [token, user?.email, userStorageKey, mergePendingForEmail]);
 
   useEffect(() => {
     // Load last seen timestamp for the current user
@@ -261,11 +267,19 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
 
   // Lightweight polling for new notifications
   useEffect(() => {
+    if (!token) return;
     const id = setInterval(() => {
       refresh().catch(() => {});
     }, 10000);
     return () => clearInterval(id);
-  }, [refresh]);
+  }, [token, refresh]);
+
+  // When token becomes available (user logs in), perform an immediate refresh
+  useEffect(() => {
+    if (token) {
+      refresh().catch(() => {});
+    }
+  }, [token, refresh]);
 
   // Persist changes locally
   useEffect(() => {
