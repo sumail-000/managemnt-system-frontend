@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { NavLink, useLocation, useNavigate } from "react-router-dom"
 import { 
   Package, 
@@ -24,6 +24,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -74,6 +75,7 @@ export function HeaderNavigation() {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [notificationModalOpen, setNotificationModalOpen] = useState(false)
+  const [accessRestrictedOpen, setAccessRestrictedOpen] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
   const { notifications, unreadCount, markAllAsRead, markAsRead, refresh, hasNew, setSeenNow } = useNotifications()
@@ -121,6 +123,15 @@ export function HeaderNavigation() {
   }
 
   const membershipInfo = getMembershipDisplay()
+  const planLower = (user?.membership_plan?.name || '').toLowerCase()
+  const isEnterprise = planLower === 'enterprise'
+
+  // Precaution: if non-enterprise lands on enterprise route, show access restricted modal
+  useEffect(() => {
+    if (!isEnterprise && location.pathname.startsWith('/enterprise')) {
+      setAccessRestrictedOpen(true)
+    }
+  }, [isEnterprise, location.pathname])
 
   const isActive = (href: string) => {
     if (href === "/dashboard") {
@@ -198,6 +209,24 @@ export function HeaderNavigation() {
                         </NavigationMenuLink>
                       ))}
                     </div>
+                    {isEnterprise && (
+                      <div className="col-span-2">
+                        <NavigationMenuLink asChild>
+                          <NavLink
+                            to="/enterprise/dashboard"
+                            className="block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground"
+                          >
+                            <div className="flex items-center gap-2">
+                              <LayoutDashboard className="h-4 w-4 text-primary" />
+                              <div className="text-sm font-medium leading-none">Manager Dashboard</div>
+                            </div>
+                            <p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
+                              Access your Enterprise Manager Dashboard
+                            </p>
+                          </NavLink>
+                        </NavigationMenuLink>
+                      </div>
+                    )}
                   </NavigationMenuContent>
                 </NavigationMenuItem>
               </NavigationMenuList>
@@ -395,6 +424,22 @@ export function HeaderNavigation() {
         open={notificationModalOpen}
         onOpenChange={setNotificationModalOpen}
       />
+
+      {/* Access Restricted Modal */}
+      <Dialog open={accessRestrictedOpen} onOpenChange={setAccessRestrictedOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Access Restricted</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            The Manager Dashboard is available for Enterprise plan users only.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setAccessRestrictedOpen(false); window.history.back(); }}>Go Back</Button>
+            <Button onClick={() => { setAccessRestrictedOpen(false); navigate('/pricing'); }}>View Plans</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       
       {/* Mobile Navigation Menu */}
       {isMobileMenuOpen && (
@@ -428,6 +473,21 @@ export function HeaderNavigation() {
                   {item.title}
                 </NavLink>
               ))}
+              {isEnterprise && (
+                <NavLink
+                  to="/enterprise/dashboard"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={cn(
+                    "flex items-center gap-3 p-3 rounded-lg text-sm transition-colors",
+                    isActive('/enterprise') 
+                      ? "bg-primary text-primary-foreground"
+                      : "hover:bg-accent hover:text-accent-foreground"
+                  )}
+                >
+                  <LayoutDashboard className="h-4 w-4" />
+                  Manager Dashboard
+                </NavLink>
+              )}
             </div>
 
           </div>

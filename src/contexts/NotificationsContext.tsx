@@ -95,6 +95,10 @@ function setApiSupported(val: boolean) {
 
 async function tryFetchFromApi(): Promise<AppNotification[] | null> {
   try {
+    // Skip API notifications fetch on payment page to avoid 402 (payment required) noise
+    if (typeof window !== 'undefined' && window.location.pathname.startsWith('/payment')) {
+      return null;
+    }
     const res = await api.get("/user/notifications");
     // Handle various shapes: [] or { data: [] } or { success, data: [] } or { data: { data: [] } }
     let list: any = null;
@@ -114,8 +118,13 @@ async function tryFetchFromApi(): Promise<AppNotification[] | null> {
     // Fallback to an empty list rather than disabling API
     setApiSupported(true);
     return [];
-  } catch (e) {
-    // On error, return null to fallback to local storage this cycle
+  } catch (e: any) {
+    // On 402 Payment Required (not paid yet), skip and fallback to local storage
+    const status = e?.response?.status;
+    if (status === 402) {
+      return null;
+    }
+    // On other errors, return null to fallback to local storage this cycle
     try { setApiSupported(false); } catch {}
     return null;
   }

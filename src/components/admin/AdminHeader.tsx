@@ -112,11 +112,7 @@ export function AdminHeader({ onMenuClick }: AdminHeaderProps) {
               <User className="mr-2 h-4 w-4" />
               <span>Admin Profile</span>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate('/admin-panel/settings')}>
-              <Settings className="mr-2 h-4 w-4" />
-              <span>Admin Settings</span>
-            </DropdownMenuItem>
-                        <DropdownMenuSeparator />
+                                    <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleReturnToDashboard}>
               <Home className="mr-2 h-4 w-4" />
               <span>Return to Dashboard</span>
