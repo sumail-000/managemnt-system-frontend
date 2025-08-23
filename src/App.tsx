@@ -50,8 +50,8 @@ import { AdminAuthGuard } from "./components/admin/AdminAuthGuard";
 import { UserAuthGuard } from "./components/UserAuthGuard";
 
 // Enterprise Components
-import { EnterpriseLayout } from "./components/enterprise/EnterpriseLayout";
-import { EnterpriseDashboard } from "./pages/enterprise/EnterpriseDashboard";
+import { NewEnterpriseLayout } from "./components/enterprise/NewEnterpriseLayout";
+import { NewEnterpriseDashboard } from "./pages/enterprise/NewEnterpriseDashboard";
 import { TeamManagement } from "./pages/enterprise/TeamManagement";
 import { BulkOperations } from "./pages/enterprise/BulkOperations";
 import { ComplianceCenter } from "./pages/enterprise/ComplianceCenter";
@@ -261,11 +261,11 @@ const App = () => {
       {/* Enterprise Routes */}
       <Route path="/enterprise/*" element={
         <ProtectedRoute requiredPlan="enterprise">
-          <EnterpriseLayout />
+          <NewEnterpriseLayout />
         </ProtectedRoute>
       }>
         <Route index element={<Navigate to="/enterprise/dashboard" replace />} />
-        <Route path="dashboard" element={<EnterpriseDashboard />} />
+        <Route path="dashboard" element={<NewEnterpriseDashboard />} />
         <Route path="team" element={<TeamManagement />} />
         <Route path="products" element={<BulkOperations />} />
         <Route path="compliance" element={<ComplianceCenter />} />
