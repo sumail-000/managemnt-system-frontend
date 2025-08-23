@@ -17,7 +17,7 @@ import {
   Bell,
   HelpCircle
 } from "lucide-react"
-import { adminAPI } from "@/services/api"
+import api, { adminAPI } from "@/services/api"
 import { useEffect, useState } from "react"
 
 interface AdminSidebarProps {
@@ -29,21 +29,31 @@ export function AdminSidebar({ open, onToggle }: AdminSidebarProps) {
   const location = useLocation()
   const [userCount, setUserCount] = useState(0)
   const [productCount, setProductCount] = useState(0)
+  const [openTicketCount, setOpenTicketCount] = useState(0)
 
   useEffect(() => {
     const fetchCounts = async () => {
       try {
-        const [userRes, productMetrics]: [any, any] = await Promise.all([
+        const [userRes, productMetrics, supportOpen]: [any, any, any] = await Promise.all([
           adminAPI.getUserStats(),
-          adminAPI.getProductMetrics()
+          adminAPI.getProductMetrics(),
+          api.get('/admin/support/tickets', { params: { status: 'open', per_page: 1 } })
         ]);
         if (userRes?.success) setUserCount(userRes.data.total_users || 0);
         if (productMetrics?.success) setProductCount(productMetrics.data.total || 0);
+        // supportOpen comes as { success, data: [], pagination: { total } }
+        const openTotal = supportOpen?.pagination?.total ?? 0;
+        setOpenTicketCount(typeof openTotal === 'number' ? openTotal : 0);
       } catch (error) {
         console.error("Failed to fetch sidebar counts:", error);
       }
     };
     fetchCounts();
+
+    // Refresh open tickets count on ticket updates
+    const refreshOnUpdate = () => fetchCounts();
+    window.addEventListener('adminSupportTicketUpdated', refreshOnUpdate as EventListener);
+    return () => window.removeEventListener('adminSupportTicketUpdated', refreshOnUpdate as EventListener);
   }, []);
 
   const navigation = [
@@ -89,7 +99,12 @@ export function AdminSidebar({ open, onToggle }: AdminSidebarProps) {
       name: "Support",
       href: "/admin-panel/support",
       icon: HelpCircle,
-      badge: "12"
+      badge: openTicketCount.toString()
+    },
+    {
+      name: "FAQs",
+      href: "/admin-panel/faqs",
+      icon: HelpCircle
     }
   ]
 

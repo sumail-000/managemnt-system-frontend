@@ -488,22 +488,7 @@ export default function QRCodes() {
         description: "Your QR code has been created and saved successfully. You can now download, share, or copy the URL."
       })
 
-      // Notify activity center
-      try {
-        await addNotification({
-          type: "qr.created",
-          title: "QR Code Generated",
-          message: selectedProduct?.name
-            ? `QR code generated for ${selectedProduct.name}`
-            : "QR code generated successfully",
-          metadata: {
-            qr_code_id: response.qr_code?.id || (response as any)?.id || null,
-            product_id: response.qr_code?.product_id || selectedProduct?.id || null,
-            public_url: response.public_url || response.qr_code?.public_url || null
-          },
-          link: "/qr-codes"
-        })
-      } catch {}
+      // Notification removed: qr.created
       
     } catch (error: any) {
       console.error('💥 [DEBUG] QR code generation failed:')

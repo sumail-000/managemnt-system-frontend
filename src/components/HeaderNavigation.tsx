@@ -300,9 +300,8 @@ export function HeaderNavigation() {
                         <div
                           className={cn(
                             "w-2 h-2 rounded-full mt-2 flex-shrink-0",
-                            n.type === "product.created" ? "bg-blue-500" :
-                            n.type === "qr.created" ? "bg-green-500" :
-                            n.type === "security.password_reset" ? "bg-orange-500" :
+                            n.type === "support_reply" ? "bg-blue-500" :
+                            n.type === "support_status" ? "bg-violet-500" :
                             "bg-muted"
                           )}
                         ></div>

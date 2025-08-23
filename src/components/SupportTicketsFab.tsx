@@ -1,11 +1,18 @@
 import { Button } from "@/components/ui/button";
 import { HelpCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 
 export function SupportTicketsFab() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const planName = (user?.membership_plan?.name || 'Basic').toLowerCase();
+  const canAccess = planName === 'pro' || planName === 'enterprise';
+
+  if (!canAccess) return null;
+
   return (
-    <div className="fixed bottom-24 right-6 z-50">
+    <div className="fixed bottom-6 right-6 z-50">
       <Button
         onClick={() => navigate('/support')}
         className="h-14 w-14 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110"

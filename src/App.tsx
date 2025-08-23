@@ -22,6 +22,7 @@ import Blog from "./pages/Blog";
 import NutritionLabel from "./pages/NutritionLabel";
 import NotFound from "./pages/NotFound";
 import SupportCenter from "./pages/SupportCenter";
+import SupportTicketDetail from "./pages/SupportTicketDetail";
 import QRCodes from "./pages/QRCodes";
 import Favorites from "./pages/Favorites";
 import Settings from "./pages/Settings";
@@ -40,10 +41,12 @@ import AdminAnalytics from "./pages/admin/AdminAnalytics";
 import AdminProductDetails from "./pages/admin/AdminProductDetails";
 import AdminReports from "./pages/admin/AdminReports";
 import AdminSupport from "./pages/admin/AdminSupport";
+import AdminSupportTicketDetail from "./pages/admin/AdminSupportTicketDetail";
 import AdminProfile from "./pages/admin/AdminProfile";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminNotifications from "./pages/admin/AdminNotifications";
 import AdminMaintenance from "./pages/admin/AdminMaintenance";
+import AdminFaqs from "./pages/admin/AdminFaqs";
 import IPRestrictionError from "./pages/admin/IPRestrictionError";
 import { AdminAuthGuard } from "./components/admin/AdminAuthGuard";
 import { UserAuthGuard } from "./components/UserAuthGuard";
@@ -204,6 +207,15 @@ const App = () => {
           </UserAuthGuard>
         </ProtectedRoute>
       } />
+      <Route path="/support/tickets/:id" element={
+        <ProtectedRoute>
+          <UserAuthGuard>
+            <DashboardLayout>
+              <SupportTicketDetail />
+            </DashboardLayout>
+          </UserAuthGuard>
+        </ProtectedRoute>
+      } />
 
       <Route path="/billing" element={
         <ProtectedRoute>
@@ -242,10 +254,12 @@ const App = () => {
         <Route path="analytics" element={<AdminAnalytics />} />
         <Route path="reports" element={<AdminReports />} />
         <Route path="support" element={<AdminSupport />} />
+        <Route path="support/:id" element={<AdminSupportTicketDetail />} />
         <Route path="profile" element={<AdminProfile />} />
         <Route path="settings" element={<AdminSettings />} />
         <Route path="notifications" element={<AdminNotifications />} />
         <Route path="maintenance" element={<AdminMaintenance />} />
+        <Route path="faqs" element={<AdminFaqs />} />
       </Route>
 
       {/* Enterprise Routes */}

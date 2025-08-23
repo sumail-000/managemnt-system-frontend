@@ -1,6 +1,5 @@
 import { ReactNode } from "react"
 import { HeaderNavigation } from "@/components/HeaderNavigation"
-import { SupportChat } from "@/components/SupportChat"
 import { SupportTicketsFab } from "@/components/SupportTicketsFab"
 import { useAuth } from "@/contexts/AuthContext"
 
@@ -11,7 +10,7 @@ interface DashboardLayoutProps {
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { user } = useAuth()
   const planName = user?.membership_plan?.name || 'Basic'
-  const hasLiveChat = planName === 'Pro' || planName === 'Enterprise'
+  const hasLiveChat = false
 
   return (
     <div className="min-h-screen bg-background">
@@ -21,8 +20,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       </main>
       {/* Always show support tickets FAB for all users */}
       <SupportTicketsFab />
-      {/* Show live chat only to Pro and Enterprise */}
-      {hasLiveChat && <SupportChat />}
+      {/* Live chat removed; SupportTicketsFab remains for access control aesthetics */}
     </div>
   )
 }

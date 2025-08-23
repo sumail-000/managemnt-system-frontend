@@ -740,6 +740,24 @@ export const adminAPI = {
     return api.get('/admin/dashboard/system-health');
   },
   
+  // FAQ management
+  getFaqs: (params?: { search?: string; category?: string; sort_by?: string; sort_order?: 'asc' | 'desc'; page?: number; per_page?: number }) => {
+    console.log('[ADMIN_API] Get FAQs request initiated', params);
+    return api.get('/admin/faqs', { params });
+  },
+  createFaq: (data: { question: string; answer: string; category?: string }) => {
+    console.log('[ADMIN_API] Create FAQ request initiated');
+    return api.post('/admin/faqs', data);
+  },
+  updateFaq: (id: number, data: { question: string; answer: string; category?: string }) => {
+    console.log('[ADMIN_API] Update FAQ request initiated', { id });
+    return api.put(`/admin/faqs/${id}`, data);
+  },
+  deleteFaq: (id: number) => {
+    console.log('[ADMIN_API] Delete FAQ request initiated', { id });
+    return api.delete(`/admin/faqs/${id}`);
+  },
+
   // Profile management
   getProfile: () => {
     console.log('[ADMIN_API] Get admin profile request initiated');
