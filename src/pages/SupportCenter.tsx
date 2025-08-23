@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion'
 import { useAuth } from '@/contexts/AuthContext'
 import { X, Send, MessageCircle, Inbox, HelpCircle, ArrowLeft } from 'lucide-react'
+import { useNotifications } from '@/contexts/NotificationsContext'
 
 // UI-only for now; backend wiring (tickets, messages, FAQs) will be added next.
 
@@ -36,6 +37,7 @@ type Mode = 'home' | 'form'
 export default function SupportCenter() {
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { addNotification } = useNotifications()
   const planName = (user?.membership_plan?.name || 'Basic').toLowerCase()
   const canAccess = planName === 'pro' || planName === 'enterprise'
 
@@ -168,6 +170,22 @@ export default function SupportCenter() {
       const { supportAPI } = await import('@/services/supportApi')
       await supportAPI.finalizeTicket(tempTicketId, { subject, message })
       cancelGuardRef.current = true // prevent cancel on unmount
+
+      // Optimistically add a notification to the bell
+      try {
+        await addNotification({
+          type: 'support_ticket_created',
+          title: 'Support ticket created',
+          message: `Your ticket has been created: ${subject}`,
+          metadata: {
+            temp_ticket_id: tempTicketId,
+            category,
+            priority,
+          },
+          link: '/support',
+        })
+      } catch {}
+
       setTempTicketId(null)
       // Reload recent tickets
       const ticketsRes: any = await supportAPI.listTickets(25)

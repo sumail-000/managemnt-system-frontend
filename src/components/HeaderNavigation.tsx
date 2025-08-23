@@ -46,7 +46,6 @@ import { logService } from "@/services/logService"
 import { getAvatarUrl } from "@/utils/storage"
 import { cn } from "@/lib/utils"
 import { NotificationModal } from "@/components/notifications/NotificationModal"
-import { NotificationSettings } from "@/components/notifications/NotificationSettings"
 import { useNotifications } from "@/contexts/NotificationsContext"
 
 const coreNavItems = [
@@ -75,10 +74,9 @@ export function HeaderNavigation() {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [notificationModalOpen, setNotificationModalOpen] = useState(false)
-  const [notificationSettingsOpen, setNotificationSettingsOpen] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
-  const { notifications, unreadCount, markAllAsRead, markAsRead, refresh } = useNotifications()
+  const { notifications, unreadCount, markAllAsRead, markAsRead, refresh, hasNew, setSeenNow } = useNotifications()
 
   const handleLogout = async () => {
     try {
@@ -249,10 +247,13 @@ export function HeaderNavigation() {
           </DropdownMenu>
 
           {/* Notifications */}
-          <DropdownMenu onOpenChange={(open) => { if (open) { try { refresh() } catch {} } }}>
+          <DropdownMenu onOpenChange={(open) => { if (open) { try { refresh(); setSeenNow(); } catch {} } }}>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="relative hover:bg-accent/50 transition-colors">
                 <Bell className="h-4 w-4" />
+                {hasNew && (
+                  <span className="absolute top-1 right-1 block h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+                )}
                 {unreadCount > 0 && (
                   <Badge className="absolute -top-1 -right-1 min-h-5 min-w-5 h-5 w-auto px-1.5 flex items-center justify-center p-0 text-[10px] bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 transition-all duration-200">
                     {unreadCount > 99 ? '99+' : unreadCount}
@@ -271,9 +272,6 @@ export function HeaderNavigation() {
                     onClick={() => { markAllAsRead() }}
                   >
                     Mark all read
-                  </Button>
-                  <Button variant="ghost" size="sm" className="text-xs h-7 px-2" onClick={() => setNotificationSettingsOpen(true)}>
-                    Settings
                   </Button>
                 </div>
               </div>
@@ -397,11 +395,7 @@ export function HeaderNavigation() {
         open={notificationModalOpen}
         onOpenChange={setNotificationModalOpen}
       />
-      <NotificationSettings
-        open={notificationSettingsOpen}
-        onOpenChange={setNotificationSettingsOpen}
-      />
-
+      
       {/* Mobile Navigation Menu */}
       {isMobileMenuOpen && (
         <div className="lg:hidden border-t border-border bg-background/95 backdrop-blur">

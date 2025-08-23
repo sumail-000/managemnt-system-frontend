@@ -7,14 +7,10 @@ import {
   Users,
   Package,
   BarChart3,
-  Settings,
   User,
-  AlertTriangle,
   FileText,
-  Activity,
   ChevronLeft,
   Shield,
-  Bell,
   HelpCircle
 } from "lucide-react"
 import api, { adminAPI } from "@/services/api"
@@ -85,17 +81,7 @@ export function AdminSidebar({ open, onToggle }: AdminSidebarProps) {
       href: "/admin-panel/reports",
       icon: FileText
     },
-    {
-      name: "System",
-      href: "/admin-panel/system",
-      icon: Settings,
-      children: [
-        { name: "Settings", href: "/admin-panel/system/settings" },
-        { name: "Notifications", href: "/admin-panel/system/notifications" },
-        { name: "Maintenance", href: "/admin-panel/system/maintenance" }
-      ]
-    },
-    {
+        {
       name: "Support",
       href: "/admin-panel/support",
       icon: HelpCircle,

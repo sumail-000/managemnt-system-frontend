@@ -16,18 +16,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { 
   Trash2, 
-  Search, 
-  Filter,
   CheckCircle2,
   Bell,
   AlertTriangle,
@@ -70,24 +60,8 @@ function getTypeBadgeClass(category: "success" | "warning" | "info") {
 
 export function NotificationModal({ open, onOpenChange }: NotificationModalProps) {
   const { notifications, markAsRead, markAllAsRead, refresh } = useNotifications()
-  const [filter, setFilter] = useState("all")
-  const [searchQuery, setSearchQuery] = useState("")
 
-  const filteredNotifications = notifications.filter((n) => {
-    const category = mapTypeToCategory(n.type)
-    const matchesFilter = filter === "all" ||
-      (filter === "unread" && !n.read_at) ||
-      (filter === "read" && !!n.read_at) ||
-      (filter === category)
-
-    const q = searchQuery.trim().toLowerCase()
-    const matchesSearch = !q ||
-      n.title?.toLowerCase().includes(q) ||
-      n.message?.toLowerCase().includes(q)
-
-    return matchesFilter && matchesSearch
-  })
-
+  
   const handleMarkAsRead = async (id: string) => {
     try {
       await markAsRead(id)
@@ -120,32 +94,7 @@ export function NotificationModal({ open, onOpenChange }: NotificationModalProps
 
         <div className="space-y-4">
           {/* Controls */}
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2 flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search notifications..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 w-64"
-                />
-              </div>
-              <Select value={filter} onValueChange={setFilter}>
-                <SelectTrigger className="w-40">
-                  <Filter className="h-4 w-4 mr-2" />
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="unread">Unread</SelectItem>
-                  <SelectItem value="read">Read</SelectItem>
-                  <SelectItem value="info">Info</SelectItem>
-                  <SelectItem value="success">Success</SelectItem>
-                  <SelectItem value="warning">Warning</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="flex items-center justify-end">
             <Button onClick={async () => { await markAllAsRead() }} variant="outline" size="sm">
               <CheckCircle2 className="h-4 w-4 mr-2" />
               Mark All Read
@@ -167,7 +116,7 @@ export function NotificationModal({ open, onOpenChange }: NotificationModalProps
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredNotifications.map((n) => {
+                  {notifications.map((n) => {
                     const category = mapTypeToCategory(n.type)
                     return (
                       <TableRow 
@@ -230,7 +179,7 @@ export function NotificationModal({ open, onOpenChange }: NotificationModalProps
             </div>
           </div>
 
-          {filteredNotifications.length === 0 && (
+          {notifications.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
               <Bell className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>No notifications found</p>

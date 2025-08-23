@@ -6,7 +6,10 @@ export type NotificationType =
   | "security.password_reset"
   | "product.created"
   | "qr.created"
-  | "system.info";
+  | "system.info"
+  | "support_ticket_created"
+  | "support_reply"
+  | "support_status";
 
 export interface AppNotification {
   id: string;
@@ -23,6 +26,7 @@ interface NotificationsContextValue {
   notifications: AppNotification[];
   unreadCount: number;
   loading: boolean;
+  hasNew: boolean;
   addNotification: (
     n: Omit<AppNotification, "id" | "created_at" | "read_at"> & { id?: string; created_at?: string; read_at?: string | null },
     opts?: { userEmail?: string }
@@ -30,6 +34,7 @@ interface NotificationsContextValue {
   markAsRead: (id: string) => Promise<void>;
   markAllAsRead: () => Promise<void>;
   refresh: () => Promise<void>;
+  setSeenNow: () => void;
 }
 
 const NotificationsContext = createContext<NotificationsContextValue | null>(null);
@@ -45,6 +50,12 @@ function storageKeyForUser(userId?: number | string, email?: string) {
 
 function pendingKeyForEmail(email: string) {
   return `notifications:pending:${email.toLowerCase()}`;
+}
+
+function lastSeenKeyForUser(userId?: number | string, email?: string) {
+  if (userId) return `notifications:lastSeen:user:${userId}`;
+  if (email) return `notifications:lastSeen:email:${String(email).toLowerCase()}`;
+  return `notifications:lastSeen:guest`;
 }
 
 function loadFromStorage(key: string): AppNotification[] {
@@ -73,12 +84,7 @@ function saveToStorage(key: string, list: AppNotification[]) {
 // ---------- Feature detection for backend notifications API ----------
 const API_SUPPORT_KEY = "notifications:api:supported";
 function isApiSupported(): boolean {
-  try {
-    const v = localStorage.getItem(API_SUPPORT_KEY);
-    if (v === "false") return false;
-    if (v === "true") return true;
-  } catch {}
-  // Unknown defaults to true to attempt a single probe
+  // Always attempt API; previously cached failures could block future fetches
   return true;
 }
 function setApiSupported(val: boolean) {
@@ -88,22 +94,29 @@ function setApiSupported(val: boolean) {
 }
 
 async function tryFetchFromApi(): Promise<AppNotification[] | null> {
-  // Short-circuit if we already detected lack of support
-  if (!isApiSupported()) return null;
   try {
     const res = await api.get("/user/notifications");
-    // Expecting either array or { success, data }
-    const data = Array.isArray(res) ? res : res?.data;
-    if (Array.isArray(data)) {
-      setApiSupported(true);
-      return normalize(data);
+    // Handle various shapes: [] or { data: [] } or { success, data: [] } or { data: { data: [] } }
+    let list: any = null;
+    if (Array.isArray(res)) {
+      list = res;
+    } else if (res && Array.isArray(res.data)) {
+      list = res.data;
+    } else if (res && res.data && Array.isArray(res.data.data)) {
+      list = res.data.data;
+    } else if (res && Array.isArray((res as any).items)) {
+      list = (res as any).items;
     }
-    // If structure isn't as expected, consider unsupported to stop noisy retries
-    setApiSupported(false);
-    return null;
-  } catch {
-    // Mark unsupported to avoid repeated 404 logs from api client interceptors
-    setApiSupported(false);
+    if (Array.isArray(list)) {
+      setApiSupported(true);
+      return normalize(list);
+    }
+    // Fallback to an empty list rather than disabling API
+    setApiSupported(true);
+    return [];
+  } catch (e) {
+    // On error, return null to fallback to local storage this cycle
+    try { setApiSupported(false); } catch {}
     return null;
   }
 }
@@ -149,10 +162,15 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(false);
+  const [lastSeenAt, setLastSeenAt] = useState<string | null>(null);
   const initializedRef = useRef(false);
 
   const userStorageKey = useMemo(
     () => storageKeyForUser(user?.id, user?.email),
+    [user?.id, user?.email]
+  );
+  const userLastSeenKey = useMemo(
+    () => lastSeenKeyForUser(user?.id, user?.email),
     [user?.id, user?.email]
   );
 
@@ -160,6 +178,16 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     () => notifications.filter((n) => !n.read_at).length,
     [notifications]
   );
+
+  const hasNew = useMemo(() => {
+    if (!notifications.length) return false;
+    if (!lastSeenAt) return notifications.length > 0;
+    const seenTs = new Date(lastSeenAt).getTime();
+    return notifications.some((n) => {
+      const t = new Date(n.created_at).getTime();
+      return t > seenTs;
+    });
+  }, [notifications, lastSeenAt]);
 
   const mergePendingForEmail = useCallback(
     (email?: string | null) => {
@@ -206,6 +234,14 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   }, [user?.email, userStorageKey, mergePendingForEmail]);
 
   useEffect(() => {
+    // Load last seen timestamp for the current user
+    try {
+      const v = localStorage.getItem(userLastSeenKey);
+      if (v) setLastSeenAt(v);
+    } catch {}
+  }, [userLastSeenKey]);
+
+  useEffect(() => {
     // On user switch, load their notifications
     if (!initializedRef.current) {
       initializedRef.current = true;
@@ -213,6 +249,14 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, user?.email]);
+
+  // Lightweight polling for new notifications
+  useEffect(() => {
+    const id = setInterval(() => {
+      refresh().catch(() => {});
+    }, 10000);
+    return () => clearInterval(id);
+  }, [refresh]);
 
   // Persist changes locally
   useEffect(() => {
@@ -277,17 +321,25 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     await tryMarkAllReadApi();
   }, []);
 
+  const setSeenNow = useCallback(() => {
+    const now = new Date().toISOString();
+    setLastSeenAt(now);
+    try { localStorage.setItem(userLastSeenKey, now); } catch {}
+  }, [userLastSeenKey]);
+
   const value = useMemo(
     () => ({
       notifications,
       unreadCount,
       loading,
+      hasNew,
       addNotification,
       markAsRead,
       markAllAsRead,
       refresh,
+      setSeenNow,
     }),
-    [notifications, unreadCount, loading, addNotification, markAsRead, markAllAsRead, refresh]
+    [notifications, unreadCount, loading, hasNew, addNotification, markAsRead, markAllAsRead, refresh, setSeenNow]
   );
 
   return <NotificationsContext.Provider value={value}>{children}</NotificationsContext.Provider>;

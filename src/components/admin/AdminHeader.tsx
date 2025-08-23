@@ -1,7 +1,6 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import {
   DropdownMenu,
@@ -15,11 +14,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   Menu,
   Search,
-  Bell,
   User,
   Settings,
   LogOut,
-  Activity,
   Shield,
   Home,
   Loader2
@@ -81,48 +78,6 @@ export function AdminHeader({ onMenuClick }: AdminHeaderProps) {
           <div className="h-2 w-2 rounded-full bg-green-500"></div>
           <span className="text-xs text-muted-foreground">System Healthy</span>
         </div>
-
-        {/* Notifications */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="relative">
-              <Bell className="h-4 w-4" />
-              <Badge 
-                variant="destructive" 
-                className="absolute -right-1 -top-1 h-5 w-5 rounded-full p-0 text-xs"
-              >
-                3
-              </Badge>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-80">
-            <DropdownMenuLabel>Notifications</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <div className="space-y-2 p-2">
-              <div className="flex items-start space-x-2 rounded-lg p-2 hover:bg-accent">
-                <Activity className="h-4 w-4 text-blue-500 mt-0.5" />
-                <div className="flex-1 text-sm">
-                  <p className="font-medium">High API usage detected</p>
-                  <p className="text-muted-foreground">User exceeded rate limit</p>
-                </div>
-              </div>
-              <div className="flex items-start space-x-2 rounded-lg p-2 hover:bg-accent">
-                <Shield className="h-4 w-4 text-red-500 mt-0.5" />
-                <div className="flex-1 text-sm">
-                  <p className="font-medium">Suspicious activity</p>
-                  <p className="text-muted-foreground">Multiple login attempts</p>
-                </div>
-              </div>
-              <div className="flex items-start space-x-2 rounded-lg p-2 hover:bg-accent">
-                <User className="h-4 w-4 text-green-500 mt-0.5" />
-                <div className="flex-1 text-sm">
-                  <p className="font-medium">New Enterprise signup</p>
-                  <p className="text-muted-foreground">Acme Corp registered</p>
-                </div>
-              </div>
-            </div>
-          </DropdownMenuContent>
-        </DropdownMenu>
 
         {/* Admin Profile */}
         <DropdownMenu>

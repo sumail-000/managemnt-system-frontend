@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import {
   Table,
   TableBody,
@@ -28,7 +29,8 @@ import {
   AlertCircle,
   Send,
   Calendar,
-  Filter
+  Filter,
+  Megaphone,
 } from "lucide-react"
 import api from "@/services/api"
 import { useNavigate } from "react-router-dom"
@@ -71,6 +73,12 @@ export default function AdminSupport() {
   const [replyText, setReplyText] = useState("")
   const [replyStatus, setReplyStatus] = useState<'open' | 'pending' | 'resolved' | 'closed' | ''>('')
   const navigate = useNavigate()
+
+  // Announcement modal state
+  const [announceOpen, setAnnounceOpen] = useState(false)
+  const [announceTitle, setAnnounceTitle] = useState("")
+  const [announceMessage, setAnnounceMessage] = useState("")
+  const [announceSending, setAnnounceSending] = useState(false)
 
   // Fetch tickets with filters
   const fetchTickets = async (page: number = 1) => {
@@ -193,9 +201,9 @@ export default function AdminSupport() {
           </p>
         </div>
         <div className="flex items-center space-x-2">
-          <Button variant="outline" size="sm">
-            <Filter className="mr-2 h-4 w-4" />
-            Advanced Filters
+          <Button variant="default" size="sm" onClick={() => setAnnounceOpen(true)}>
+            <Megaphone className="mr-2 h-4 w-4" />
+            Send Announcement
           </Button>
         </div>
       </div>
@@ -341,6 +349,60 @@ export default function AdminSupport() {
           )}
         </CardContent>
       </Card>
+    {/* Announcement Dialog */}
+      <Dialog open={announceOpen} onOpenChange={setAnnounceOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send Announcement</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-muted-foreground">Title</label>
+              <Input
+                placeholder="Announcement title"
+                value={announceTitle}
+                onChange={(e) => setAnnounceTitle(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Message</label>
+              <Textarea
+                placeholder="Write the announcement message..."
+                value={announceMessage}
+                onChange={(e) => setAnnounceMessage(e.target.value)}
+                className="min-h-[140px]"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAnnounceOpen(false)} disabled={announceSending}>Cancel</Button>
+            <Button
+              onClick={async () => {
+                if (!announceTitle.trim() || !announceMessage.trim()) return;
+                try {
+                  setAnnounceSending(true)
+                  await api.post('/admin/announcements', {
+                    title: announceTitle.trim(),
+                    message: announceMessage.trim(),
+                    type: 'announcement',
+                  })
+                  // Reset form and close
+                  setAnnounceTitle("")
+                  setAnnounceMessage("")
+                  setAnnounceOpen(false)
+                } catch (e) {
+                  // Optionally show a toast
+                } finally {
+                  setAnnounceSending(false)
+                }
+              }}
+              disabled={announceSending}
+            >
+              {announceSending ? 'Sending...' : 'Send'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
