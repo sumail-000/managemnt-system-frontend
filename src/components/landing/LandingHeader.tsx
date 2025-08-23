@@ -1,14 +1,16 @@
 import { Button } from "@/components/ui/button"
 import { Link, useNavigate } from "react-router-dom"
-import { Menu, X } from "lucide-react"
+import { Menu, X, Sun, Moon } from "lucide-react"
 import { useState } from "react"
 import { TokenManager } from "@/utils/tokenManager"
 import { useAuth } from "@/contexts/AuthContext"
+import { useTheme } from "next-themes"
 
 export function LandingHeader() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { theme, setTheme } = useTheme()
 
   const handleSignInClick = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -76,6 +78,18 @@ export function LandingHeader() {
 
           {/* Desktop Auth Buttons */}
           <div className="hidden md:flex items-center space-x-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              className="w-9 h-9"
+            >
+              {theme === "dark" ? (
+                <Sun className="w-4 h-4" />
+              ) : (
+                <Moon className="w-4 h-4" />
+              )}
+            </Button>
             <Button variant="ghost" onClick={handleSignInClick}>
               Sign In
             </Button>
@@ -122,6 +136,23 @@ export function LandingHeader() {
                 )
               ))}
               <div className="flex flex-col space-y-2 pt-4 border-t border-border">
+                <Button
+                  variant="ghost"
+                  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                  className="justify-start"
+                >
+                  {theme === "dark" ? (
+                    <>
+                      <Sun className="w-4 h-4 mr-2" />
+                      Light Mode
+                    </>
+                  ) : (
+                    <>
+                      <Moon className="w-4 h-4 mr-2" />
+                      Dark Mode
+                    </>
+                  )}
+                </Button>
                 <Button variant="ghost" onClick={(e) => { handleSignInClick(e); setIsMenuOpen(false); }}>
                   Sign In
                 </Button>

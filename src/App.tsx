@@ -5,6 +5,7 @@ import { AuthProvider } from './contexts/AuthContext'
 import { NotificationsProvider } from './contexts/NotificationsContext'
 import { StripeProvider } from './components/providers/StripeProvider'
 import { Toaster } from './components/ui/toaster'
+import { ThemeProvider } from 'next-themes'
 import LandingPage from "./pages/LandingPage";
 import Dashboard from "./pages/Dashboard";
 import Products from "./pages/Products";
@@ -71,10 +72,11 @@ const App = () => {
   console.log('[App] Application initialized');
   
   return (
-    <StripeProvider>
-      <Router>
-        <AuthProvider>
-          <NotificationsProvider>
+    <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
+      <StripeProvider>
+        <Router>
+          <AuthProvider>
+            <NotificationsProvider>
       <Routes>
       {/* Public Routes */}
       <Route path="/" element={<LandingPage />} />
@@ -284,12 +286,13 @@ const App = () => {
       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
       <Route path="*" element={<NotFound />} />
       </Routes>
-        <Toaster />
-        <PlanLimitUpgradeListener />
-        </NotificationsProvider>
-        </AuthProvider>
-      </Router>
-    </StripeProvider>
+            <Toaster />
+            <PlanLimitUpgradeListener />
+            </NotificationsProvider>
+          </AuthProvider>
+        </Router>
+      </StripeProvider>
+    </ThemeProvider>
   );
 };
 

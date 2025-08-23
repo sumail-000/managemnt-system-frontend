@@ -19,11 +19,14 @@ import {
   LogOut,
   Shield,
   Home,
-  Loader2
+  Loader2,
+  Sun,
+  Moon
 } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
 import { useToast } from "@/hooks/use-toast"
 import { getAvatarUrl } from "@/utils/storage"
+import { useTheme } from "next-themes"
 
 interface AdminHeaderProps {
   onMenuClick: () => void
@@ -34,6 +37,7 @@ export function AdminHeader({ onMenuClick }: AdminHeaderProps) {
   const { toast } = useToast()
   const navigate = useNavigate()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const { theme, setTheme } = useTheme()
 
   const handleLogout = async () => {
     try {
@@ -78,6 +82,20 @@ export function AdminHeader({ onMenuClick }: AdminHeaderProps) {
           <div className="h-2 w-2 rounded-full bg-green-500"></div>
           <span className="text-xs text-muted-foreground">System Healthy</span>
         </div>
+
+        {/* Theme Toggle */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          className="w-9 h-9"
+        >
+          {theme === "dark" ? (
+            <Sun className="w-4 h-4" />
+          ) : (
+            <Moon className="w-4 h-4" />
+          )}
+        </Button>
 
         {/* Admin Profile */}
         <DropdownMenu>

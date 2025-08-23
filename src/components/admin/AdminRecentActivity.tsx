@@ -13,7 +13,7 @@ interface ActivityItem {
   timestamp?: string | null;
 }
 
-function getIconAndColor(type: string): { Icon: LucideIcon; color: string } {
+function getIconAndColor(type: string): { Icon: React.ComponentType<any>; color: string } {
   switch (type) {
     case "user_signup":
       return { Icon: UserPlus, color: "green" };

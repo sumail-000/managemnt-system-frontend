@@ -20,7 +20,9 @@ import {
   ChevronDown,
   LayoutDashboard,
   Menu,
-  X
+  X,
+  Sun,
+  Moon
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -48,6 +50,7 @@ import { getAvatarUrl } from "@/utils/storage"
 import { cn } from "@/lib/utils"
 import { NotificationModal } from "@/components/notifications/NotificationModal"
 import { useNotifications } from "@/contexts/NotificationsContext"
+import { useTheme } from "next-themes"
 
 const coreNavItems = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -79,6 +82,7 @@ export function HeaderNavigation() {
   const location = useLocation()
   const navigate = useNavigate()
   const { notifications, unreadCount, markAllAsRead, markAsRead, refresh, hasNew, setSeenNow } = useNotifications()
+  const { theme, setTheme } = useTheme()
 
   const handleLogout = async () => {
     try {
@@ -239,6 +243,20 @@ export function HeaderNavigation() {
 
         {/* Right Side - Actions & User Menu */}
         <div className="flex items-center gap-4">
+          {/* Theme Toggle */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            className="w-9 h-9 hover:bg-accent/50"
+          >
+            {theme === "dark" ? (
+              <Sun className="w-4 h-4" />
+            ) : (
+              <Moon className="w-4 h-4" />
+            )}
+          </Button>
+
           {/* Settings Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
