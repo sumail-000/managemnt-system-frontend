@@ -103,7 +103,7 @@ export function NotificationModal({ open, onOpenChange }: NotificationModalProps
 
           {/* Notifications Table */}
           <div className="border rounded-lg overflow-hidden">
-            <div className="max-h-96 overflow-y-auto">
+            <div className="max-h-[60vh] overflow-y-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -140,7 +140,7 @@ export function NotificationModal({ open, onOpenChange }: NotificationModalProps
                           <div className="font-medium">{n.title}</div>
                         </TableCell>
                         <TableCell>
-                          <div className="text-sm text-muted-foreground max-w-xs truncate">
+                          <div className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
                             {n.message}
                           </div>
                         </TableCell>

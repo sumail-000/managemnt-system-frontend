@@ -163,7 +163,7 @@ export function HeaderNavigation() {
           </NavLink>
 
           {/* Desktop Navigation */}
-          <nav className="hidden lg:flex">
+          <nav className={cn("hidden lg:flex", user?.is_suspended ? "pointer-events-none opacity-60" : "")}>
             <NavigationMenu>
               <NavigationMenuList className="gap-1">
                 <NavigationMenuItem>
@@ -247,6 +247,7 @@ export function HeaderNavigation() {
           <Button
             variant="ghost"
             size="icon"
+            allowWhenSuspended
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             className="w-9 h-9 hover:bg-accent/50"
           >
@@ -260,7 +261,7 @@ export function HeaderNavigation() {
           {/* Settings Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="gap-2 hover:bg-accent/50 transition-colors">
+              <Button variant="ghost" size="sm" className="gap-2 hover:bg-accent/50 transition-colors" disabled={Boolean(user?.is_suspended)}>
                 <Settings className="h-4 w-4" />
                 <ChevronDown className="h-3 w-3 opacity-50" />
               </Button>
@@ -296,7 +297,7 @@ export function HeaderNavigation() {
           {/* Notifications */}
           <DropdownMenu onOpenChange={(open) => { if (open) { try { refresh(); setSeenNow(); } catch {} } }}>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="relative hover:bg-accent/50 transition-colors">
+              <Button variant="ghost" size="sm" allowWhenSuspended className="relative hover:bg-accent/50 transition-colors">
                 <Bell className="h-4 w-4" />
                 {hasNew && (
                   <span className="absolute top-1 right-1 block h-2 w-2 rounded-full bg-red-500 animate-pulse" />
@@ -315,6 +316,7 @@ export function HeaderNavigation() {
                   <Button
                     variant="ghost"
                     size="sm"
+                    allowWhenSuspended
                     className="text-xs h-7 px-2"
                     onClick={() => { markAllAsRead() }}
                   >
@@ -363,7 +365,7 @@ export function HeaderNavigation() {
                 </div>
               </div>
               <div className="p-3 border-t border-border">
-                <Button variant="ghost" size="sm" className="w-full text-sm" onClick={() => setNotificationModalOpen(true)}>
+                <Button variant="ghost" size="sm" allowWhenSuspended className="w-full text-sm" onClick={() => setNotificationModalOpen(true)}>
                   View all notifications
                 </Button>
               </div>
@@ -461,7 +463,7 @@ export function HeaderNavigation() {
       
       {/* Mobile Navigation Menu */}
       {isMobileMenuOpen && (
-        <div className="lg:hidden border-t border-border bg-background/95 backdrop-blur">
+        <div className={cn("lg:hidden border-t border-border bg-background/95 backdrop-blur", user?.is_suspended ? "pointer-events-none opacity-60" : "")}>
           <div className="p-4 space-y-4">
             {/* Mobile Search */}
             <div className="relative">

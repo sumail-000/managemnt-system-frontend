@@ -56,7 +56,7 @@ export default function SupportTicketDetail() {
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
+          <Button variant="ghost" size="sm" allowWhenSuspended onClick={() => navigate(-1)}>
             <ArrowLeft className="h-4 w-4 mr-1" /> Back
           </Button>
           <h1 className="text-2xl font-bold tracking-tight">Support Ticket</h1>
@@ -98,7 +98,7 @@ export default function SupportTicketDetail() {
                   <div className="mt-4 space-y-2">
                     <Textarea placeholder="Type your message..." value={text} onChange={(e) => setText(e.target.value)} />
                     <div className="flex justify-end">
-                      <Button onClick={send}><Send className="h-4 w-4 mr-2" /> Send</Button>
+                      <Button allowWhenSuspended onClick={send}><Send className="h-4 w-4 mr-2" /> Send</Button>
                     </div>
                   </div>
                 ) : (

@@ -57,10 +57,8 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
     // Heuristics to allow support actions while suspended without changing each caller
     const ariaLabel = (props as any)?.["aria-label"] as string | undefined
-    const routePath = (typeof window !== 'undefined' && window.location && window.location.pathname) ? window.location.pathname : ''
     const looksLikeSupport = Boolean(
       (ariaLabel && ariaLabel.toLowerCase().includes('support')) ||
-      routePath.startsWith('/support') ||
       (props as any)?.["data-allow-when-suspended"]
     )
 

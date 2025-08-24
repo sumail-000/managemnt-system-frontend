@@ -216,7 +216,7 @@ export default function SupportCenter() {
           <h1 className="text-2xl font-bold tracking-tight">Support Center</h1>
           <p className="text-muted-foreground text-sm">Create and manage support tickets. Browse FAQs.</p>
         </div>
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Close Support Center">
+        <Button variant="ghost" size="icon" allowWhenSuspended onClick={() => navigate(-1)} aria-label="Close Support Center">
           <X className="h-5 w-5" />
         </Button>
       </div>
@@ -225,7 +225,7 @@ export default function SupportCenter() {
       {mode === 'home' && (
         <>
           <div className="mb-6">
-            <Button onClick={startCreateFlow}>
+            <Button allowWhenSuspended onClick={startCreateFlow}>
               <MessageCircle className="h-4 w-4 mr-2" /> Create Support Ticket
             </Button>
           </div>
@@ -261,7 +261,7 @@ export default function SupportCenter() {
                           <div className="text-xs text-muted-foreground">Last update: {formattedTime(t.last_reply_at)}</div>
                         </div>
                       </div>
-                      <Button variant="outline" size="sm" onClick={() => navigate(`/support/tickets/${t.id}`)}>View</Button>
+                      <Button variant="outline" size="sm" allowWhenSuspended onClick={() => navigate(`/support/tickets/${t.id}`)}>View</Button>
                     </div>
                   ))}
                 </div>
@@ -309,7 +309,7 @@ export default function SupportCenter() {
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-semibold">Create Support Ticket</h2>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={async () => {
+              <Button variant="outline" size="sm" allowWhenSuspended onClick={async () => {
                 // cancel temporary ticket
                 if (tempTicketId) {
                   try {
@@ -364,7 +364,7 @@ export default function SupportCenter() {
               </div>
 
               <div className="flex justify-end mt-4">
-                <Button onClick={onSubmitTicket}>
+                <Button allowWhenSuspended onClick={onSubmitTicket}>
                   <Send className="h-4 w-4 mr-2" /> Submit Ticket
                 </Button>
               </div>
@@ -411,8 +411,8 @@ export default function SupportCenter() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpenSelectModal(false)}>Cancel</Button>
-            <Button onClick={confirmCreateFlow}>Create</Button>
+            <Button variant="outline" allowWhenSuspended onClick={() => setOpenSelectModal(false)}>Cancel</Button>
+            <Button allowWhenSuspended onClick={confirmCreateFlow}>Create</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
